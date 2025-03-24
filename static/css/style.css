@@ -1,0 +1,30 @@
+/* Chat message container */
+.chat-message-container {
+    display: flex;
+    justify-content: flex-start; /* Aligns content to the left for bot messages */
+    margin-bottom: 4px; /* Space between messages */
+  }
+  
+  .chat-message-container.user .chat-message {
+    margin-left: auto; /* Pushes the message to the right for user messages */
+  }
+  
+  /* Chat message bubble */
+  .chat-message {
+    display: inline-flex; /* Allows internal flexbox alignments */
+    align-items: center;
+    padding: 8px 16px;
+    border-radius: 16px;
+    margin: 4px;
+  }
+  
+  /* User message styles */
+  .user-message {
+    background-color: #aca1ff; /* Light gray */
+  }
+  
+  /* Bot message styles */
+  .bot-message {
+    background-color: #c7ffa1; /* Slightly darker gray */
+  }
+  

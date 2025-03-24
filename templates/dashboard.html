@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Home</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  /* Additional CSS if needed */
+  .card-shadow {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+</style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="min-h-screen flex">
+    <!-- Sidebar -->
+    <aside class="w-1/4 bg-blue p-4 space-y-4 shadow-lg">
+        <h3 class="text-lg font-semibold text-gray-700">Bank of Roachathon</h3>
+        <nav class="text-gray-600">
+          <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+            <i class="fas fa-home mr-2"></i> Home
+          </a>
+          <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+            <i class="fas fa-wallet mr-2"></i> Savings Wallet
+          </a>
+          <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+            <i class="fas fa-credit-card mr-2"></i> Credit Card
+          </a>
+          <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+            <i class="fas fa-file-alt mr-2"></i> Statements
+          </a>
+          <a href="/banko" class="flex items-center py-2 hover:bg-blue-50">
+            <i class="fas fa-robot mr-2"></i> Banko Assistant
+          </a>
+          <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+            <i class="fas fa-gift mr-2"></i> Benefits
+          </a>
+          <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+            <i class="fas fa-cog mr-2"></i> Settings
+          </a>
+        </nav>
+      </aside>
+
+  <!-- Main content -->
+  <main class="w-3/4 p-4 flex flex-col bg-white shadow-lg">
+    <div class="ml-16">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+        <div class="flex space-x-4 items-center">
+            <input type="text" placeholder="Search" class="px-4 py-2 bg-blue-50 rounded-md">
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="w-10 h-10 rounded-full overflow-hidden">
+            <img src="/static/profilepic.jpeg" alt="Profile" class="object-cover w-full h-full">
+            </div>
+        </div>
+        </div>
+
+        <!-- Welcome message -->
+        <div class="mb-8">
+        <h1 class="text-2xl font-semibold text-gray-800">Welcome to Roachathon Bank!</h1>
+        </div>
+
+        <!-- Dashboard widgets -->
+        <div class="grid grid-cols-12 gap-4">
+        <!-- Expenses by category -->
+        <div class="col-span-4 card-shadow bg-white p-4 rounded-lg">
+            <div class="flex justify-between border-b border-gray-200 pb-4">
+                <h1 class="font-semibold text-lg">Expenses by Category</h1>
+                <select id="monthSelect" name="monthSelect" class="text-blue-500 hover:text-blue-600 transition duration-300">
+                    <option>January</option>
+                    <!-- Add more months as needed -->
+                </select>
+            </div>
+            <div class="flex flex-wrap mx-4">
+                <div class="w-48 lg:w-1/2 px-4">
+                    <div class="chart-container">
+                        <canvas id="expensesChart"></canvas>
+                    </div>
+                </div>
+            <div class="w-full lg:w-1/2 px-4">
+            <div class="mb-4 h-12">
+            </div>
+            <div class="space-y-2">
+                <div class="flex items-center">
+                <span class="h-4 w-4 rounded-full bg-blue-500 inline-block mr-2"></span>
+                <span>Shopping 52%</span>
+                </div>
+                <div class="flex items-center">
+                <span class="h-4 w-4 rounded-full bg-green-500 inline-block mr-2"></span>
+                <span>Sport 16%</span>
+                </div>
+                <div class="flex items-center">
+                <span class="h-4 w-4 rounded-full bg-yellow-500 inline-block mr-2"></span>
+                <span>Food 12%</span>
+                </div>
+                <div class="flex items-center">
+                <span class="h-4 w-4 rounded-full bg-indigo-500 inline-block mr-2"></span>
+                <span>Clothes 12%</span>
+                </div>
+                <div class="flex items-center">
+                <span class="h-4 w-4 rounded-full bg-gray-300 inline-block mr-2"></span>
+                <span>Others 8%</span>
+                </div>
+            </div>
+            </div>
+        </div>
+        </div>
+
+        <!-- Transactions -->
+        <div class="col-span-4 card-shadow bg-white p-4 rounded-lg">
+              <div class="flex justify-between border-b border-gray-200 pb-4">
+                <h1 class="font-semibold text-lg">Transactions</h1>
+                <a href="#" class="text-blue-500 hover:text-blue-600 transition duration-300">More details →</a>
+              </div>
+              <div class="mt-4">
+                <!-- Transaction 1 -->
+                <div class="flex items-center justify-between py-4 border-b border-gray-200">
+                  <div class="flex items-center">
+                    <div class="p-2 rounded-full bg-yellow-200 mr-4">
+                        <i class="p-2 fas fa-pizza-slice"></i>
+                    </div>
+                    <div>
+                      <p class="text-sm font-semibold">Uber eats</p>
+                      <p class="text-sm text-gray-600">Jan 31, 9:00 AM</p>
+                    </div>
+                  </div>
+                  <div class="text-red-500">-$23.10</div>
+                </div>
+                <!-- Transaction 2 -->
+                <div class="flex items-center justify-between py-4 border-b border-gray-200">
+                  <div class="flex items-center">
+                    <div class="p-2 rounded-full bg-blue-200 mr-4">
+                        <i class="p-2 fas fa-dumbbell"></i>
+                    </div>
+                    <div>
+                      <p class="text-sm font-semibold">Gym membership</p>
+                      <p class="text-sm text-gray-600">Jan 30, 10:31 PM</p>
+                    </div>
+                  </div>
+                  <div class="text-red-500">-$150.00</div>
+                </div>
+                <!-- Transaction 3 -->
+                <div class="flex items-center justify-between py-4">
+                  <div class="flex items-center">
+                    <div class="p-2 rounded-full bg-green-200 mr-4">
+                        <i class="p-2 fas fa-money-bill"></i>
+                    </div>
+                    <div>
+                      <p class="text-sm font-semibold">Salary</p>
+                      <p class="text-sm text-gray-600">Jan 30, 12:15 PM</p>
+                    </div>
+                  </div>
+                  <div class="text-green-500">+$5,000.00</div>
+                </div>
+              </div>
+        </div>
+
+        
+
+        <!-- My cards -->
+        <div class="col-span-4 card-shadow bg-white p-4 rounded-lg">
+            <div class="flex justify-between pb-4">
+                <h1 class="font-semibold text-lg">Cards</h1>
+                <a href="#" class="text-blue-500 hover:text-blue-600 transition duration-300">Salary Card →</a>
+            </div>
+            <div class="w-full h-60 bg-blue rounded-md">
+                <img src="/static/creditcard.png" alt="Credit Card" class="w-72 h-44">
+                <!-- Card details would go here -->
+                <div class="flex items-center justify-between py-4 border-b border-gray-100">
+                    <div class="flex items-center">
+                      <div>
+                        <p class="text-sm font-semibold">Card Balance</p>
+                        <p class="text-sm text-gray-600">Feb 9</p>
+                      </div>
+                    </div>
+                    <div class="text-red-500">-$2300.47</div>
+                </div>
+                <div class="flex items-center justify-between py-4">
+                    <div class="flex items-center">
+                      <div>
+                        <p class="text-sm font-semibold">Credit Limit</p>
+                        <p class="text-sm text-gray-600">Approved</p>
+                      </div>
+                    </div>
+                    <div class="text-green-500">$25000</div>
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <!-- Analytics -->
+        <div class="col-span-12 card-shadow bg-white p-4 rounded-lg mt-4">
+            <div class="flex justify-between border-b border-gray-200 pb-4">
+                <h1 class="font-semibold text-lg">Spend Analysis</h1>
+                <a href="#" class="text-blue-500 hover:text-blue-600 transition duration-300">Yearly Breakdown →</a>
+            </div>
+            <div class="flex mt-4"> <!-- Apply flex container here -->
+                <div class="col-span-4 bg-white p-4 rounded-lg">
+                    <img src="/static/graph.png" alt="Graph" class="w-144 h-72 mr-2"> <!-- Ensure alt text is descriptive -->
+                </div>
+                <div class="col-span-4 bg-white p-4 rounded-lg">
+                    <img src="/static/graph2.png" alt="Graph" class="w-144 h-72 ml-40 mr-20"> <!-- Ensure alt text is descriptive -->
+                </div>
+            </div>
+        </div>
+
+
+        <!-- New transaction button -->
+        <div class="fixed bottom-8 right-8">
+        <button class="bg-blue-500 text-white px-6 py-2 rounded-full font-semibold hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+            + New transaction
+        </button>
+        </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  const ctx = document.getElementById('expensesChart').getContext('2d');
+  const expensesChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Shopping', 'Sport', 'Food', 'Clothes', 'Others'],
+      datasets: [{
+        label: 'Expenses by category',
+        data: [52, 16, 12, 12, 8],
+        backgroundColor: [
+          'rgba(59, 130, 246, 0.8)',
+          'rgba(16, 185, 129, 0.8)',
+          'rgba(251, 191, 36, 0.8)',
+          'rgba(79, 70, 229, 0.8)',
+          'rgba(209, 213, 219, 0.8)'
+        ],
+        hoverOffset: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        }
+      }
+    }
+  });
+</script>
+</body>
+</html>

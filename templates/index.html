@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Banko Assistant Chat Interface</title>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+<div class="min-h-screen flex">
+<!-- Sidebar -->
+<aside class="w-1/4 bg-blue p-4 space-y-4 shadow-lg">
+    <h3 class="text-lg font-semibold text-gray-700">Bank of Roachathon</h3>
+    <nav class="text-gray-600">
+      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+        <i class="fas fa-home mr-2"></i> Home
+      </a>
+      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+        <i class="fas fa-wallet mr-2"></i> Savings Wallet
+      </a>
+      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+        <i class="fas fa-credit-card mr-2"></i> Credit Card
+      </a>
+      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+        <i class="fas fa-file-alt mr-2"></i> Statements
+      </a>
+      <a href="/banko" class="flex items-center py-2 hover:bg-blue-50">
+        <i class="fas fa-robot mr-2"></i> Banko Assistant
+      </a>
+      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+        <i class="fas fa-gift mr-2"></i> Benefits
+      </a>
+      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
+        <i class="fas fa-cog mr-2"></i> Settings
+      </a>
+    </nav>
+  </aside>
+  
+  
+  <!-- Chat interface -->
+  <main class="w-3/4 p-4 flex flex-col bg-white shadow-lg">
+    <!-- User info -->
+    <header class="flex justify-between items-center mb-4 border-b pb-3">
+      <h2 class="text-xl font-semibold text-gray-800">Banko : The Assistant</h2>
+      <div class="rounded-full overflow-hidden w-16 h-16">
+        <img src="/static/profilepic.jpeg" alt="User Profile" class="object-cover w-full h-full">
+      </div>
+    </header>
+    
+    <!-- Chat messages -->
+    <section class="flex-1 overflow-y-auto mb-4">
+        <!-- Loop through messages -->
+        {% for message in chat %}
+            {% if message.class == 'Assistant' %}
+                <!-- Bot message -->
+                <div class="flex justify-start items-start mb-4" data-read-aloud="{{ message.text }}">
+                    <div class="flex items-start mr-2">
+                        <div class="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center text-sm text-white">B</div>
+                    </div>
+                    <div class="max-w-xl bg-blue-100 rounded-xl p-6 shadow-md">
+                        <div class="text-gray-800 whitespace-pre-line text-lg font-medium">
+                            <strong>Banko Bot:</strong>
+                            <div style="font-family: 'Open Sans', sans-serif; line-height: 1.5; color: #1a202c;">
+                                {{ message.text | safe }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% elif message.class == 'User' %}
+                <!-- User message -->
+                <div class="flex justify-end items-end">
+                    <div class="max-w-xl bg-green-100 rounded-xl p-4">
+                        <p class="text-gray-800"><strong>You:</strong> {{ message.text }}</p>
+                    </div>
+                    <div class="flex items-end ml-2">
+                    <div class="h-8 w-8 rounded-full bg-gray-500 flex items-center justify-center text-sm text-white">U</div>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </section>
+    
+    <!-- Message input -->
+    <footer class="mt-auto">
+        <form class="flex w-full" method="post" action="/banko">
+            <input type="text" name="message" placeholder="Type your message here" class="flex-grow p-2 border-2 border-gray-300 rounded-l-md focus:outline-none focus:border-blue-500">
+            <button type="button" id="start-btn" class="px-4 py-2 text-white bg-gray-500 rounded-l-none rounded-r-md hover:bg-gray-700 focus:outline-none">
+                <i class="fas fa-microphone"></i>
+            </button>
+            <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 focus:outline-none">
+              Send
+            </button>
+        </form>
+    </footer>    
+  </main>
+</div>
+</body>
+</html>
