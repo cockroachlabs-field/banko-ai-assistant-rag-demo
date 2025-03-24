@@ -1,6 +1,28 @@
+# Python cache files
 __pycache__/
-.venv
-old_files
-scratchcode
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Project specific folders
+old_files/
+scratchcode/
+
+# Configuration and sensitive files
 config.py
+*.env
+.env
+
+# IDE specific files
+.vscode/
+.idea/
+
+# OS specific files
+.DS_Store
+Thumbs.db
 
