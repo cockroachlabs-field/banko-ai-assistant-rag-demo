@@ -1,2 +1,6 @@
 __pycache__/
+.venv
+old_files
 scratchcode
+config.py
+
