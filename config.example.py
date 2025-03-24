@@ -1,4 +1,3 @@
-# Example configuration file
 # Rename to config.py and fill in your actual credentials
 
 # API Keys
