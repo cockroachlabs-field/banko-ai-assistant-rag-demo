@@ -6,6 +6,29 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![CockroachDB](https://img.shields.io/badge/database-CockroachDB-purple.svg)](https://www.cockroachlabs.com/)
 
+> **See Banko AI Assistant in Action** - Key Features & Capabilities
+
+### �� AI Status & Integration
+![AI Status Dashboard](static/ai-status.png)
+*Real-time AI service status, provider switching, and health monitoring*
+
+### 📊 Cache Performance & Statistics  
+![Cache Statistics](static/cache-stats.png)
+*Multi-layer caching system with 50-80% token reduction and performance metrics*
+
+### 💬 Intelligent Banking Conversations
+![Banko AI Response](static/banko-response.png)
+*Natural language processing for expense queries, spending analysis, and financial insights*
+
+### 🔍 Real-time Database Operations
+![Database Operations](static/banko-db-ops.png)
+*Live query tracing, vector search operations, and database performance monitoring*
+
+### 👀 Query Watcher & Live Monitoring
+![Query Watcher](static/query_watcher.png)
+*Real-time SQL query visibility, performance tracking, and demo-friendly operation logs*
+
+---
 ## ✨ Features
 
 - **🤖 Multi-AI Provider Support**: IBM Watsonx AI & AWS Bedrock with dynamic switching
@@ -126,7 +149,6 @@ docker exec banko-app python vector_search/dynamic_expenses.py
 # ✅ Real-time expense addition (like a mobile app)
 # ✅ Dynamic search with query-time embedding generation  
 # ✅ No pre-computed embeddings required
-# ✅ Production-ready patterns for banking applications
 ```
 
 ## 🎯 Demo & Usage
@@ -233,20 +255,6 @@ curl http://localhost:5000/ai-status
 - **Vector Search**: CockroachDB with pgvector for semantic similarity
 - **Containerized Deployment**: Docker/Podman with automated setup
 
-### Production Ready
-- **Scalable**: Handles real-time expense additions
-- **Efficient**: Token optimization reduces AI costs by 50-80%
-- **Observable**: Query tracing and performance monitoring
-- **Accessible**: Voice interface with multi-language support
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
@@ -270,4 +278,3 @@ Get started in under 5 minutes with our automated setup! 🚀
 - ✅ **Consolidated Documentation**: Streamlined docs structure with focused guides
 - ✅ **Token Optimization**: Multi-layer caching for 50-80% cost reduction
 - ✅ **Enhanced Voice Interface**: Multi-language support with toggleable features
-- ✅ **Production Patterns**: Banking-grade architecture and deployment
