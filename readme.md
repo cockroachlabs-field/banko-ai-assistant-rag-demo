@@ -41,8 +41,8 @@ sudo ln -sf $(which podman-compose) /usr/local/bin/docker-compose
 
 ```bash
 # 1. Clone and enter directory
-git clone https://github.com/your-repo/banko-ai-assistant.git
-cd banko-ai-assistant
+git clone https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo.git
+cd banko-ai-assistant-rag-demo
 
 # 2. Configure API keys
 cp config.example.py config.py
