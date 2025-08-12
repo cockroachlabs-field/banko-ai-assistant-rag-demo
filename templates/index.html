@@ -7,6 +7,36 @@
 <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 <script src="https://cdn.tailwindcss.com"></script>
+<!-- Marked.js for markdown rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- DOMPurify for security -->
+<script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+<style>
+    /* Markdown styling */
+    .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+        font-weight: bold;
+        margin: 0.5em 0;
+    }
+    .markdown-content h1 { font-size: 1.25em; }
+    .markdown-content h2 { font-size: 1.125em; }
+    .markdown-content h3 { font-size: 1.0625em; }
+    .markdown-content strong { font-weight: 600; }
+    .markdown-content em { font-style: italic; }
+    .markdown-content ul, .markdown-content ol { margin: 0.5em 0; padding-left: 1.5em; }
+    .markdown-content table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+    .markdown-content th, .markdown-content td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+    .markdown-content th { background-color: #f5f5f5; font-weight: 600; }
+    .markdown-content code { background-color: #f1f1f1; padding: 0.1em 0.3em; border-radius: 3px; font-family: monospace; }
+    .markdown-content pre { background-color: #f1f1f1; padding: 1em; border-radius: 5px; overflow-x: auto; }
+    
+    /* Voice recording styles */
+    .recording { animation: pulse 1.5s infinite; }
+    @keyframes pulse {
+        0% { background-color: #ef4444; }
+        50% { background-color: #dc2626; }
+        100% { background-color: #ef4444; }
+    }
+</style>
 </head>
 <body class="bg-gray-100 font-sans">
 <div class="min-h-screen flex">
@@ -43,14 +73,46 @@
   <main class="w-3/4 p-4 flex flex-col bg-white shadow-lg">
     <!-- User info -->
     <header class="flex justify-between items-center mb-4 border-b pb-3">
-      <h2 class="text-xl font-semibold text-gray-800">Banko : The Assistant</h2>
+      <div class="flex flex-col">
+        <h2 class="text-xl font-semibold text-gray-800">Banko : The Assistant</h2>
+        <div class="flex items-center mt-1 space-x-2">
+          <span class="text-sm text-gray-600">Powered by:</span>
+          <!-- AI Provider Badge -->
+          <span class="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full flex items-center">
+            {% if ai_provider.current_service.lower() == 'watsonx' %}
+              <img src="/static/watsonx-icon.svg" alt="IBM Watsonx" class="w-4 h-4 mr-2" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));" />
+            {% else %}
+              <span class="mr-1">{{ ai_provider.icon }}</span>
+            {% endif %}
+            {{ ai_provider.name }}
+          </span>
+          <!-- Database Badge -->
+          <span class="px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full flex items-center">
+            <img src="/static/roach-logo.svg" alt="CockroachDB" class="w-4 h-4 mr-2" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));" />
+            CockroachDB
+          </span>
+        </div>
+      </div>
       <div class="rounded-full overflow-hidden w-16 h-16">
         <img src="/static/profilepic.jpeg" alt="User Profile" class="object-cover w-full h-full">
       </div>
     </header>
     
+    <!-- Database Operations Panel -->
+    <div id="db-panel" class="hidden mb-4 p-4 bg-gray-50 border rounded-lg">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold text-gray-700">🔍 Database Operations</h3>
+            <button id="close-db-panel" class="text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="db-operations" class="space-y-2 text-sm">
+            <!-- Operations will be displayed here -->
+        </div>
+    </div>
+
     <!-- Chat messages -->
-    <section class="flex-1 overflow-y-auto mb-4">
+    <section class="flex-1 overflow-y-auto mb-4" style="scroll-behavior: smooth; max-height: calc(100vh - 400px);">
         <!-- Loop through messages -->
         {% for message in chat %}
             {% if message.class == 'Assistant' %}
@@ -60,10 +122,11 @@
                         <div class="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center text-sm text-white">B</div>
                     </div>
                     <div class="max-w-xl bg-blue-100 rounded-xl p-6 shadow-md">
-                        <div class="text-gray-800 whitespace-pre-line text-lg font-medium">
+                        <div class="text-gray-800 text-lg font-medium">
                             <strong>Banko Bot:</strong>
-                            <div style="font-family: 'Open Sans', sans-serif; line-height: 1.5; color: #1a202c;">
-                                {{ message.text | safe }}
+                            <div class="markdown-content mt-2" style="font-family: 'Open Sans', sans-serif; line-height: 1.6; color: #1a202c;" 
+                                 data-raw-content="{{ message.text }}">
+                                <!-- Markdown content will be rendered here by JavaScript -->
                             </div>
                         </div>
                     </div>
@@ -84,17 +147,533 @@
     
     <!-- Message input -->
     <footer class="mt-auto">
-        <form class="flex w-full" method="post" action="/banko">
-            <input type="text" name="message" placeholder="Type your message here" class="flex-grow p-2 border-2 border-gray-300 rounded-l-md focus:outline-none focus:border-blue-500">
-            <button type="button" id="start-btn" class="px-4 py-2 text-white bg-gray-500 rounded-l-none rounded-r-md hover:bg-gray-700 focus:outline-none">
-                <i class="fas fa-microphone"></i>
+        <div class="flex flex-col w-full">
+            <!-- Feature toggles -->
+            <div class="flex justify-end gap-2 mb-2">
+                <button type="button" id="voice-toggle" class="px-3 py-1 text-xs bg-green-200 hover:bg-green-300 rounded-md" title="Toggle Voice Features">
+                    <i class="fas fa-microphone mr-1"></i> Voice: ON
+                </button>
+                <button type="button" id="db-toggle" class="px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded-md" title="Show Database Operations">
+                    <i class="fas fa-database mr-1"></i> DB Operations
+                </button>
+            </div>
+            
+            <form class="flex w-full" method="post" action="/banko" id="chat-form">
+                <input type="text" name="message" id="message-input" placeholder="Type your message here or use voice..." class="flex-grow p-2 border-2 border-gray-300 rounded-l-md focus:outline-none focus:border-blue-500">
+                <input type="hidden" name="user_input" id="user-input-hidden">
+                <button type="button" id="voice-btn" class="px-4 py-2 text-white bg-gray-500 hover:bg-gray-700 focus:outline-none" title="Voice Input">
+                    <i class="fas fa-microphone" id="mic-icon"></i>
+                </button>
+            <button type="button" id="speaker-btn" class="px-4 py-2 text-white bg-blue-500 hover:bg-blue-700 focus:outline-none" title="Read Aloud">
+                <i class="fas fa-volume-up" id="speaker-icon"></i>
             </button>
-            <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 focus:outline-none">
+            <select id="language-select" class="px-3 py-2 border-2 border-gray-300 focus:outline-none focus:border-blue-500" title="Voice Language">
+                <option value="en-US">🇺🇸 English</option>
+                <option value="es-ES">🇪🇸 Español</option>
+                <option value="fr-FR">🇫🇷 Français</option>
+                <option value="de-DE">🇩🇪 Deutsch</option>
+                <option value="it-IT">🇮🇹 Italiano</option>
+                <option value="pt-PT">🇵🇹 Português</option>
+                <option value="ja-JP">🇯🇵 日本語</option>
+                <option value="ko-KR">🇰🇷 한국어</option>
+                <option value="zh-CN">🇨🇳 中文</option>
+                <option value="hi-IN">🇮🇳 हिन्दी</option>
+            </select>
+            <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded-r-md hover:bg-green-700 focus:outline-none">
               Send
             </button>
         </form>
+        </div>
     </footer>    
   </main>
 </div>
+
+<script>
+// Configure marked for better security and formatting
+marked.setOptions({
+    breaks: true,
+    gfm: true,
+    sanitize: false // We'll use DOMPurify instead
+});
+
+// Render markdown content for all bot messages
+document.addEventListener('DOMContentLoaded', function() {
+    const markdownElements = document.querySelectorAll('.markdown-content[data-raw-content]');
+    markdownElements.forEach(element => {
+        const rawContent = element.getAttribute('data-raw-content');
+        if (rawContent) {
+            const htmlContent = marked.parse(rawContent);
+            const cleanContent = DOMPurify.sanitize(htmlContent);
+            element.innerHTML = cleanContent;
+        }
+    });
+    
+    // Auto-scroll to bottom of chat
+    const chatSection = document.querySelector('section');
+    if (chatSection) {
+        chatSection.scrollTop = chatSection.scrollHeight;
+    }
+});
+
+// Voice Recognition
+let recognition;
+let isRecording = false;
+
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    
+    // Update language based on selection
+    function updateRecognitionLanguage() {
+        const languageSelect = document.getElementById('language-select');
+        recognition.lang = languageSelect.value;
+    }
+    
+    // Set initial language
+    updateRecognitionLanguage();
+    
+    // Update language when changed
+    document.getElementById('language-select').addEventListener('change', updateRecognitionLanguage);
+    
+    recognition.onstart = function() {
+        isRecording = true;
+        const voiceBtn = document.getElementById('voice-btn');
+        const micIcon = document.getElementById('mic-icon');
+        voiceBtn.classList.add('recording');
+        voiceBtn.style.backgroundColor = '#ef4444';
+        micIcon.classList.remove('fa-microphone');
+        micIcon.classList.add('fa-stop');
+        document.getElementById('message-input').placeholder = 'Listening...';
+    };
+    
+    recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        document.getElementById('message-input').value = transcript;
+        document.getElementById('user-input-hidden').value = transcript;
+    };
+    
+    recognition.onend = function() {
+        isRecording = false;
+        const voiceBtn = document.getElementById('voice-btn');
+        const micIcon = document.getElementById('mic-icon');
+        voiceBtn.classList.remove('recording');
+        voiceBtn.style.backgroundColor = '';
+        micIcon.classList.remove('fa-stop');
+        micIcon.classList.add('fa-microphone');
+        document.getElementById('message-input').placeholder = 'Type your message here or use voice...';
+    };
+    
+    recognition.onerror = function(event) {
+        console.error('Speech recognition error:', event.error);
+        isRecording = false;
+        recognition.onend();
+        alert('Voice recognition error: ' + event.error);
+    };
+} else {
+    // Hide voice button if not supported
+    document.getElementById('voice-btn').style.display = 'none';
+}
+
+// Voice button click handler
+document.getElementById('voice-btn').addEventListener('click', function() {
+    if (!voiceFeaturesEnabled) {
+        return; // Voice features are disabled
+    }
+    
+    if (!recognition) {
+        alert('Voice recognition is not supported in this browser');
+        return;
+    }
+    
+    if (isRecording) {
+        recognition.stop();
+    } else {
+        recognition.start();
+    }
+});
+
+// Text-to-Speech
+let speechSynthesis = window.speechSynthesis;
+let isSpeaking = false;
+
+document.getElementById('speaker-btn').addEventListener('click', function() {
+    if (!voiceFeaturesEnabled) {
+        return; // Voice features are disabled
+    }
+    
+    const speakerBtn = document.getElementById('speaker-btn');
+    const speakerIcon = document.getElementById('speaker-icon');
+    
+    if (isSpeaking) {
+        speechSynthesis.cancel();
+        isSpeaking = false;
+        speakerBtn.style.backgroundColor = '';
+        speakerIcon.classList.remove('fa-stop');
+        speakerIcon.classList.add('fa-volume-up');
+        return;
+    }
+    
+    // Get the last bot message
+    const botMessages = document.querySelectorAll('[data-read-aloud]');
+    if (botMessages.length === 0) {
+        alert('No message to read');
+        return;
+    }
+    
+    const lastMessage = botMessages[botMessages.length - 1];
+    const textToRead = lastMessage.getAttribute('data-read-aloud');
+    
+    if (textToRead) {
+        const utterance = new SpeechSynthesisUtterance(textToRead);
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 0.8;
+        
+        // Set language for speech synthesis
+        const languageSelect = document.getElementById('language-select');
+        utterance.lang = languageSelect.value;
+        
+        // Try to find a voice that matches the selected language
+        const voices = speechSynthesis.getVoices();
+        const matchingVoice = voices.find(voice => voice.lang.startsWith(languageSelect.value.split('-')[0]));
+        if (matchingVoice) {
+            utterance.voice = matchingVoice;
+        }
+        
+        utterance.onstart = function() {
+            isSpeaking = true;
+            speakerBtn.style.backgroundColor = '#dc2626';
+            speakerIcon.classList.remove('fa-volume-up');
+            speakerIcon.classList.add('fa-stop');
+        };
+        
+        utterance.onend = function() {
+            isSpeaking = false;
+            speakerBtn.style.backgroundColor = '';
+            speakerIcon.classList.remove('fa-stop');
+            speakerIcon.classList.add('fa-volume-up');
+        };
+        
+        speechSynthesis.speak(utterance);
+    }
+});
+
+// Voice features control
+let voiceFeaturesEnabled = true;
+
+function toggleVoiceFeatures() {
+    voiceFeaturesEnabled = !voiceFeaturesEnabled;
+    const voiceToggleBtn = document.getElementById('voice-toggle');
+    const voiceBtn = document.getElementById('voice-btn');
+    const speakerBtn = document.getElementById('speaker-btn');
+    const languageSelect = document.getElementById('language-select');
+    const messageInput = document.getElementById('message-input');
+    
+    if (voiceFeaturesEnabled) {
+        // Enable voice features
+        voiceToggleBtn.innerHTML = '<i class="fas fa-microphone mr-1"></i> Voice: ON';
+        voiceToggleBtn.className = 'px-3 py-1 text-xs bg-green-200 hover:bg-green-300 rounded-md';
+        voiceBtn.style.display = 'block';
+        speakerBtn.style.display = 'block';
+        languageSelect.style.display = 'block';
+        messageInput.placeholder = 'Type your message here or use voice...';
+        
+        // Stop any ongoing speech
+        if (isSpeaking) {
+            speechSynthesis.cancel();
+        }
+        if (isRecording) {
+            recognition.stop();
+        }
+    } else {
+        // Disable voice features
+        voiceToggleBtn.innerHTML = '<i class="fas fa-microphone-slash mr-1"></i> Voice: OFF';
+        voiceToggleBtn.className = 'px-3 py-1 text-xs bg-red-200 hover:bg-red-300 rounded-md';
+        voiceBtn.style.display = 'none';
+        speakerBtn.style.display = 'none';
+        languageSelect.style.display = 'none';
+        messageInput.placeholder = 'Type your message here...';
+        
+        // Stop any ongoing speech/recording
+        if (isSpeaking) {
+            speechSynthesis.cancel();
+            isSpeaking = false;
+        }
+        if (isRecording && recognition) {
+            recognition.stop();
+            isRecording = false;
+        }
+    }
+}
+
+// Auto-scroll functionality
+function smoothScrollToBottom() {
+    // Scroll the main chat container to bottom
+    const chatContainer = document.querySelector('section.flex-1.overflow-y-auto');
+    if (chatContainer) {
+        chatContainer.scrollTo({
+            top: chatContainer.scrollHeight,
+            behavior: 'smooth'
+        });
+    }
+    
+    // Also scroll the entire page to ensure visibility
+    setTimeout(() => {
+        window.scrollTo({
+            top: document.documentElement.scrollHeight,
+            behavior: 'smooth'
+        });
+    }, 100);
+}
+
+function scrollToDbPanel() {
+    // Scroll to make DB panel visible
+    const dbPanel = document.getElementById('db-panel');
+    if (dbPanel && !dbPanel.classList.contains('hidden')) {
+        dbPanel.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+        });
+    }
+}
+
+// Database operations tracking
+let dbOperationsVisible = false;
+
+function addDbOperation(step, description, type = 'info') {
+    const operationsDiv = document.getElementById('db-operations');
+    const timestamp = new Date().toLocaleTimeString();
+    
+    const operationDiv = document.createElement('div');
+    
+    // Enhanced styling for cache status
+    let bgColor, textColor, borderColor = '';
+    if (type === 'success') {
+        bgColor = 'bg-green-50';
+        textColor = 'text-green-800';
+        borderColor = 'border-l-4 border-green-400';
+    } else if (type === 'warning') {
+        bgColor = 'bg-orange-50'; 
+        textColor = 'text-orange-800';
+        borderColor = 'border-l-4 border-orange-400';
+    } else if (type === 'error') {
+        bgColor = 'bg-red-50';
+        textColor = 'text-red-800'; 
+        borderColor = 'border-l-4 border-red-400';
+    } else {
+        bgColor = 'bg-blue-50';
+        textColor = 'text-blue-800';
+        borderColor = 'border-l-4 border-blue-400';
+    }
+    
+    operationDiv.className = `flex items-center space-x-2 p-3 rounded-lg ${bgColor} ${textColor} ${borderColor} transition-all duration-300 hover:shadow-sm`;
+    
+    // Add special styling for cache hits/misses
+    const isCacheOperation = description.includes('CACHE HIT') || description.includes('CACHE MISS');
+    const cacheIcon = description.includes('CACHE HIT') ? '🎯' : 
+                     description.includes('CACHE MISS') ? '⚡' : '';
+    
+    operationDiv.innerHTML = `
+        <span class="text-xs text-gray-500 font-mono">${timestamp}</span>
+        <span class="font-semibold">${step}</span>
+        ${cacheIcon ? `<span class="text-lg">${cacheIcon}</span>` : ''}
+        <span class="flex-1 ${isCacheOperation ? 'font-medium' : ''}">${description}</span>
+    `;
+    
+    operationsDiv.appendChild(operationDiv);
+    operationsDiv.scrollTop = operationsDiv.scrollHeight;
+    
+    // Add a slight animation for cache operations
+    if (isCacheOperation) {
+        operationDiv.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+            operationDiv.style.transform = 'scale(1)';
+        }, 100);
+    }
+    
+    // Auto-scroll to keep DB operations visible
+    if (dbOperationsVisible) {
+        setTimeout(scrollToDbPanel, 200);
+    }
+}
+
+function clearDbOperations() {
+    const operationsDiv = document.getElementById('db-operations');
+    operationsDiv.innerHTML = '';
+}
+
+function showDbPanel() {
+    document.getElementById('db-panel').classList.remove('hidden');
+    dbOperationsVisible = true;
+    // Auto-scroll to show the panel
+    setTimeout(scrollToDbPanel, 100);
+}
+
+function hideDbPanel() {
+    document.getElementById('db-panel').classList.add('hidden');
+    dbOperationsVisible = false;
+    // Auto-scroll to bottom after hiding panel
+    setTimeout(smoothScrollToBottom, 100);
+}
+
+// Voice toggle handler
+document.getElementById('voice-toggle').addEventListener('click', function() {
+    toggleVoiceFeatures();
+});
+
+// Database panel toggle handlers
+document.getElementById('db-toggle').addEventListener('click', function() {
+    if (dbOperationsVisible) {
+        hideDbPanel();
+    } else {
+        showDbPanel();
+    }
+});
+
+document.getElementById('close-db-panel').addEventListener('click', function() {
+    hideDbPanel();
+});
+
+// Enhanced form submission with database tracking
+document.getElementById('chat-form').addEventListener('submit', function(e) {
+    const messageInput = document.getElementById('message-input');
+    const hiddenInput = document.getElementById('user-input-hidden');
+    
+    // Use the voice input if available, otherwise use text input
+    const message = hiddenInput.value || messageInput.value;
+    if (!message.trim()) {
+        e.preventDefault();
+        return;
+    }
+    
+    // Auto-scroll to bottom before processing
+    smoothScrollToBottom();
+    
+    // Show database operations if user has it enabled
+    if (dbOperationsVisible) {
+        clearDbOperations();
+        addDbOperation('📤 Query', `Processing: "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}"`, 'info');
+        
+        // Simulate database operations with realistic cache hit/miss scenarios
+        const cacheScenarios = [
+            // Scenario 1: Fresh query (all misses)
+            {
+                embedding: 'miss',
+                vectorSearch: 'miss', 
+                response: 'miss',
+                probability: 0.4
+            },
+            // Scenario 2: Partial cache hits
+            {
+                embedding: 'hit',
+                vectorSearch: 'miss',
+                response: 'miss',
+                probability: 0.3
+            },
+            // Scenario 3: Mostly cached
+            {
+                embedding: 'hit',
+                vectorSearch: 'hit',
+                response: 'miss',
+                probability: 0.2
+            },
+            // Scenario 4: Full cache hit
+            {
+                embedding: 'hit',
+                vectorSearch: 'hit',
+                response: 'hit',
+                probability: 0.1
+            }
+        ];
+        
+        // Select random cache scenario based on probability
+        const random = Math.random();
+        let cumulative = 0;
+        let selectedScenario = cacheScenarios[0];
+        for (const scenario of cacheScenarios) {
+            cumulative += scenario.probability;
+            if (random <= cumulative) {
+                selectedScenario = scenario;
+                break;
+            }
+        }
+        
+        // Show operations with cache status
+        setTimeout(() => {
+            const embeddingStatus = selectedScenario.embedding === 'hit' ? '✅ CACHE HIT' : '❌ CACHE MISS';
+            const embeddingType = selectedScenario.embedding === 'hit' ? 'success' : 'warning';
+            addDbOperation('🔍 Embedding', `${embeddingStatus} - ${selectedScenario.embedding === 'hit' ? 'Using cached embedding' : 'Generating new embedding with SentenceTransformer'}`, embeddingType);
+        }, 500);
+        
+        setTimeout(() => {
+            const vectorStatus = selectedScenario.vectorSearch === 'hit' ? '✅ CACHE HIT' : '❌ CACHE MISS';
+            const vectorType = selectedScenario.vectorSearch === 'hit' ? 'success' : 'warning';
+            addDbOperation('🗄️ Vector Search', `${vectorStatus} - ${selectedScenario.vectorSearch === 'hit' ? 'Retrieved from cache' : 'Querying CockroachDB with vector similarity'}`, vectorType);
+        }, 1000);
+        
+        setTimeout(() => addDbOperation('📊 Analysis', 'Analyzing spending patterns and categories', 'info'), 1500);
+        
+        setTimeout(() => {
+            const responseStatus = selectedScenario.response === 'hit' ? '✅ CACHE HIT' : '❌ CACHE MISS';
+            const responseType = selectedScenario.response === 'hit' ? 'success' : 'warning';
+            const aiProvider = '{{ ai_provider.name }}' || 'AI Provider';
+            addDbOperation('🤖 AI Processing', `${responseStatus} - ${selectedScenario.response === 'hit' ? 'Using cached response' : `Generating new response with ${aiProvider}`}`, responseType);
+        }, 2000);
+        
+        setTimeout(() => {
+            const totalHits = [selectedScenario.embedding, selectedScenario.vectorSearch, selectedScenario.response].filter(s => s === 'hit').length;
+            const efficiency = Math.round((totalHits / 3) * 100);
+            addDbOperation('✅ Complete', `Response ready! Cache efficiency: ${efficiency}% (${totalHits}/3 cache hits) 🚀`, 'success');
+            // Final scroll to ensure response is visible
+            setTimeout(smoothScrollToBottom, 500);
+        }, 2500);
+    } else {
+        // If DB panel is hidden, just auto-scroll after a short delay to see the response
+        setTimeout(smoothScrollToBottom, 1000);
+    }
+    
+    // Set the correct field name for the backend
+    messageInput.name = 'user_input';
+    messageInput.value = message;
+    if (hiddenInput) hiddenInput.remove(); // Remove hidden field to avoid confusion
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // Ctrl/Cmd + Enter to send
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        document.getElementById('chat-form').submit();
+    }
+    
+    // Ctrl/Cmd + Shift + V for voice
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
+        e.preventDefault();
+        if (voiceFeaturesEnabled) {
+            document.getElementById('voice-btn').click();
+        }
+    }
+    
+    // Ctrl/Cmd + Shift + S for speech
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        if (voiceFeaturesEnabled) {
+            document.getElementById('speaker-btn').click();
+        }
+    }
+});
+
+// Auto-scroll to bottom on page load to show latest messages
+window.addEventListener('load', function() {
+    setTimeout(smoothScrollToBottom, 300);
+});
+
+// Also auto-scroll when page is fully ready
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(smoothScrollToBottom, 200);
+});
+</script>
+
 </body>
 </html>

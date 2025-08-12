@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  cockroachdb:
+    image: cockroachdb/cockroach:v25.2.4
+    container_name: banko-cockroachdb
+    command: start-single-node --insecure
+    ports:
+      - "26257:26257"  # CockroachDB SQL port
+      - "8080:8080"    # CockroachDB Admin UI
+    volumes:
+      - cockroach-data:/cockroach/cockroach-data
+    environment:
+      - COCKROACH_DATABASE=defaultdb
+      - COCKROACH_USER=root
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health?ready=1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - banko-network
+
+  # Database initialization service
+  db-init:
+    image: cockroachdb/cockroach:v25.2.4
+    container_name: banko-db-init
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+    volumes:
+      - ./vector_search:/scripts
+    command: >
+      bash -c "
+        echo '🔧 Initializing CockroachDB for Banko AI...' &&
+        echo '⏳ Waiting for database to be fully ready...' &&
+        sleep 15 &&
+        echo '🚀 Enabling vector index feature...' &&
+        ./cockroach sql --insecure --host=cockroachdb:26257 --execute='SET CLUSTER SETTING feature.vector_index.enabled = true;' &&
+        echo '✅ Vector index feature enabled!' &&
+        echo '📊 Enabling SQL query tracing for demo visibility...' &&
+        ./cockroach sql --insecure --host=cockroachdb:26257 --execute='SET CLUSTER SETTING sql.log.all_statements.enabled = true;' &&
+        ./cockroach sql --insecure --host=cockroachdb:26257 --execute='SET CLUSTER SETTING sql.trace.stmt.enable_threshold = \"0s\";' &&
+        echo '✅ SQL query tracing enabled!' &&
+        echo '📊 Database initialization complete!'
+      "
+    restart: "no"
+    networks:
+      - banko-network
+
+  # Flask application service
+  banko-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: banko-ai-assistant:latest
+    container_name: banko-app
+    ports:
+      - "5000:5000"
+    environment:
+      - AI_SERVICE=watsonx
+      - FLASK_ENV=development
+      - DATABASE_URL=cockroachdb://root@cockroachdb:26257/defaultdb?sslmode=disable
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    volumes:
+      - .:/app
+    networks:
+      - banko-network
+    restart: unless-stopped
+
+volumes:
+  cockroach-data:
+    name: cockroach-data
+
+networks:
+  banko-network:
+    name: banko-network
