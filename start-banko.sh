@@ -171,9 +171,9 @@ init_database_data() {
     log_info "Setting up database schema and sample data..."
     
     # Check if we need to create tables and load data
-    table_exists=$(${CONTAINER_CMD} exec banko-cockroachdb ./cockroach sql --insecure --execute="SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'expenses');" --format=csv | tail -n 1)
+    table_exists=$(${CONTAINER_CMD} exec banko-cockroachdb ./cockroach sql --insecure --execute="SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'expenses');" --format=csv | tail -n 1 | tr -d '\r' | tr -d '\n')
     
-    if [ "$table_exists" = "false" ]; then
+    if [ "$table_exists" = "f" ]; then
         log_info "Creating expenses table..."
         ${CONTAINER_CMD} exec banko-cockroachdb ./cockroach sql --insecure --execute="
         CREATE TABLE expenses (
