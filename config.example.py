@@ -9,4 +9,9 @@ AWS_SECRET_KEY = "your_aws_secret_key_here"
 AWS_REGION = "us-east-1"
 
 # Database Configuration
-DATABASE_URL = "your_cockroachdb_connection_string_here" 
+DATABASE_URL = "your_cockroachdb_connection_string_here"
+
+# IBM Watsonx Configuration
+WATSONX_API_KEY = "your_watsonx_api_key_here"
+WATSONX_PROJECT_ID = "your_watsonx_project_id_here"
+WATSONX_MODEL_ID = "openai/gpt-oss-120b"  # or your preferred model 

@@ -69,7 +69,7 @@ def search_expenses(query, limit=5):
     return [dict(row._mapping) for row in results]
 
 def main():
-    query = "How is my gorcery spending?"
+    query = "How is my grocery spending?"
     results = search_expenses(query)
     print(f"\nSearch results for: '{query}'\n")
     for i, result in enumerate(results, 1):

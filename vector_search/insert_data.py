@@ -7,7 +7,8 @@ import pandas as pd
 
 
 # Database connection settings
-DB_URI = "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
+import os
+DB_URI = os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
 
 # Create SQLAlchemy engine
 engine = create_engine(DB_URI)
@@ -17,7 +18,7 @@ def numpy_vector_to_pg_vector(vector):
     return json.dumps(vector.flatten().tolist())
 
 def read_csv_data(file_path):
-    df = pd.read_csv('/Users/david/Documents/Demos/ML-AI-Banking-App/vector_search/expense_data.csv')
+    df = pd.read_csv(file_path)
     return df.to_dict('records')
 
 def insert_content(data_content, batch_size=50):
