@@ -55,12 +55,12 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
-    image: banko-ai-assistant:latest
+    image: banko-ai-assistant:multi-provider-test
     container_name: banko-app
     ports:
       - "5000:5000"
     environment:
-      - AI_SERVICE=watsonx
+      - AI_SERVICE=aws_bedrock
       - FLASK_ENV=development
       - DATABASE_URL=cockroachdb://root@cockroachdb:26257/defaultdb?sslmode=disable
     depends_on:
