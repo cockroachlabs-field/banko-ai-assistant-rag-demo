@@ -302,13 +302,13 @@ main() {
     check_services
     show_final_status
     
-    # Keep script running to show logs
-    log_info "Showing service logs (Ctrl+C to exit)..."
-    ${COMPOSE_CMD} logs -f
+    # Services are now running in the background
+    log_info "Services started successfully in the background!"
+    log_info "Use './start-banko.sh status' to check service health"
+    log_info "Use './start-banko.sh logs' to view service logs"
+    log_info "Use './start-banko.sh stop' to stop all services"
 }
 
-# Handle Ctrl+C gracefully
-trap 'echo -e "\n${YELLOW}Stopping services...${NC}"; ${COMPOSE_CMD} down; exit 0' INT
 
 # Parse command line arguments
 case "${1:-}" in
@@ -328,7 +328,9 @@ case "${1:-}" in
         ;;
     "logs")
         check_docker  # Set COMPOSE_CMD
-        ${COMPOSE_CMD} logs -f
+        log_info "Use './start-banko.sh status' to check service health"
+    log_info "Use './start-banko.sh logs' to view service logs"
+    log_info "Use './start-banko.sh stop' to stop all services"
         exit 0
         ;;
     "status")
