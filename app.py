@@ -263,4 +263,8 @@ if __name__ == '__main__':
     print(f"Active AI Service: {service_name}")
     print("=====================================")
     
-    app.run(debug=True)
+    # Get port from environment variable or default to 5000
+    port = int(os.environ.get("PORT", 5000))
+
+    # Run the app on all interfaces, using the configured port
+    app.run(host='0.0.0.0', port=port, debug=True)
