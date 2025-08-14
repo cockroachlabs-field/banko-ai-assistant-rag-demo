@@ -65,7 +65,7 @@ class BankoCacheManager:
             -- Query cache for similar questions and responses
             CREATE TABLE IF NOT EXISTS query_cache (
                 cache_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                query_hash STRING NOT NULL,
+                query_hash STRING UNIQUE NOT NULL,
                 query_text STRING NOT NULL,
                 query_embedding VECTOR(384),
                 response_text TEXT NOT NULL,
@@ -110,7 +110,7 @@ class BankoCacheManager:
             -- Vector search results cache
             CREATE TABLE IF NOT EXISTS vector_search_cache (
                 search_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                query_embedding_hash STRING NOT NULL,
+                query_embedding_hash STRING UNIQUE NOT NULL,
                 search_results JSONB NOT NULL,
                 result_count INTEGER,
                 similarity_threshold FLOAT,
@@ -361,7 +361,12 @@ class BankoCacheManager:
                     conn.commit()
                     
                     self._log_cache_stat('vector_search', 'hit', tokens_saved=50)
-                    return json.loads(row.search_results)[:limit]
+                    # search_results is already a list from JSONB, no need to parse
+                    if isinstance(row.search_results, list):
+                        return row.search_results[:limit]
+                    else:
+                        # Fallback: try to parse if it's a string
+                        return json.loads(row.search_results)[:limit]
                     
         except Exception as e:
             print(f"⚠️ Error reading vector search cache: {e}")

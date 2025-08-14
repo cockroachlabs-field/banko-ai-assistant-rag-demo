@@ -6,6 +6,11 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![CockroachDB](https://img.shields.io/badge/database-CockroachDB-purple.svg)](https://www.cockroachlabs.com/)
 
+## 🎬 Live Demo
+
+![Banko AI Assistant Demo](static/banko-ai-assistant-watsonx.gif)
+*Experience intelligent banking conversations with voice input, real-time AI responses, and seamless navigation*
+
 > **See Banko AI Assistant in Action** - Key Features & Capabilities
 
 ### �� AI Status & Integration
@@ -48,6 +53,12 @@
 - **Docker/Podman** with docker-compose support
 - **Git** for cloning the repository
 
+**For Local Deployment (Optional):**
+- **Python 3.11+** with pip
+- **CockroachDB** binary installed
+- **AI Service API Keys** (Watsonx, AWS Bedrock)
+- **Connection String Format**: Use `cockroachdb://` prefix (not `postgresql://`) for CockroachDB connections
+
 ```bash
 # Install Docker/Podman (choose one)
 # Docker:
@@ -78,6 +89,80 @@ cp config.example.py config.py
 ```
 
 ### Manual Setup (Alternative)
+
+### 🚀 Multi-Deployment Options
+
+#### 🐳 **Option 1: Docker/Podman (Recommended)**
+```bash
+# Start everything with Docker/Podman
+./start-banko.sh
+
+# Check status
+./start-banko.sh status
+
+# View logs
+./start-banko.sh logs
+
+# Stop services
+./start-banko.sh stop
+```
+
+#### 💻 **Option 2: Local CockroachDB**
+```bash
+# Install CockroachDB locally first
+# https://www.cockroachlabs.com/docs/stable/install-cockroachdb.html
+
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Start local CockroachDB
+cockroach start-single-node --insecure --store=./cockroach-data --listen-addr=localhost:26257 --http-addr=localhost:8080 --background
+
+# Enable vector features
+cockroach sql --insecure --host=localhost:26257 --execute="SET CLUSTER SETTING feature.vector_index.enabled = true;"
+
+# Setup database and start app
+export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
+# Enable vector indexes in Cockroach Cloud (run this once):
+# cockroach sql --url="cockroachdb://user:pass@host:port/db?sslmode=require" --execute="SET CLUSTER SETTING feature.vector_index.enabled = true;"
+# Note: Use cockroachdb:// prefix for CockroachDB connections (not postgresql://)
+# Cockroach Cloud provides postgresql:// URLs - replace with cockroachdb://
+export AI_SERVICE="watsonx"  # or "aws_bedrock"
+cd vector_search
+python create_table.py
+python insert_data.py
+cd ..
+python app.py
+```
+
+#### ☁️ **Option 3: Cockroach Cloud**
+
+**Note:** The scripts now include automatic fallback to handle CockroachDB version compatibility issues with SQLAlchemy. If you encounter connection errors, the scripts will automatically try alternative connection methods.
+```bash
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Setup database and start app
+export DATABASE_URL="cockroachdb://user:pass@host:port/db?sslmode=require"  # Replace postgresql:// with cockroachdb:// from Cockroach Cloud
+# Enable vector indexes in Cockroach Cloud (run this once):
+# cockroach sql --url="cockroachdb://user:pass@host:port/db?sslmode=require" --execute="SET CLUSTER SETTING feature.vector_index.enabled = true;"
+# Note: Use cockroachdb:// prefix for CockroachDB connections (not postgresql://)
+# Cockroach Cloud provides postgresql:// URLs - replace with cockroachdb://
+export AI_SERVICE="watsonx"  # or "aws_bedrock"
+cd vector_search
+python create_table.py
+python insert_data.py
+cd ..
+python app.py
+```
 
 ```bash
 # Start database only

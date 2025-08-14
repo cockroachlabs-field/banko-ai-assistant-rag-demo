@@ -85,6 +85,10 @@ def get_ai_service_functions():
         # Default to AWS Bedrock
         return aws_search_expenses, aws_rag_response, 'AWS Bedrock'
 
+@app.route('/')
+def root():
+    return redirect(url_for('chat'))
+
 @app.route('/banko', methods=['GET', 'POST'])
 def chat():
     session['chat'] = []
@@ -124,11 +128,35 @@ def chat():
                 print(f"Error with {service_name}: {str(e)}")
                 session['chat'].append({'text': error_message, 'class': 'Assistant'})
                 
-    return render_template('index.html', chat=session['chat'], ai_provider=ai_provider)
+    return render_template('index.html', chat=session['chat'], ai_provider=ai_provider, current_page='banko')
 
 @app.route('/home')
 def dashboard():
-    return render_template('dashboard.html')
+    return render_template('dashboard.html', current_page='home')
+
+@app.route('/savings')
+def savings():
+    return render_template('dashboard.html', current_page='savings')
+
+@app.route('/wallet')
+def wallet():
+    return render_template('dashboard.html', current_page='wallet')
+
+@app.route('/credit-card')
+def credit_card():
+    return render_template('dashboard.html', current_page='credit-card')
+
+@app.route('/statements')
+def statements():
+    return render_template('dashboard.html', current_page='statements')
+
+@app.route('/benefits')
+def benefits():
+    return render_template('dashboard.html', current_page='benefits')
+
+@app.route('/settings')
+def settings():
+    return render_template('dashboard.html', current_page='settings')
 
 @app.route('/ai-status')
 def ai_status():

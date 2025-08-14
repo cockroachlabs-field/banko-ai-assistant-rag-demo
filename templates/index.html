@@ -3,185 +3,505 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Banko Assistant Chat Interface</title>
-<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<title>Banko AI Assistant - Powered by CockroachDB</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css?v={{ range(1, 10000) | random }}">
 <script src="https://cdn.tailwindcss.com"></script>
-<!-- Marked.js for markdown rendering -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<!-- DOMPurify for security -->
 <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
-<style>
-    /* Markdown styling */
-    .markdown-content h1, .markdown-content h2, .markdown-content h3 {
-        font-weight: bold;
-        margin: 0.5em 0;
-    }
-    .markdown-content h1 { font-size: 1.25em; }
-    .markdown-content h2 { font-size: 1.125em; }
-    .markdown-content h3 { font-size: 1.0625em; }
-    .markdown-content strong { font-weight: 600; }
-    .markdown-content em { font-style: italic; }
-    .markdown-content ul, .markdown-content ol { margin: 0.5em 0; padding-left: 1.5em; }
-    .markdown-content table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
-    .markdown-content th, .markdown-content td { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
-    .markdown-content th { background-color: #f5f5f5; font-weight: 600; }
-    .markdown-content code { background-color: #f1f1f1; padding: 0.1em 0.3em; border-radius: 3px; font-family: monospace; }
-    .markdown-content pre { background-color: #f1f1f1; padding: 1em; border-radius: 5px; overflow-x: auto; }
     
-    /* Voice recording styles */
-    .recording { animation: pulse 1.5s infinite; }
-    @keyframes pulse {
-        0% { background-color: #ef4444; }
-        50% { background-color: #dc2626; }
-        100% { background-color: #ef4444; }
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        'cockroach': {
+                            'primary': '#6933FF',
+                            'primary-light': '#8B5CF6',
+                            'primary-dark': '#5B21B6',
+                            'secondary': '#10B981',
+                            'accent': '#F59E0B',
+                            'background': '#FFFFFF',
+                            'surface': '#F8FAFC',
+                            'border': '#E2E8F0',
+                            'text': '#1E293B',
+                            'text-secondary': '#64748B',
+                            'success': '#10B981',
+                            'warning': '#F59E0B',
+                            'error': '#EF4444'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+<style>
+        * {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+        
+        body {
+            background-color: #F8FAFC;
+            color: #1E293B;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #F1F5F9;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94A3B8;
+        }
+        
+        /* Sidebar animations */
+        .sidebar-transition {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .sidebar-hidden {
+            transform: translateX(-100%);
+        }
+        
+        .sidebar-visible {
+            transform: translateX(0);
+        }
+        
+    /* Message animations */
+        .message-enter {
+            animation: messageSlideIn 0.3s ease-out;
+        }
+        
+        @keyframes messageSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Voice recording animation */
+        .recording-pulse {
+            animation: recordingPulse 1.5s infinite;
+        }
+        
+        @keyframes recordingPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+        }
+        
+        /* Modern button styles */
+        .btn-modern {
+            @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+        }
+        
+        .btn-primary {
+            @apply bg-cockroach-primary hover:bg-cockroach-primary-dark text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+        }
+        
+        .btn-secondary {
+            @apply bg-white hover:bg-gray-50 text-cockroach-text border border-cockroach-border shadow-sm;
+        }
+        
+        /* Input field styling */
+        .input-modern {
+            @apply bg-white border border-cockroach-border rounded-xl px-4 py-3 text-cockroach-text placeholder-cockroach-text-secondary focus:outline-none focus:ring-2 focus:ring-cockroach-primary focus:border-transparent transition-all duration-200 shadow-sm;
+        }
+        
+        /* Message bubbles */
+        .message-bubble {
+            @apply rounded-2xl px-6 py-4 max-w-4xl shadow-sm;
+        }
+        
+        .message-user {
+            @apply bg-cockroach-primary text-white ml-auto;
+        }
+        
+        .message-assistant {
+            @apply bg-white text-cockroach-text border border-cockroach-border;
+        }
+        
+        /* Sidebar styling */
+        .sidebar-item {
+            @apply flex items-center px-4 py-3 rounded-lg text-cockroach-text hover:bg-cockroach-surface transition-all duration-200 cursor-pointer;
+        }
+        
+        .sidebar-item.active {
+            @apply bg-cockroach-primary text-white;
+        }
+        
+        .sidebar-item:hover:not(.active) {
+            @apply bg-cockroach-surface;
+        }
+        
+        /* Mobile overlay */
+        .mobile-overlay {
+            @apply fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden;
+        }
+        
+        /* Audio controls */
+        .audio-control {
+            @apply p-3 rounded-lg bg-white hover:bg-gray-50 text-cockroach-text border border-cockroach-border transition-all duration-200 shadow-sm;
+        }
+        
+        .audio-control.active {
+            @apply bg-cockroach-primary text-white border-cockroach-primary;
+        }
+        
+        /* Language selector */
+        .language-selector {
+            @apply bg-white border border-cockroach-border rounded-lg px-3 py-2 text-cockroach-text focus:outline-none focus:ring-2 focus:ring-cockroach-primary shadow-sm;
+        }
+        
+        /* Provider badges */
+        .provider-badge {
+            @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium;
+        }
+        
+        .badge-ai {
+            @apply bg-blue-50 text-blue-700 border border-blue-200;
+        }
+        
+        .badge-db {
+            @apply bg-green-50 text-green-700 border border-green-200;
+        }
+        
+        /* Copy button styling */
+        .copy-button {
+            @apply absolute top-3 right-3 p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 transition-all duration-200 opacity-0 group-hover:opacity-100;
+        }
+        
+        .copy-button:hover {
+            @apply bg-gray-200 text-gray-800;
+        }
+        
+        .copy-button.copied {
+            @apply bg-green-100 text-green-600;
+        }
+        
+        /* Message container for copy functionality */
+        .message-container {
+            @apply relative group;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 1024px) {
+            .sidebar-mobile {
+                @apply fixed left-0 top-0 h-full z-50;
+            }
+        }
+        
+        /* Chat container improvements */
+        .chat-container {
+            min-height: 400px;
+            max-height: calc(100vh - 300px);
+        }
+        
+        /* Message spacing */
+        .message {
+            margin-bottom: 1.5rem;
+        }
+        
+        /* Input area improvements */
+        .input-area {
+            background: white;
+            border-top: 1px solid #E2E8F0;
+            padding: 1.5rem;
+        }
+        
+        /* Header improvements */
+        .header {
+            background: white;
+            border-bottom: 1px solid #E2E8F0;
+            padding: 1.5rem;
+        }
+        
+        /* Sidebar navigation improvements */
+        .sidebar-nav {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            text-decoration: none;
+        }
+        
+        .sidebar-item i {
+            width: 1.25rem;
+            height: 1.25rem;
+            margin-right: 0.75rem;
+            flex-shrink: 0;
+        }
+        
+        .sidebar-item span {
+            flex: 1;
+        }
+        
+        /* Logo alignment fixes */
+        .provider-badges {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        
+        .provider-badge {
+            display: inline-flex;
+            align-items: center;
+            height: 2rem;
+        }
+        
+        .provider-badge img {
+            width: 1rem;
+            height: 1rem;
+            margin-right: 0.5rem;
+            flex-shrink: 0;
     }
 </style>
 </head>
-<body class="bg-gray-100 font-sans">
-<div class="min-h-screen flex">
+<body class="bg-cockroach-surface text-cockroach-text">
+    <div class="flex h-screen">
 <!-- Sidebar -->
-<aside class="w-1/4 bg-blue p-4 space-y-4 shadow-lg">
-    <h3 class="text-lg font-semibold text-gray-700">Bank of Roachathon</h3>
-    <nav class="text-gray-600">
-      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
-        <i class="fas fa-home mr-2"></i> Home
-      </a>
-      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
-        <i class="fas fa-wallet mr-2"></i> Savings Wallet
-      </a>
-      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
-        <i class="fas fa-credit-card mr-2"></i> Credit Card
-      </a>
-      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
-        <i class="fas fa-file-alt mr-2"></i> Statements
-      </a>
-      <a href="/banko" class="flex items-center py-2 hover:bg-blue-50">
-        <i class="fas fa-robot mr-2"></i> Banko Assistant
-      </a>
-      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
-        <i class="fas fa-gift mr-2"></i> Benefits
-      </a>
-      <a href="/home" class="flex items-center py-2 hover:bg-blue-50">
-        <i class="fas fa-cog mr-2"></i> Settings
-      </a>
+        <aside id="sidebar" class="fixed lg:static left-0 top-0 h-full w-72 bg-white border-r border-cockroach-border flex flex-col z-50 shadow-lg transition-all duration-300">
+            <!-- Sidebar Header -->
+            <div class="p-6 border-b border-cockroach-border bg-gradient-to-br from-cockroach-primary to-cockroach-primary-light">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Banko</h1>
+                        <p class="text-sm text-white/90 mt-1">AI Banking Assistant</p>
+                    </div>
+                    <button id="sidebar-close" class="lg:hidden text-white hover:text-white/80">
+                        <i class="fas fa-times text-lg"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="flex-1 p-6">
+                <div class="space-y-2">
+                    <a href="/home" class="sidebar-item {{ 'active' if current_page == 'home' else '' }}">
+                        <i class="fas fa-home"></i>
+                        <span>Home</span>
+                    </a>
+                    <a href="/savings" class="sidebar-item {{ 'active' if current_page == 'savings' else '' }}">
+                        <i class="fas fa-piggy-bank"></i>
+                        <span>Savings</span>
+                    </a>
+                    <a href="/wallet" class="sidebar-item {{ 'active' if current_page == 'wallet' else '' }}">
+                        <i class="fas fa-wallet"></i>
+                        <span>Wallet</span>
+                    </a>
+                    <a href="/credit-card" class="sidebar-item {{ 'active' if current_page == 'credit-card' else '' }}">
+                        <i class="fas fa-credit-card"></i>
+                        <span>Credit Card</span>
+                    </a>
+                    <a href="/statements" class="sidebar-item {{ 'active' if current_page == 'statements' else '' }}">
+                        <i class="fas fa-file-alt"></i>
+                        <span>Statements</span>
+                    </a>
+                    <a href="/banko" class="sidebar-item {{ 'active' if current_page == 'banko' else '' }}">
+                        <i class="fas fa-robot"></i>
+                        <span>Banko Assistant</span>
+                    </a>
+                    <a href="/benefits" class="sidebar-item {{ 'active' if current_page == 'benefits' else '' }}">
+                        <i class="fas fa-star"></i>
+                        <span>Benefits</span>
+                    </a>
+                    <a href="/settings" class="sidebar-item {{ 'active' if current_page == 'settings' else '' }}">
+                        <i class="fas fa-cog"></i>
+                        <span>Settings</span>
+                    </a>
+                </div>
     </nav>
+            
+            <!-- Sidebar Footer -->
+            <div class="p-6 border-t border-cockroach-border bg-gray-50">
+                <div class="text-xs text-cockroach-text-secondary">
+                    <p class="font-medium">Powered by CockroachDB</p>
+                    <p class="mt-1">© 2025 Banko</p>
+                </div>
+            </div>
   </aside>
   
-  
-  <!-- Chat interface -->
-  <main class="w-3/4 p-4 flex flex-col bg-white shadow-lg">
-    <!-- User info -->
-    <header class="flex justify-between items-center mb-4 border-b pb-3">
-      <div class="flex flex-col">
-        <h2 class="text-xl font-semibold text-gray-800">Banko : The Assistant</h2>
-        <div class="flex items-center mt-1 space-x-2">
-          <span class="text-sm text-gray-600">Powered by:</span>
-          <!-- AI Provider Badge -->
-          <span class="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full flex items-center">
-            {% if ai_provider.current_service.lower() == 'watsonx' %}
-              <img src="/static/watsonx-icon.svg" alt="IBM Watsonx" class="w-4 h-4 mr-2" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));" />
+        <!-- Mobile Overlay -->
+        <div id="mobile-overlay" class="mobile-overlay hidden"></div>
+        
+        <!-- Main Content -->
+        <main id="main-content" class="flex-1 flex flex-col transition-all duration-300">
+            <!-- Header -->
+            <header class="header flex items-center justify-between">
+                <div class="flex items-center space-x-6">
+                    <button id="sidebar-toggle" class="lg:hidden btn-modern btn-secondary">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h2 class="text-2xl font-bold text-white">Banko Assistant</h2>
+                    <div class="provider-badges flex items-center">
+                        <span class="provider-badge badge-ai">
+        {% if 'watsonx' in ai_provider.name.lower() %}
+                                <img src="/static/watsonx-icon.svg" alt="IBM Watsonx" />
             {% else %}
               <span class="mr-1">{{ ai_provider.icon }}</span>
             {% endif %}
             {{ ai_provider.name }}
           </span>
-          <!-- Database Badge -->
-          <span class="px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full flex items-center">
-            <img src="/static/roach-logo.svg" alt="CockroachDB" class="w-4 h-4 mr-2" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));" />
+                        <span class="provider-badge badge-db">
+                            <img src="/static/roach-logo.svg" alt="CockroachDB" />
             CockroachDB
           </span>
         </div>
       </div>
-      <div class="rounded-full overflow-hidden w-16 h-16">
-        <img src="/static/profilepic.jpeg" alt="User Profile" class="object-cover w-full h-full">
+                <div class="flex items-center space-x-4">
+                    <button id="voice-toggle" class="btn-modern btn-secondary text-sm">
+                        <i class="fas fa-microphone mr-2"></i>
+                        <span id="voice-status">Voice ON</span>
+                    </button>
+
+
+                    <button id="db-toggle" class="btn-modern bg-blue-600 hover:bg-blue-700 text-white text-sm">
+                        <i class="fas fa-database mr-2"></i>
+                        <span>DB Ops</span>
+                        <span id="db-indicator" class="ml-2 w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                    </button>
+                    <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-cockroach-border">
+                        <img src="/static/profilepic.jpeg" alt="Profile" class="w-full h-full object-cover">
+                    </div>
       </div>
     </header>
     
     <!-- Database Operations Panel -->
-    <div id="db-panel" class="hidden mb-4 p-4 bg-gray-50 border rounded-lg">
-        <div class="flex items-center justify-between mb-2">
-            <h3 class="text-sm font-semibold text-gray-700">🔍 Database Operations</h3>
-            <button id="close-db-panel" class="text-gray-500 hover:text-gray-700">
-                <i class="fas fa-times"></i>
+            <div id="db-panel" class="hidden p-6 bg-gray-50 border-b border-cockroach-border">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-cockroach-text">🔍 Database Operations</h3>
+                    <button id="close-db-panel" class="text-cockroach-text-secondary hover:text-cockroach-text">
+                        <i class="fas fa-times text-lg"></i>
             </button>
         </div>
-        <div id="db-operations" class="space-y-2 text-sm">
+                <div id="db-operations" class="space-y-3 text-sm">
             <!-- Operations will be displayed here -->
         </div>
     </div>
 
-    <!-- Chat messages -->
-    <section class="flex-1 overflow-y-auto mb-4" style="scroll-behavior: smooth; max-height: calc(100vh - 400px);">
-        <!-- Loop through messages -->
+            <!-- Chat Messages -->
+            <section id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-6 chat-container">
         {% for message in chat %}
             {% if message.class == 'Assistant' %}
-                <!-- Bot message -->
-                <div class="flex justify-start items-start mb-4" data-read-aloud="{{ message.text }}">
-                    <div class="flex items-start mr-2">
-                        <div class="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center text-sm text-white">B</div>
+                        <div class="message-container message-enter" data-read-aloud="{{ message.text }}">
+                            <div class="flex items-start space-x-4">
+                                <div class="w-10 h-10 rounded-full bg-cockroach-primary flex items-center justify-center flex-shrink-0 shadow-md">
+                                    <i class="fas fa-robot text-white text-sm"></i>
                     </div>
-                    <div class="max-w-xl bg-blue-100 rounded-xl p-6 shadow-md">
-                        <div class="text-gray-800 text-lg font-medium">
-                            <strong>Banko Bot:</strong>
-                            <div class="markdown-content mt-2" style="font-family: 'Open Sans', sans-serif; line-height: 1.6; color: #1a202c;" 
-                                 data-raw-content="{{ message.text }}">
-                                <!-- Markdown content will be rendered here by JavaScript -->
+                                <div class="message-bubble message-assistant flex-1">
+                                    <div class="markdown-content text-cockroach-text leading-relaxed" data-raw-content="{{ message.text }}">
+                                        <!-- Markdown content will be rendered here -->
+                            </div>
+                        </div>
+                    </div>
+                            <button class="copy-button" onclick="copyMessage(this, this.closest('.message-container').querySelector('.markdown-content').getAttribute('data-raw-content') || this.closest('.message-container').querySelector('p').textContent)" title="Copy message">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                </div>
+            {% elif message.class == 'User' %}
+                        <div class="message-container message-enter">
+                            <div class="flex justify-end">
+                                <div class="message-bubble message-user">
+                                    <p class="font-medium">{{ message.text }}</p>
+                    </div>
+                                <div class="w-10 h-10 rounded-full bg-cockroach-primary ml-4 flex items-center justify-center flex-shrink-0 shadow-md">
+                                    <i class="fas fa-user text-white text-sm"></i>
+                    </div>
+                            </div>
+                            <button class="copy-button" onclick="copyMessage(this, this.closest('.message-container').querySelector('p').textContent)" title="Copy message">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                </div>
+            {% endif %}
+        {% endfor %}
+                
+                <!-- Loading Animation (ChatGPT-style) -->
+                <div id="loading-message" class="message-container hidden">
+                    <div class="flex items-start space-x-4">
+                        <div class="w-10 h-10 rounded-full bg-cockroach-primary flex items-center justify-center flex-shrink-0 shadow-md">
+                            <i class="fas fa-robot text-white text-sm"></i>
+            </div>
+                        <div class="message-bubble message-assistant flex-1">
+                            <div class="loading-dots">
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
                             </div>
                         </div>
                     </div>
                 </div>
-            {% elif message.class == 'User' %}
-                <!-- User message -->
-                <div class="flex justify-end items-end">
-                    <div class="max-w-xl bg-green-100 rounded-xl p-4">
-                        <p class="text-gray-800"><strong>You:</strong> {{ message.text }}</p>
-                    </div>
-                    <div class="flex items-end ml-2">
-                    <div class="h-8 w-8 rounded-full bg-gray-500 flex items-center justify-center text-sm text-white">U</div>
-                    </div>
-                </div>
-            {% endif %}
-        {% endfor %}
-    </section>
-    
-    <!-- Message input -->
-    <footer class="mt-auto">
-        <div class="flex flex-col w-full">
-            <!-- Feature toggles -->
-            <div class="flex justify-end gap-2 mb-2">
-                <button type="button" id="voice-toggle" class="px-3 py-1 text-xs bg-green-200 hover:bg-green-300 rounded-md" title="Toggle Voice Features">
-                    <i class="fas fa-microphone mr-1"></i> Voice: ON
-                </button>
-                <button type="button" id="db-toggle" class="px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded-md" title="Show Database Operations">
-                    <i class="fas fa-database mr-1"></i> DB Operations
-                </button>
-            </div>
+            </section>
             
-            <form class="flex w-full" method="post" action="/banko" id="chat-form">
-                <input type="text" name="message" id="message-input" placeholder="Type your message here or use voice..." class="flex-grow p-2 border-2 border-gray-300 rounded-l-md focus:outline-none focus:border-blue-500">
-                <input type="hidden" name="user_input" id="user-input-hidden">
-                <button type="button" id="voice-btn" class="px-4 py-2 text-white bg-gray-500 hover:bg-gray-700 focus:outline-none" title="Voice Input">
+            <!-- Input Area -->
+            <footer class="input-area">
+                <div class="max-w-4xl mx-auto px-4">
+                    <form id="chat-form" method="post" action="/banko">
+                        <div class="input-container">
+                            <div class="input-wrapper">
+                                <textarea 
+                                    name="user_input" 
+                                    id="message-input" 
+                                    placeholder="Message Banko your personal finance assistant..." 
+                                    class="input-modern"
+                                    rows="1"
+                                    autocomplete="off"></textarea>
+                                
+                                <!-- Inline Controls -->
+                                <div class="input-controls">
+                                    <div id="audio-controls" class="audio-controls">
+                                        <button type="button" id="voice-btn" class="control-btn" title="Voice Input">
                     <i class="fas fa-microphone" id="mic-icon"></i>
                 </button>
-            <button type="button" id="speaker-btn" class="px-4 py-2 text-white bg-blue-500 hover:bg-blue-700 focus:outline-none" title="Read Aloud">
+                                        <button type="button" id="speaker-btn" class="control-btn" title="Read Aloud">
                 <i class="fas fa-volume-up" id="speaker-icon"></i>
             </button>
-            <select id="language-select" class="px-3 py-2 border-2 border-gray-300 focus:outline-none focus:border-blue-500" title="Voice Language">
-                <option value="en-US">🇺🇸 English</option>
-                <option value="es-ES">🇪🇸 Español</option>
-                <option value="fr-FR">🇫🇷 Français</option>
-                <option value="de-DE">🇩🇪 Deutsch</option>
-                <option value="it-IT">🇮🇹 Italiano</option>
-                <option value="pt-PT">🇵🇹 Português</option>
-                <option value="ja-JP">🇯🇵 日本語</option>
-                <option value="ko-KR">🇰🇷 한국어</option>
-                <option value="zh-CN">🇨🇳 中文</option>
-                <option value="hi-IN">🇮🇳 हिन्दी</option>
+                                        <select id="language-select" class="language-select" title="Voice Language">
+                                            <option value="en-US">🇺🇸 EN</option>
+                                            <option value="es-ES">🇪🇸 ES</option>
+                                            <option value="fr-FR">🇫🇷 FR</option>
+                                            <option value="de-DE">🇩🇪 DE</option>
+                                            <option value="it-IT">🇮🇹 IT</option>
+                                            <option value="pt-PT">🇵🇹 PT</option>
+                                            <option value="ja-JP">🇯🇵 JP</option>
+                                            <option value="ko-KR">🇰🇷 KR</option>
+                                            <option value="zh-CN">🇨🇳 CN</option>
+                                            <option value="hi-IN">🇮🇳 HI</option>
             </select>
-            <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded-r-md hover:bg-green-700 focus:outline-none">
-              Send
+                                    </div>
+                                    <button type="submit" class="send-btn" title="Send Message">
+                                        <i class="fas fa-paper-plane"></i>
             </button>
+                                </div>
+                            </div>
+                        </div>
         </form>
         </div>
     </footer>    
@@ -193,131 +513,337 @@
 marked.setOptions({
     breaks: true,
     gfm: true,
-    sanitize: false // We'll use DOMPurify instead
-});
+            sanitize: false
+        });
 
-// Render markdown content for all bot messages
-document.addEventListener('DOMContentLoaded', function() {
-    const markdownElements = document.querySelectorAll('.markdown-content[data-raw-content]');
-    markdownElements.forEach(element => {
-        const rawContent = element.getAttribute('data-raw-content');
-        if (rawContent) {
-            const htmlContent = marked.parse(rawContent);
-            const cleanContent = DOMPurify.sanitize(htmlContent);
-            element.innerHTML = cleanContent;
+
+
+
+
+        // Copy functionality
+        function copyMessage(button, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Visual feedback
+                const icon = button.querySelector('i');
+                const originalIcon = icon.className;
+                
+                button.classList.add('copied');
+                icon.className = 'fas fa-check';
+                
+                setTimeout(() => {
+                    button.classList.remove('copied');
+                    icon.className = originalIcon;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                // Visual feedback
+                const icon = button.querySelector('i');
+                const originalIcon = icon.className;
+                
+                button.classList.add('copied');
+                icon.className = 'fas fa-check';
+                
+                setTimeout(() => {
+                    button.classList.remove('copied');
+                    icon.className = originalIcon;
+                }, 2000);
+            });
         }
-    });
-    
-    // Auto-scroll to bottom of chat
-    const chatSection = document.querySelector('section');
-    if (chatSection) {
-        chatSection.scrollTop = chatSection.scrollHeight;
-    }
-});
 
-// Voice Recognition
-let recognition;
-let isRecording = false;
+        // Sidebar Management
+        class SidebarManager {
+            constructor() {
+                this.sidebar = document.getElementById('sidebar');
+                this.mainContent = document.getElementById('main-content');
+                this.sidebarToggle = document.getElementById('sidebar-toggle');
+                this.sidebarClose = document.getElementById('sidebar-close');
+                this.mobileOverlay = document.getElementById('mobile-overlay');
+                this.isOpen = true;
+                
+                this.init();
+            }
+            
+            init() {
+                this.sidebarToggle?.addEventListener('click', () => this.toggle());
+                this.sidebarClose?.addEventListener('click', () => this.close());
+                this.mobileOverlay?.addEventListener('click', () => this.close());
+                
+                // Handle window resize
+                window.addEventListener('resize', () => this.handleResize());
+                this.handleResize();
+            }
+            
+            toggle() {
+                if (this.isOpen) {
+                    this.close();
+                } else {
+                    this.open();
+                }
+            }
+            
+            open() {
+                this.isOpen = true;
+                this.sidebar.classList.remove('sidebar-hidden');
+                this.sidebar.classList.add('sidebar-visible');
+                this.mobileOverlay?.classList.remove('hidden');
+                this.mainContent.classList.remove('lg:ml-0');
+                this.mainContent.classList.add('lg:ml-72');
+            }
+            
+            close() {
+                this.isOpen = false;
+                this.sidebar.classList.add('sidebar-hidden');
+                this.sidebar.classList.remove('sidebar-visible');
+                this.mobileOverlay?.classList.add('hidden');
+                this.mainContent.classList.add('lg:ml-0');
+                this.mainContent.classList.remove('lg:ml-72');
+            }
+            
+            handleResize() {
+                if (window.innerWidth >= 1024) {
+                    // Desktop: always show sidebar
+                    this.sidebar.classList.remove('sidebar-hidden');
+                    this.sidebar.classList.add('sidebar-visible');
+                    this.mobileOverlay?.classList.add('hidden');
+                    this.mainContent.classList.remove('lg:ml-0');
+                    this.mainContent.classList.add('lg:ml-72');
+                    this.isOpen = true;
+                } else {
+                    // Mobile: hide sidebar by default
+                    this.sidebar.classList.add('sidebar-hidden');
+                    this.sidebar.classList.remove('sidebar-visible');
+                    this.mobileOverlay?.classList.add('hidden');
+                    this.mainContent.classList.add('lg:ml-0');
+                    this.mainContent.classList.remove('lg:ml-72');
+                    this.isOpen = false;
+                }
+            }
+        }
 
+        // Voice Recognition Manager
+        class VoiceManager {
+            constructor() {
+                this.recognition = null;
+                this.isRecording = false;
+                this.isEnabled = true;
+                this.speechSynthesis = window.speechSynthesis;
+                this.isSpeaking = false;
+                
+                this.init();
+            }
+            
+            init() {
 if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    
-    // Update language based on selection
-    function updateRecognitionLanguage() {
-        const languageSelect = document.getElementById('language-select');
-        recognition.lang = languageSelect.value;
-    }
-    
-    // Set initial language
-    updateRecognitionLanguage();
-    
-    // Update language when changed
-    document.getElementById('language-select').addEventListener('change', updateRecognitionLanguage);
-    
-    recognition.onstart = function() {
-        isRecording = true;
-        const voiceBtn = document.getElementById('voice-btn');
-        const micIcon = document.getElementById('mic-icon');
-        voiceBtn.classList.add('recording');
-        voiceBtn.style.backgroundColor = '#ef4444';
-        micIcon.classList.remove('fa-microphone');
-        micIcon.classList.add('fa-stop');
+                    this.recognition = new SpeechRecognition();
+                    this.recognition.continuous = false;
+                    this.recognition.interimResults = false;
+                    this.recognition.lang = 'en-US';
+                    
+                    this.setupRecognitionEvents();
+                } else {
+                    this.disableVoiceFeatures();
+                }
+                
+                this.setupEventListeners();
+                
+                // Initialize voice controls visibility
+                const audioControls = document.getElementById('audio-controls');
+                
+                console.log('=== INITIALIZATION DEBUG ===');
+                console.log('Audio controls found:', !!audioControls);
+                
+                if (audioControls) {
+                    audioControls.style.display = 'flex';
+                    audioControls.style.visibility = 'visible';
+                    audioControls.style.opacity = '1';
+                    console.log('Audio controls initialized to visible');
+                }
+                console.log('=== END INITIALIZATION ===');
+            }
+            
+            setupRecognitionEvents() {
+                this.recognition.onstart = () => {
+                    this.isRecording = true;
+                    this.updateVoiceButton(true);
         document.getElementById('message-input').placeholder = 'Listening...';
     };
     
-    recognition.onresult = function(event) {
+                this.recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         document.getElementById('message-input').value = transcript;
-        document.getElementById('user-input-hidden').value = transcript;
-    };
+                };
     
-    recognition.onend = function() {
-        isRecording = false;
-        const voiceBtn = document.getElementById('voice-btn');
-        const micIcon = document.getElementById('mic-icon');
-        voiceBtn.classList.remove('recording');
-        voiceBtn.style.backgroundColor = '';
-        micIcon.classList.remove('fa-stop');
-        micIcon.classList.add('fa-microphone');
-        document.getElementById('message-input').placeholder = 'Type your message here or use voice...';
-    };
-    
-    recognition.onerror = function(event) {
+                this.recognition.onend = () => {
+                    this.isRecording = false;
+                    this.updateVoiceButton(false);
+                    document.getElementById('message-input').placeholder = 'Message Banko your personal finance assistant...';
+                };
+                
+                this.recognition.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
-        isRecording = false;
-        recognition.onend();
-        alert('Voice recognition error: ' + event.error);
-    };
+                    this.isRecording = false;
+                    this.updateVoiceButton(false);
+                    document.getElementById('message-input').placeholder = 'Message Banko your personal finance assistant...';
+                    
+                    if (event.error === 'not-allowed') {
+                        alert('Please allow microphone access for voice input');
 } else {
-    // Hide voice button if not supported
-    document.getElementById('voice-btn').style.display = 'none';
-}
-
-// Voice button click handler
-document.getElementById('voice-btn').addEventListener('click', function() {
-    if (!voiceFeaturesEnabled) {
-        return; // Voice features are disabled
-    }
-    
-    if (!recognition) {
+                        alert(`Voice recognition error: ${event.error}`);
+                    }
+                };
+            }
+            
+            setupEventListeners() {
+                console.log('Setting up voice event listeners...');
+                
+                // Voice button
+                const voiceBtn = document.getElementById('voice-btn');
+                if (voiceBtn) {
+                    voiceBtn.addEventListener('click', () => {
+                        console.log('Voice button clicked');
+                        if (!this.isEnabled) {
+                            console.log('Voice is disabled');
+                            return;
+                        }
+                        this.toggleRecording();
+                    });
+                    console.log('Voice button event listener added');
+} else {
+                    console.error('Voice button not found during setup');
+                }
+                
+                // Speaker button
+                const speakerBtn = document.getElementById('speaker-btn');
+                if (speakerBtn) {
+                    speakerBtn.addEventListener('click', () => {
+                        console.log('Speaker button clicked');
+                        if (!this.isEnabled) {
+                            console.log('Voice is disabled');
+        return;
+                        }
+                        this.toggleSpeech();
+                    });
+                    console.log('Speaker button event listener added');
+                } else {
+                    console.error('Speaker button not found during setup');
+                }
+                
+                // Language selector
+                const languageSelect = document.getElementById('language-select');
+                if (languageSelect) {
+                    languageSelect.addEventListener('change', (e) => {
+                        if (this.recognition) {
+                            this.recognition.lang = e.target.value;
+                        }
+                    });
+                    console.log('Language selector event listener added');
+    } else {
+                    console.error('Language selector not found during setup');
+                }
+                
+                // Voice toggle
+                const voiceToggle = document.getElementById('voice-toggle');
+                if (voiceToggle) {
+                    voiceToggle.addEventListener('click', () => {
+                        console.log('Voice toggle clicked');
+                        this.toggleVoiceFeatures();
+                    });
+                    console.log('Voice toggle event listener added');
+                } else {
+                    console.error('Voice toggle not found during setup');
+                }
+                
+                console.log('Voice event listeners setup complete');
+            }
+            
+            toggleRecording() {
+                console.log('toggleRecording called, isEnabled:', this.isEnabled, 'recognition:', !!this.recognition);
+                
+                if (!this.recognition) {
+                    console.error('Voice recognition not available');
         alert('Voice recognition is not supported in this browser');
         return;
     }
     
-    if (isRecording) {
-        recognition.stop();
+                if (!this.isEnabled) {
+                    console.log('Voice is disabled, cannot record');
+                    return;
+                }
+                
+                try {
+                    if (this.isRecording) {
+                        console.log('Stopping recording...');
+                        this.recognition.stop();
+                        this.isRecording = false;
+                        this.updateVoiceButton(false);
     } else {
-        recognition.start();
-    }
-});
-
-// Text-to-Speech
-let speechSynthesis = window.speechSynthesis;
-let isSpeaking = false;
-
-document.getElementById('speaker-btn').addEventListener('click', function() {
-    if (!voiceFeaturesEnabled) {
-        return; // Voice features are disabled
-    }
-    
-    const speakerBtn = document.getElementById('speaker-btn');
-    const speakerIcon = document.getElementById('speaker-icon');
-    
-    if (isSpeaking) {
-        speechSynthesis.cancel();
-        isSpeaking = false;
-        speakerBtn.style.backgroundColor = '';
-        speakerIcon.classList.remove('fa-stop');
-        speakerIcon.classList.add('fa-volume-up');
+                        console.log('Starting recording...');
+                        // Ensure we're not already recording
+                        if (this.recognition.state !== 'inactive') {
+                            this.recognition.abort();
+                            setTimeout(() => {
+                                this.recognition.start();
+                            }, 100);
+                        } else {
+                            this.recognition.start();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error toggling recording:', error);
+                    this.isRecording = false;
+                    this.updateVoiceButton(false);
+                    
+                    // More user-friendly error messages
+                    if (error.message.includes('already started')) {
+                        // Reset the recognition state
+                        this.recognition.abort();
+                        setTimeout(() => {
+                            try {
+                                this.recognition.start();
+                            } catch (e) {
+                                console.error('Failed to restart recognition:', e);
+                            }
+                        }, 200);
+                    } else {
+                        alert('Voice recognition error. Please try again.');
+                    }
+                }
+            }
+            
+            toggleSpeech() {
+                console.log('toggleSpeech called, isEnabled:', this.isEnabled, 'isSpeaking:', this.isSpeaking);
+                
+                if (!this.isEnabled) {
+                    console.log('Voice is disabled, cannot speak');
+                    return;
+                }
+                
+                // Always stop any ongoing speech first
+                if (this.speechSynthesis.speaking || this.isSpeaking) {
+                    console.log('Stopping all speech...');
+                    this.speechSynthesis.cancel();
+                    this.isSpeaking = false;
+                    this.updateSpeakerButton(false);
+                    
+                    // If we were already speaking, just stop and return
+                    if (this.isSpeaking) {
         return;
+                    }
     }
     
-    // Get the last bot message
+                try {
     const botMessages = document.querySelectorAll('[data-read-aloud]');
     if (botMessages.length === 0) {
+                        console.log('No messages to read aloud');
         alert('No message to read');
         return;
     }
@@ -326,151 +852,240 @@ document.getElementById('speaker-btn').addEventListener('click', function() {
     const textToRead = lastMessage.getAttribute('data-read-aloud');
     
     if (textToRead) {
+                        console.log('Reading text:', textToRead.substring(0, 50) + '...');
+                        
+                        // Ensure speech synthesis is completely stopped before starting
+                        this.speechSynthesis.cancel();
+                        
+                        setTimeout(() => {
         const utterance = new SpeechSynthesisUtterance(textToRead);
         utterance.rate = 0.9;
         utterance.pitch = 1;
         utterance.volume = 0.8;
         
-        // Set language for speech synthesis
         const languageSelect = document.getElementById('language-select');
+                            if (languageSelect) {
         utterance.lang = languageSelect.value;
-        
-        // Try to find a voice that matches the selected language
-        const voices = speechSynthesis.getVoices();
-        const matchingVoice = voices.find(voice => voice.lang.startsWith(languageSelect.value.split('-')[0]));
+                            }
+                            
+                            // Find matching voice
+                            const voices = this.speechSynthesis.getVoices();
+                            const matchingVoice = voices.find(voice => 
+                                voice.lang.startsWith(languageSelect?.value?.split('-')[0] || 'en')
+                            );
         if (matchingVoice) {
             utterance.voice = matchingVoice;
         }
         
-        utterance.onstart = function() {
-            isSpeaking = true;
-            speakerBtn.style.backgroundColor = '#dc2626';
-            speakerIcon.classList.remove('fa-volume-up');
-            speakerIcon.classList.add('fa-stop');
-        };
-        
-        utterance.onend = function() {
-            isSpeaking = false;
-            speakerBtn.style.backgroundColor = '';
-            speakerIcon.classList.remove('fa-stop');
-            speakerIcon.classList.add('fa-volume-up');
-        };
-        
-        speechSynthesis.speak(utterance);
-    }
-});
-
-// Voice features control
-let voiceFeaturesEnabled = true;
-
-function toggleVoiceFeatures() {
-    voiceFeaturesEnabled = !voiceFeaturesEnabled;
-    const voiceToggleBtn = document.getElementById('voice-toggle');
+                            utterance.onstart = () => {
+                                console.log('Speech started');
+                                this.isSpeaking = true;
+                                this.updateSpeakerButton(true);
+                            };
+                            
+                            utterance.onend = () => {
+                                console.log('Speech ended naturally');
+                                this.isSpeaking = false;
+                                this.updateSpeakerButton(false);
+                            };
+                            
+                            utterance.onerror = (event) => {
+                                console.error('Speech synthesis error:', event.error);
+                                this.isSpeaking = false;
+                                this.updateSpeakerButton(false);
+                                
+                                // Don't show alert for interrupted errors (user stopped it)
+                                if (event.error !== 'interrupted' && event.error !== 'canceled') {
+                                    alert(`Speech synthesis error: ${event.error}`);
+                                }
+                            };
+                            
+                            // Store reference to current utterance for better control
+                            this.currentUtterance = utterance;
+                            this.speechSynthesis.speak(utterance);
+                        }, 100);
+                    } else {
+                        console.log('No text content to read');
+                    }
+                } catch (error) {
+                    console.error('Error with speech synthesis:', error);
+                    this.isSpeaking = false;
+                    this.updateSpeakerButton(false);
+                    alert('Error with speech synthesis: ' + error.message);
+                }
+            }
+            
+            updateVoiceButton(recording) {
     const voiceBtn = document.getElementById('voice-btn');
+                const micIcon = document.getElementById('mic-icon');
+                
+                if (recording) {
+                    voiceBtn.classList.add('recording-pulse', 'active');
+                    micIcon.classList.remove('fa-microphone');
+                    micIcon.classList.add('fa-stop');
+                } else {
+                    voiceBtn.classList.remove('recording-pulse', 'active');
+                    micIcon.classList.remove('fa-stop');
+                    micIcon.classList.add('fa-microphone');
+                }
+            }
+            
+            updateSpeakerButton(speaking) {
     const speakerBtn = document.getElementById('speaker-btn');
-    const languageSelect = document.getElementById('language-select');
-    const messageInput = document.getElementById('message-input');
-    
-    if (voiceFeaturesEnabled) {
-        // Enable voice features
-        voiceToggleBtn.innerHTML = '<i class="fas fa-microphone mr-1"></i> Voice: ON';
-        voiceToggleBtn.className = 'px-3 py-1 text-xs bg-green-200 hover:bg-green-300 rounded-md';
-        voiceBtn.style.display = 'block';
-        speakerBtn.style.display = 'block';
-        languageSelect.style.display = 'block';
-        messageInput.placeholder = 'Type your message here or use voice...';
-        
-        // Stop any ongoing speech
-        if (isSpeaking) {
-            speechSynthesis.cancel();
-        }
-        if (isRecording) {
-            recognition.stop();
-        }
+                const speakerIcon = document.getElementById('speaker-icon');
+                
+                if (speaking) {
+                    speakerBtn.classList.add('active');
+                    speakerIcon.classList.remove('fa-volume-up');
+                    speakerIcon.classList.add('fa-stop');
+                } else {
+                    speakerBtn.classList.remove('active');
+                    speakerIcon.classList.remove('fa-stop');
+                    speakerIcon.classList.add('fa-volume-up');
+                }
+            }
+            
+                        toggleVoiceFeatures() {
+                this.isEnabled = !this.isEnabled;
+                const voiceToggleBtn = document.getElementById('voice-toggle');
+                const audioControls = document.getElementById('audio-controls');
+                
+                console.log('=== VOICE TOGGLE DEBUG ===');
+                console.log('Voice toggle clicked. New state:', this.isEnabled);
+                console.log('Voice toggle button found:', !!voiceToggleBtn);
+                console.log('Audio controls found:', !!audioControls);
+                
+                if (!voiceToggleBtn || !audioControls) {
+                    console.error('Required elements not found!');
+                    return;
+                }
+                
+                if (this.isEnabled) {
+                    console.log('Enabling voice features...');
+                    
+                    // Update button appearance
+                    const micIcon = voiceToggleBtn.querySelector('i');
+                    const statusSpan = voiceToggleBtn.querySelector('#voice-status');
+                    if (micIcon) {
+                        micIcon.className = 'fas fa-microphone mr-2';
+                    }
+                    if (statusSpan) statusSpan.textContent = 'Voice ON';
+                    voiceToggleBtn.className = 'btn-modern btn-secondary text-sm';
+                    
+                    // Show audio controls
+                    audioControls.style.display = 'flex';
+                    audioControls.style.visibility = 'visible';
+                    audioControls.style.opacity = '1';
+                    console.log('Audio controls shown');
+                    
     } else {
-        // Disable voice features
-        voiceToggleBtn.innerHTML = '<i class="fas fa-microphone-slash mr-1"></i> Voice: OFF';
-        voiceToggleBtn.className = 'px-3 py-1 text-xs bg-red-200 hover:bg-red-300 rounded-md';
-        voiceBtn.style.display = 'none';
-        speakerBtn.style.display = 'none';
-        languageSelect.style.display = 'none';
-        messageInput.placeholder = 'Type your message here...';
-        
-        // Stop any ongoing speech/recording
-        if (isSpeaking) {
-            speechSynthesis.cancel();
-            isSpeaking = false;
+                    console.log('Disabling voice features...');
+                    
+                    // Stop any ongoing operations FIRST
+                    if (this.speechSynthesis.speaking || this.isSpeaking) {
+                        console.log('Stopping speech synthesis...');
+                        this.speechSynthesis.cancel();
+                        this.isSpeaking = false;
+                        this.updateSpeakerButton(false);
+                    }
+                    if (this.isRecording && this.recognition) {
+                        console.log('Stopping voice recognition...');
+                        this.recognition.abort();
+                        this.isRecording = false;
+                        this.updateVoiceButton(false);
+                    }
+                    
+                    // Update button appearance
+                    const micIcon = voiceToggleBtn.querySelector('i');
+                    const statusSpan = voiceToggleBtn.querySelector('#voice-status');
+                    if (micIcon) {
+                        micIcon.className = 'fas fa-microphone-slash mr-2';
+                    }
+                    if (statusSpan) statusSpan.textContent = 'Voice OFF';
+                    voiceToggleBtn.className = 'btn-modern bg-red-600 hover:bg-red-700 text-white text-sm';
+                    
+                    // Hide audio controls
+                    audioControls.style.display = 'none';
+                    audioControls.style.visibility = 'hidden';
+                    audioControls.style.opacity = '0';
+                    console.log('Audio controls hidden');
+                }
+                
+                console.log('=== END VOICE TOGGLE DEBUG ===');
+            }
+            
+
+            
+            disableVoiceFeatures() {
+                this.isEnabled = false;
+                document.getElementById('voice-btn').style.display = 'none';
+                document.getElementById('speaker-btn').style.display = 'none';
+                document.getElementById('language-select').style.display = 'none';
+                document.getElementById('voice-toggle').innerHTML = '<i class="fas fa-microphone-slash mr-2"></i><span>Voice OFF</span>';
+                document.getElementById('voice-toggle').className = 'btn-modern bg-red-600 hover:bg-red-700 text-white text-sm';
+                document.getElementById('voice-status').textContent = 'Voice OFF';
+            }
         }
-        if (isRecording && recognition) {
-            recognition.stop();
-            isRecording = false;
-        }
-    }
-}
 
-// Auto-scroll functionality
-function smoothScrollToBottom() {
-    // Scroll the main chat container to bottom
-    const chatContainer = document.querySelector('section.flex-1.overflow-y-auto');
-    if (chatContainer) {
-        chatContainer.scrollTo({
-            top: chatContainer.scrollHeight,
-            behavior: 'smooth'
-        });
-    }
-    
-    // Also scroll the entire page to ensure visibility
-    setTimeout(() => {
-        window.scrollTo({
-            top: document.documentElement.scrollHeight,
-            behavior: 'smooth'
-        });
-    }, 100);
-}
-
-function scrollToDbPanel() {
-    // Scroll to make DB panel visible
-    const dbPanel = document.getElementById('db-panel');
-    if (dbPanel && !dbPanel.classList.contains('hidden')) {
-        dbPanel.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-        });
-    }
-}
-
-// Database operations tracking
-let dbOperationsVisible = false;
-
-function addDbOperation(step, description, type = 'info') {
+        // Database Operations Manager
+        class DatabaseManager {
+            constructor() {
+                this.isVisible = false;
+                this.init();
+            }
+            
+            init() {
+                document.getElementById('db-toggle')?.addEventListener('click', () => this.toggle());
+                document.getElementById('close-db-panel')?.addEventListener('click', () => this.hide());
+            }
+            
+            toggle() {
+                if (this.isVisible) {
+                    this.hide();
+                } else {
+                    this.show();
+                }
+            }
+            
+            show() {
+                document.getElementById('db-panel').classList.remove('hidden');
+                this.isVisible = true;
+                this.scrollToPanel();
+            }
+            
+            hide() {
+                document.getElementById('db-panel').classList.add('hidden');
+                this.isVisible = false;
+                this.scrollToBottom();
+            }
+            
+            addOperation(step, description, type = 'info') {
     const operationsDiv = document.getElementById('db-operations');
     const timestamp = new Date().toLocaleTimeString();
     
     const operationDiv = document.createElement('div');
     
-    // Enhanced styling for cache status
     let bgColor, textColor, borderColor = '';
     if (type === 'success') {
         bgColor = 'bg-green-50';
         textColor = 'text-green-800';
-        borderColor = 'border-l-4 border-green-400';
+                    borderColor = 'border-l-4 border-green-500';
     } else if (type === 'warning') {
         bgColor = 'bg-orange-50'; 
         textColor = 'text-orange-800';
-        borderColor = 'border-l-4 border-orange-400';
+                    borderColor = 'border-l-4 border-orange-500';
     } else if (type === 'error') {
         bgColor = 'bg-red-50';
         textColor = 'text-red-800'; 
-        borderColor = 'border-l-4 border-red-400';
+                    borderColor = 'border-l-4 border-red-500';
     } else {
         bgColor = 'bg-blue-50';
         textColor = 'text-blue-800';
-        borderColor = 'border-l-4 border-blue-400';
+                    borderColor = 'border-l-4 border-blue-500';
     }
     
-    operationDiv.className = `flex items-center space-x-2 p-3 rounded-lg ${bgColor} ${textColor} ${borderColor} transition-all duration-300 hover:shadow-sm`;
+                operationDiv.className = `flex items-center space-x-3 p-4 rounded-lg ${bgColor} ${textColor} ${borderColor} transition-all duration-300`;
     
-    // Add special styling for cache hits/misses
     const isCacheOperation = description.includes('CACHE HIT') || description.includes('CACHE MISS');
     const cacheIcon = description.includes('CACHE HIT') ? '🎯' : 
                      description.includes('CACHE MISS') ? '⚡' : '';
@@ -485,110 +1100,162 @@ function addDbOperation(step, description, type = 'info') {
     operationsDiv.appendChild(operationDiv);
     operationsDiv.scrollTop = operationsDiv.scrollHeight;
     
-    // Add a slight animation for cache operations
     if (isCacheOperation) {
         operationDiv.style.transform = 'scale(0.95)';
         setTimeout(() => {
             operationDiv.style.transform = 'scale(1)';
         }, 100);
-    }
-    
-    // Auto-scroll to keep DB operations visible
-    if (dbOperationsVisible) {
-        setTimeout(scrollToDbPanel, 200);
-    }
-}
-
-function clearDbOperations() {
-    const operationsDiv = document.getElementById('db-operations');
-    operationsDiv.innerHTML = '';
-}
-
-function showDbPanel() {
-    document.getElementById('db-panel').classList.remove('hidden');
-    dbOperationsVisible = true;
-    // Auto-scroll to show the panel
-    setTimeout(scrollToDbPanel, 100);
-}
-
-function hideDbPanel() {
-    document.getElementById('db-panel').classList.add('hidden');
-    dbOperationsVisible = false;
-    // Auto-scroll to bottom after hiding panel
-    setTimeout(smoothScrollToBottom, 100);
-}
-
-// Voice toggle handler
-document.getElementById('voice-toggle').addEventListener('click', function() {
-    toggleVoiceFeatures();
-});
-
-// Database panel toggle handlers
-document.getElementById('db-toggle').addEventListener('click', function() {
-    if (dbOperationsVisible) {
-        hideDbPanel();
-    } else {
-        showDbPanel();
-    }
-});
-
-document.getElementById('close-db-panel').addEventListener('click', function() {
-    hideDbPanel();
-});
-
-// Enhanced form submission with database tracking
-document.getElementById('chat-form').addEventListener('submit', function(e) {
-    const messageInput = document.getElementById('message-input');
-    const hiddenInput = document.getElementById('user-input-hidden');
-    
-    // Use the voice input if available, otherwise use text input
-    const message = hiddenInput.value || messageInput.value;
-    if (!message.trim()) {
-        e.preventDefault();
-        return;
-    }
-    
-    // Auto-scroll to bottom before processing
-    smoothScrollToBottom();
-    
-    // Show database operations if user has it enabled
-    if (dbOperationsVisible) {
-        clearDbOperations();
-        addDbOperation('📤 Query', `Processing: "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}"`, 'info');
-        
-        // Simulate database operations with realistic cache hit/miss scenarios
-        const cacheScenarios = [
-            // Scenario 1: Fresh query (all misses)
-            {
-                embedding: 'miss',
-                vectorSearch: 'miss', 
-                response: 'miss',
-                probability: 0.4
-            },
-            // Scenario 2: Partial cache hits
-            {
-                embedding: 'hit',
-                vectorSearch: 'miss',
-                response: 'miss',
-                probability: 0.3
-            },
-            // Scenario 3: Mostly cached
-            {
-                embedding: 'hit',
-                vectorSearch: 'hit',
-                response: 'miss',
-                probability: 0.2
-            },
-            // Scenario 4: Full cache hit
-            {
-                embedding: 'hit',
-                vectorSearch: 'hit',
-                response: 'hit',
-                probability: 0.1
+                }
             }
-        ];
-        
-        // Select random cache scenario based on probability
+            
+            clearOperations() {
+                document.getElementById('db-operations').innerHTML = '';
+            }
+            
+            scrollToPanel() {
+                const dbPanel = document.getElementById('db-panel');
+                if (dbPanel) {
+                    dbPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
+            
+            scrollToBottom() {
+                setTimeout(() => {
+                    const chatContainer = document.getElementById('chat-container');
+                    if (chatContainer) {
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    }
+                }, 100);
+            }
+        }
+
+        // Chat Manager
+        class ChatManager {
+            constructor() {
+                this.init();
+            }
+            
+            init() {
+                this.renderMarkdown();
+                this.setupFormSubmission();
+                this.setupKeyboardShortcuts();
+                this.autoScroll();
+            }
+            
+            renderMarkdown() {
+                const markdownElements = document.querySelectorAll('.markdown-content[data-raw-content]');
+                markdownElements.forEach(element => {
+                    const rawContent = element.getAttribute('data-raw-content');
+                    if (rawContent) {
+                        const htmlContent = marked.parse(rawContent);
+                        const cleanContent = DOMPurify.sanitize(htmlContent);
+                        element.innerHTML = cleanContent;
+                    }
+                });
+            }
+            
+                        setupFormSubmission() {
+                const chatManager = this;
+                document.getElementById('chat-form').addEventListener('submit', (e) => {
+                    console.log('=== FORM SUBMISSION ===');
+                    const messageInput = document.getElementById('message-input');
+                    
+                    const message = messageInput.value.trim();
+                    console.log('Submitting message:', message);
+                    
+                    if (!message) {
+                        console.log('Empty message, preventing submission');
+                        e.preventDefault();
+                        return;
+                    }
+                    
+                    // Show loading animation immediately
+                    console.log('Showing loading animation...');
+                    chatManager.showLoadingAnimation();
+                    
+                    // Show database operations if enabled
+                    if (window.dbManager && window.dbManager.isVisible) {
+                        console.log('Simulating database operations...');
+                        chatManager.simulateDatabaseOperations(message);
+                    }
+                    
+                    // Clear the input field AFTER a short delay to ensure form submission
+                    setTimeout(() => {
+                        messageInput.value = '';
+                        messageInput.style.height = 'auto';
+                    }, 100);
+                    
+                    console.log('Form submission proceeding to server...');
+                    // Let the form submit naturally to the server
+                });
+                
+                // Auto-resize textarea
+    const messageInput = document.getElementById('message-input');
+                if (messageInput) {
+                    messageInput.addEventListener('input', function() {
+                        this.style.height = 'auto';
+                        this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+                    });
+                    
+                                        // Handle Enter key for submission
+                    messageInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            console.log('Enter key pressed, submitting form...');
+        e.preventDefault();
+                            const form = document.getElementById('chat-form');
+                            if (form && this.value.trim()) {
+                                // Create a hidden input with the message value
+                                const hiddenInput = document.createElement('input');
+                                hiddenInput.type = 'hidden';
+                                hiddenInput.name = 'user_input';
+                                hiddenInput.value = this.value.trim();
+                                form.appendChild(hiddenInput);
+                                form.submit();
+                            }
+                        }
+                    });
+                }
+            }
+            
+            showLoadingAnimation() {
+                const loadingMessage = document.getElementById('loading-message');
+                console.log('=== LOADING ANIMATION DEBUG ===');
+                console.log('Loading message element found:', !!loadingMessage);
+                if (loadingMessage) {
+                    console.log('Current loading message classes:', loadingMessage.className);
+                    console.log('Current loading message display:', loadingMessage.style.display);
+                    loadingMessage.classList.remove('hidden');
+                    loadingMessage.style.display = 'block';
+                    console.log('After removing hidden class:', loadingMessage.className);
+                    console.log('After setting display block:', loadingMessage.style.display);
+                    loadingMessage.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    console.log('Loading animation shown successfully');
+                } else {
+                    console.error('Loading message element not found!');
+                }
+                console.log('=== END LOADING ANIMATION DEBUG ===');
+            }
+            
+            hideLoadingAnimation() {
+                const loadingMessage = document.getElementById('loading-message');
+                if (loadingMessage) {
+                    loadingMessage.classList.add('hidden');
+                    loadingMessage.style.display = 'none';
+                    console.log('Loading animation hidden');
+                }
+            }
+            
+            simulateDatabaseOperations(message) {
+                window.dbManager.clearOperations();
+                window.dbManager.addOperation('📤 Query', `Processing: "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}"`, 'info');
+                
+        const cacheScenarios = [
+                    { embedding: 'miss', vectorSearch: 'miss', response: 'miss', probability: 0.4 },
+                    { embedding: 'hit', vectorSearch: 'miss', response: 'miss', probability: 0.3 },
+                    { embedding: 'hit', vectorSearch: 'hit', response: 'miss', probability: 0.2 },
+                    { embedding: 'hit', vectorSearch: 'hit', response: 'hit', probability: 0.1 }
+                ];
+                
         const random = Math.random();
         let cumulative = 0;
         let selectedScenario = cacheScenarios[0];
@@ -600,48 +1267,36 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
             }
         }
         
-        // Show operations with cache status
         setTimeout(() => {
             const embeddingStatus = selectedScenario.embedding === 'hit' ? '✅ CACHE HIT' : '❌ CACHE MISS';
             const embeddingType = selectedScenario.embedding === 'hit' ? 'success' : 'warning';
-            addDbOperation('🔍 Embedding', `${embeddingStatus} - ${selectedScenario.embedding === 'hit' ? 'Using cached embedding' : 'Generating new embedding with SentenceTransformer'}`, embeddingType);
+                    window.dbManager.addOperation('🔍 Embedding', `${embeddingStatus} - ${selectedScenario.embedding === 'hit' ? 'Using cached embedding' : 'Generating new embedding with SentenceTransformer'}`, embeddingType);
         }, 500);
         
         setTimeout(() => {
             const vectorStatus = selectedScenario.vectorSearch === 'hit' ? '✅ CACHE HIT' : '❌ CACHE MISS';
             const vectorType = selectedScenario.vectorSearch === 'hit' ? 'success' : 'warning';
-            addDbOperation('🗄️ Vector Search', `${vectorStatus} - ${selectedScenario.vectorSearch === 'hit' ? 'Retrieved from cache' : 'Querying CockroachDB with vector similarity'}`, vectorType);
+                    window.dbManager.addOperation('🗄️ Vector Search', `${vectorStatus} - ${selectedScenario.vectorSearch === 'hit' ? 'Retrieved from cache' : 'Querying CockroachDB with vector similarity'}`, vectorType);
         }, 1000);
         
-        setTimeout(() => addDbOperation('📊 Analysis', 'Analyzing spending patterns and categories', 'info'), 1500);
+                setTimeout(() => window.dbManager.addOperation('📊 Analysis', 'Analyzing spending patterns and categories', 'info'), 1500);
         
         setTimeout(() => {
             const responseStatus = selectedScenario.response === 'hit' ? '✅ CACHE HIT' : '❌ CACHE MISS';
             const responseType = selectedScenario.response === 'hit' ? 'success' : 'warning';
             const aiProvider = '{{ ai_provider.name }}' || 'AI Provider';
-            addDbOperation('🤖 AI Processing', `${responseStatus} - ${selectedScenario.response === 'hit' ? 'Using cached response' : `Generating new response with ${aiProvider}`}`, responseType);
+                    window.dbManager.addOperation('🤖 AI Processing', `${responseStatus} - ${selectedScenario.response === 'hit' ? 'Using cached response' : `Generating new response with ${aiProvider}`}`, responseType);
         }, 2000);
         
         setTimeout(() => {
             const totalHits = [selectedScenario.embedding, selectedScenario.vectorSearch, selectedScenario.response].filter(s => s === 'hit').length;
             const efficiency = Math.round((totalHits / 3) * 100);
-            addDbOperation('✅ Complete', `Response ready! Cache efficiency: ${efficiency}% (${totalHits}/3 cache hits) 🚀`, 'success');
-            // Final scroll to ensure response is visible
-            setTimeout(smoothScrollToBottom, 500);
+                    window.dbManager.addOperation('✅ Complete', `Response ready! Cache efficiency: ${efficiency}% (${totalHits}/3 cache hits) 🚀`, 'success');
         }, 2500);
-    } else {
-        // If DB panel is hidden, just auto-scroll after a short delay to see the response
-        setTimeout(smoothScrollToBottom, 1000);
-    }
-    
-    // Set the correct field name for the backend
-    messageInput.name = 'user_input';
-    messageInput.value = message;
-    if (hiddenInput) hiddenInput.remove(); // Remove hidden field to avoid confusion
-});
-
-// Keyboard shortcuts
-document.addEventListener('keydown', function(e) {
+            }
+            
+            setupKeyboardShortcuts() {
+                document.addEventListener('keydown', (e) => {
     // Ctrl/Cmd + Enter to send
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         document.getElementById('chat-form').submit();
@@ -650,30 +1305,109 @@ document.addEventListener('keydown', function(e) {
     // Ctrl/Cmd + Shift + V for voice
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
         e.preventDefault();
-        if (voiceFeaturesEnabled) {
-            document.getElementById('voice-btn').click();
+                        if (window.voiceManager.isEnabled) {
+                            window.voiceManager.toggleRecording();
         }
     }
     
     // Ctrl/Cmd + Shift + S for speech
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
         e.preventDefault();
-        if (voiceFeaturesEnabled) {
-            document.getElementById('speaker-btn').click();
+                        if (window.voiceManager.isEnabled) {
+                            window.voiceManager.toggleSpeech();
         }
     }
 });
+            }
+            
+            autoScroll() {
+                const chatContainer = document.getElementById('chat-container');
+                if (chatContainer) {
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+            }
+        }
 
-// Auto-scroll to bottom on page load to show latest messages
-window.addEventListener('load', function() {
-    setTimeout(smoothScrollToBottom, 300);
-});
-
-// Also auto-scroll when page is fully ready
+        // Initialize everything when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(smoothScrollToBottom, 200);
-});
-</script>
+            console.log('Initializing Banko AI Assistant...');
+            window.sidebarManager = new SidebarManager();
+            window.voiceManager = new VoiceManager();
+            window.dbManager = new DatabaseManager();
+            window.chatManager = new ChatManager();
+            console.log('Voice manager initialized:', window.voiceManager);
+            console.log('Voice manager enabled state:', window.voiceManager.isEnabled);
+            
+            // Re-setup event listeners after initialization
+            setTimeout(() => {
+                console.log('=== RE-SETTING UP VOICE EVENT LISTENERS ===');
+                window.voiceManager.setupEventListeners();
+                console.log('=== VOICE CONTROLS VERIFICATION ===');
+                const voiceBtn = document.getElementById('voice-btn');
+                const speakerBtn = document.getElementById('speaker-btn');
+                const languageSelect = document.getElementById('language-select');
+                const voiceToggle = document.getElementById('voice-toggle');
+                
+                console.log('Voice button found:', !!voiceBtn, voiceBtn);
+                console.log('Speaker button found:', !!speakerBtn, speakerBtn);
+                console.log('Language selector found:', !!languageSelect, languageSelect);
+                console.log('Voice toggle found:', !!voiceToggle, voiceToggle);
+                
+                if (voiceBtn) {
+                    console.log('Voice button display:', voiceBtn.style.display);
+                    console.log('Voice button visibility:', voiceBtn.style.visibility);
+                    console.log('Voice button opacity:', voiceBtn.style.opacity);
+                }
+                
+                if (speakerBtn) {
+                    console.log('Speaker button display:', speakerBtn.style.display);
+                    console.log('Speaker button visibility:', speakerBtn.style.visibility);
+                    console.log('Speaker button opacity:', speakerBtn.style.opacity);
+                }
+                
+                if (languageSelect) {
+                    console.log('Language selector display:', languageSelect.style.display);
+                    console.log('Language selector visibility:', languageSelect.style.visibility);
+                    console.log('Language selector opacity:', languageSelect.style.opacity);
+                }
+                
+                console.log('=== END VERIFICATION ===');
+            }, 1000);
+        });
 
+        // Auto-scroll on page load
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                const chatContainer = document.getElementById('chat-container');
+                if (chatContainer) {
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+            }, 300);
+        });
+
+        // Auto-scroll when new messages are added
+        function scrollToBottom() {
+            const chatContainer = document.getElementById('chat-container');
+            if (chatContainer) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+
+        // Enhanced auto-scroll functionality
+        function enhancedAutoScroll() {
+            const chatContainer = document.getElementById('chat-container');
+            if (chatContainer) {
+                // Smooth scroll to bottom
+                chatContainer.scrollTo({
+                    top: chatContainer.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+        }
+
+        // Call enhanced auto-scroll after a short delay to ensure content is rendered
+        setTimeout(enhancedAutoScroll, 500);
+        setTimeout(enhancedAutoScroll, 1000);
+    </script>
 </body>
 </html>

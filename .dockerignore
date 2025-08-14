@@ -1,0 +1,30 @@
+# Venvs & caches
+.venv
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+
+# VCS
+.git
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Local data/models/logs you don’t want in the image
+*.log
+*.db
+data/
+models/
+embeddings/
+vector_store/
+vector_search/
+tmp/
+.dist/
+build/
+dist/
+node_modules/
+.DS_Store
+
