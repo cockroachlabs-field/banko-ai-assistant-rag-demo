@@ -174,7 +174,7 @@ def search_expenses(query, limit=5):
 
 def get_access_token(api_key):
     """
-    Get access token from IBM Cloud IAM using the API key.
+    Get access token from IBM Cloud IAM using the API key with retry logic.
     
     Args:
         api_key (str): IBM Cloud API key
@@ -183,8 +183,10 @@ def get_access_token(api_key):
         str: Access token for API calls
         
     Raises:
-        Exception: If token retrieval fails
+        Exception: If token retrieval fails after all retries
     """
+    import time
+    
     token_url = "https://iam.cloud.ibm.com/identity/token"
     
     headers = {
@@ -197,19 +199,64 @@ def get_access_token(api_key):
         "apikey": api_key
     }
     
-    try:
-        response = requests.post(token_url, headers=headers, data=data, timeout=30)
-        
-        if response.status_code != 200:
-            raise Exception(f"Failed to get access token (status {response.status_code}): {response.text}")
-        
-        token_data = response.json()
-        return token_data.get('access_token')
-        
-    except requests.exceptions.RequestException as e:
-        raise Exception(f"Token request failed: {str(e)}")
-    except json.JSONDecodeError:
-        raise Exception("Invalid JSON response from IBM Cloud IAM")
+    # Retry logic for network issues
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"🔑 Requesting IBM Cloud access token (attempt {attempt + 1}/{max_retries})...")
+            response = requests.post(token_url, headers=headers, data=data, timeout=30)
+            
+            if response.status_code != 200:
+                raise Exception(f"Failed to get access token (status {response.status_code}): {response.text}")
+            
+            token_data = response.json()
+            access_token = token_data.get('access_token')
+            
+            if access_token:
+                print("✅ Successfully obtained IBM Cloud access token")
+                return access_token
+            else:
+                raise Exception("No access token in response")
+                
+        except requests.exceptions.ConnectionError as e:
+            if "Failed to resolve" in str(e) or "nodename nor servname provided" in str(e):
+                print(f"🌐 DNS/Network issue on attempt {attempt + 1}: {str(e)}")
+                if attempt < max_retries - 1:
+                    print(f"⏳ Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    raise Exception(f"Network connectivity issue: Unable to reach IBM Cloud IAM after {max_retries} attempts. Please check your internet connection and DNS settings.")
+            else:
+                raise Exception(f"Connection error: {str(e)}")
+                
+        except requests.exceptions.Timeout as e:
+            print(f"⏰ Request timeout on attempt {attempt + 1}")
+            if attempt < max_retries - 1:
+                print(f"⏳ Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2
+                continue
+            else:
+                raise Exception(f"Request timeout: IBM Cloud IAM is not responding after {max_retries} attempts")
+                
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                print(f"🔄 Request failed on attempt {attempt + 1}: {str(e)}")
+                print(f"⏳ Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2
+                continue
+            else:
+                raise Exception(f"Token request failed after {max_retries} attempts: {str(e)}")
+                
+        except json.JSONDecodeError:
+            raise Exception("Invalid JSON response from IBM Cloud IAM")
+    
+    raise Exception(f"Failed to obtain access token after {max_retries} attempts")
 
 def call_watsonx_api(messages, config=None):
     """
@@ -470,7 +517,24 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
     except Exception as e:
         error_msg = f"❌ Error generating Watsonx response: {str(e)}"
         print(error_msg)
-        return f"I apologize, but I'm experiencing technical difficulties. Please try again later. (Error: {str(e)})"
+        
+        # Check if it's a network connectivity issue
+        if "Failed to resolve" in str(e) or "nodename nor servname provided" in str(e) or "Network connectivity issue" in str(e):
+            return f"""I apologize, but I'm experiencing network connectivity issues with IBM Watsonx AI. 
+
+**🔧 Troubleshooting suggestions:**
+- Check your internet connection
+- Try switching to AWS Bedrock by setting `AI_SERVICE=aws` in your environment
+- Verify your network allows access to `iam.cloud.ibm.com`
+
+**💡 Quick fix:** You can switch AI providers by running:
+```bash
+export AI_SERVICE=aws
+```
+
+(Network Error: {str(e)})"""
+        else:
+            return f"I apologize, but I'm experiencing technical difficulties with IBM Watsonx AI. Please try again later or consider switching to AWS Bedrock. (Error: {str(e)})"
 
 def search_expenses_with_cache_info(query, limit=5):
     """
@@ -550,6 +614,37 @@ def RAG_response_with_cache_info(prompt, search_results=None, use_watsonx=True):
     # Generate fresh response
     response = RAG_response(prompt, search_results, use_watsonx)
     return response, response_cache_status
+
+def test_network_connectivity():
+    """
+    Test network connectivity to IBM Cloud services.
+    
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    import socket
+    
+    try:
+        # Test DNS resolution
+        print("🌐 Testing DNS resolution for iam.cloud.ibm.com...")
+        socket.gethostbyname("iam.cloud.ibm.com")
+        print("✅ DNS resolution successful")
+        
+        # Test HTTP connectivity
+        print("🔗 Testing HTTP connectivity to IBM Cloud IAM...")
+        response = requests.get("https://iam.cloud.ibm.com", timeout=10)
+        print(f"✅ HTTP connectivity successful (status: {response.status_code})")
+        
+        return True, "Network connectivity to IBM Cloud is working"
+        
+    except socket.gaierror as e:
+        return False, f"DNS resolution failed: {str(e)}"
+    except requests.exceptions.ConnectionError as e:
+        return False, f"Connection failed: {str(e)}"
+    except requests.exceptions.Timeout as e:
+        return False, f"Connection timeout: {str(e)}"
+    except Exception as e:
+        return False, f"Network test failed: {str(e)}"
 
 def test_watsonx_connection():
     """

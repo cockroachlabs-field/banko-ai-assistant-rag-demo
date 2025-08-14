@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Banko AI Assistant - Powered by CockroachDB</title>
+    <link rel="icon" type="image/svg+xml" href="/static/roach-logo.svg">
+    <link rel="icon" type="image/png" href="/static/roach-logo.svg">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/style.css?v={{ range(1, 10000) | random }}">
@@ -67,6 +69,17 @@
         
         ::-webkit-scrollbar-thumb:hover {
             background: #94A3B8;
+        }
+        
+        /* Focus improvements for accessibility */
+        button:focus-visible, select:focus-visible, input:focus-visible {
+            outline: 2px solid #6933FF;
+            outline-offset: 2px;
+        }
+        
+        /* Smooth hover transitions */
+        .sidebar-item, .btn-modern {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
         /* Sidebar animations */
@@ -233,7 +246,7 @@
         
         /* Header improvements */
         .header {
-            background: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-bottom: 1px solid #E2E8F0;
             padding: 1.5rem;
         }
@@ -355,29 +368,33 @@
         <!-- Main Content -->
         <main id="main-content" class="flex-1 flex flex-col transition-all duration-300">
             <!-- Header -->
-            <header class="header flex items-center justify-between">
-                <div class="flex items-center space-x-6">
+            <header class="header flex items-center justify-between py-4">
+                <div class="flex items-center space-x-6 pl-6">
                     <button id="sidebar-toggle" class="lg:hidden btn-modern btn-secondary">
                         <i class="fas fa-bars"></i>
                     </button>
                     <h2 class="text-2xl font-bold text-white">Banko Assistant</h2>
-                    <div class="provider-badges flex items-center">
-                        <span class="provider-badge badge-ai">
-        {% if 'watsonx' in ai_provider.name.lower() %}
-                                <img src="/static/watsonx-icon.svg" alt="IBM Watsonx" />
-            {% else %}
-              <span class="mr-1">{{ ai_provider.icon }}</span>
-            {% endif %}
-            {{ ai_provider.name }}
-          </span>
-                        <span class="provider-badge badge-db">
-                            <img src="/static/roach-logo.svg" alt="CockroachDB" />
-            CockroachDB
-          </span>
-        </div>
-      </div>
-                <div class="flex items-center space-x-4">
-                    <button id="voice-toggle" class="btn-modern btn-secondary text-sm">
+                    <div class="flex items-center space-x-4 text-white/90 text-sm">
+                        <span class="text-white font-medium">Powered in partnership with</span>
+                        <div class="provider-badges flex items-center space-x-3">
+                            <span class="provider-badge badge-ai flex items-center space-x-2 bg-white text-gray-800 px-3 py-1 rounded-full shadow-sm">
+                                {% if 'watsonx' in ai_provider.name.lower() %}
+                                    <img src="/static/watsonx-icon.svg" alt="IBM Watsonx" class="w-4 h-4" />
+                                {% else %}
+                                    <span class="text-lg">{{ ai_provider.icon }}</span>
+                                {% endif %}
+                                <span class="font-medium">{{ ai_provider.name }}</span>
+                            </span>
+                            <span class="text-white/70">×</span>
+                            <span class="provider-badge badge-db flex items-center space-x-2 bg-white text-gray-800 px-3 py-1 rounded-full shadow-sm">
+                                <img src="/static/roach-logo.svg" alt="CockroachDB" class="w-4 h-4" />
+                                <span class="font-medium">CockroachDB</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4 pr-6">
+                    <button id="voice-toggle" class="btn-modern btn-secondary text-sm transition-all duration-300 hover:scale-105">
                         <i class="fas fa-microphone mr-2"></i>
                         <span id="voice-status">Voice ON</span>
                     </button>
@@ -464,6 +481,9 @@
             <footer class="input-area">
                 <div class="max-w-4xl mx-auto px-4">
                     <form id="chat-form" method="post" action="/banko">
+                        <!-- Hidden field for language preference -->
+                        <input type="hidden" name="response_language" id="response-language" value="en-US">
+                        
                         <div class="input-container">
                             <div class="input-wrapper">
                                 <textarea 
@@ -740,10 +760,40 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                 // Language selector
                 const languageSelect = document.getElementById('language-select');
                 if (languageSelect) {
-                    languageSelect.addEventListener('change', (e) => {
+                    // Load saved language preference
+                    const savedLanguage = localStorage.getItem('banko-voice-language');
+                    if (savedLanguage) {
+                        languageSelect.value = savedLanguage;
                         if (this.recognition) {
-                            this.recognition.lang = e.target.value;
+                            this.recognition.lang = savedLanguage;
                         }
+                        
+                        // Update hidden field for AI response language
+                        const responseLanguageField = document.getElementById('response-language');
+                        if (responseLanguageField) {
+                            responseLanguageField.value = savedLanguage;
+                            console.log('Set initial response language field:', savedLanguage);
+                        }
+                        
+                        console.log('Loaded saved language:', savedLanguage);
+                    }
+                    
+                    languageSelect.addEventListener('change', (e) => {
+                        const selectedLang = e.target.value;
+                        if (this.recognition) {
+                            this.recognition.lang = selectedLang;
+                        }
+                        
+                        // Update hidden field for AI response language
+                        const responseLanguageField = document.getElementById('response-language');
+                        if (responseLanguageField) {
+                            responseLanguageField.value = selectedLang;
+                            console.log('Updated response language field:', selectedLang);
+                        }
+                        
+                        // Save language preference
+                        localStorage.setItem('banko-voice-language', selectedLang);
+                        console.log('Language changed and saved:', selectedLang);
                     });
                     console.log('Language selector event listener added');
     } else {
@@ -970,7 +1020,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                         micIcon.className = 'fas fa-microphone mr-2';
                     }
                     if (statusSpan) statusSpan.textContent = 'Voice ON';
-                    voiceToggleBtn.className = 'btn-modern btn-secondary text-sm';
+                    voiceToggleBtn.className = 'btn-modern btn-secondary text-sm transition-all duration-300 hover:scale-105';
                     
                     // Show audio controls
                     audioControls.style.display = 'flex';
@@ -1002,7 +1052,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                         micIcon.className = 'fas fa-microphone-slash mr-2';
                     }
                     if (statusSpan) statusSpan.textContent = 'Voice OFF';
-                    voiceToggleBtn.className = 'btn-modern bg-red-600 hover:bg-red-700 text-white text-sm';
+                    voiceToggleBtn.className = 'btn-modern bg-red-600 hover:bg-red-700 text-white text-sm transition-all duration-300 hover:scale-105';
                     
                     // Hide audio controls
                     audioControls.style.display = 'none';
@@ -1156,6 +1206,9 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             
                         setupFormSubmission() {
                 const chatManager = this;
+                // Store reference globally for Enter key handler
+                window.chatManager = chatManager;
+                
                 document.getElementById('chat-form').addEventListener('submit', (e) => {
                     console.log('=== FORM SUBMISSION ===');
                     const messageInput = document.getElementById('message-input');
@@ -1200,21 +1253,46 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                                         // Handle Enter key for submission
                     messageInput.addEventListener('keydown', function(e) {
                         if (e.key === 'Enter' && !e.shiftKey) {
-                            console.log('Enter key pressed, submitting form...');
-        e.preventDefault();
+                            console.log('Enter key pressed, triggering form submission...');
+                            e.preventDefault();
+                            
+                            const message = this.value.trim();
+                            if (!message) {
+                                console.log('Empty message, not submitting');
+                                return;
+                            }
+                            
+                            // Show loading animation immediately (same as submit button)
+                            console.log('Showing loading animation for Enter key...');
+                            if (window.chatManager) {
+                                window.chatManager.showLoadingAnimation();
+                                
+                                // Show database operations if enabled
+                                if (window.dbManager && window.dbManager.isVisible) {
+                                    console.log('Simulating database operations...');
+                                    window.chatManager.simulateDatabaseOperations(message);
+                                }
+                            }
+                            
+                            // Clear the input field AFTER a short delay to ensure form submission
+                            setTimeout(() => {
+                                this.value = '';
+                                this.style.height = 'auto';
+                            }, 100);
+                            
+                            // Submit the form
                             const form = document.getElementById('chat-form');
-                            if (form && this.value.trim()) {
-                                // Create a hidden input with the message value
-                                const hiddenInput = document.createElement('input');
-                                hiddenInput.type = 'hidden';
-                                hiddenInput.name = 'user_input';
-                                hiddenInput.value = this.value.trim();
-                                form.appendChild(hiddenInput);
+                            if (form) {
                                 form.submit();
                             }
                         }
                     });
                 }
+            }
+            
+            setupKeyboardShortcuts() {
+                // Additional keyboard shortcuts can be added here
+                console.log('Chat keyboard shortcuts initialized');
             }
             
             showLoadingAnimation() {
@@ -1337,6 +1415,18 @@ document.addEventListener('DOMContentLoaded', function() {
             window.chatManager = new ChatManager();
             console.log('Voice manager initialized:', window.voiceManager);
             console.log('Voice manager enabled state:', window.voiceManager.isEnabled);
+            
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                // Ctrl+M or Cmd+M for voice toggle
+                if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
+                    e.preventDefault();
+                    if (window.voiceManager) {
+                        window.voiceManager.toggleVoiceFeatures();
+                        console.log('Voice toggle triggered via keyboard shortcut');
+                    }
+                }
+            });
             
             // Re-setup event listeners after initialization
             setTimeout(() => {

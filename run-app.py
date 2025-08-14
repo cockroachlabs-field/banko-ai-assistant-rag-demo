@@ -12,6 +12,7 @@ Usage:
 import os
 import sys
 import argparse
+import subprocess
 from app import app, check_database_connection
 
 def print_banner():
@@ -39,11 +40,45 @@ def check_prerequisites():
     
     if not table_exists:
         print("❌ Expenses table not found")
-        print("💡 Initialize the database:")
-        print("   cd vector_search && python create_table.py && python insert_data.py")
-        return False
+        print("🔧 Automatically creating expenses table...")
+        if setup_database():
+            # Re-check after setup
+            db_connected, db_message, table_exists, record_count = check_database_connection()
+            if table_exists:
+                print(f"✅ Database setup complete: {record_count:,} records")
+            else:
+                print("❌ Database setup failed")
+                return False
+        else:
+            print("❌ Automatic table creation failed")
+            print("💡 Manual setup:")
+            print("   cd vector_search && python create_table.py && python insert_data.py")
+            return False
     
     print(f"✅ Expenses table: {record_count:,} records")
+    
+    # Offer data generation if records are low
+    if record_count < 1000:
+        print(f"💡 You have {record_count} records. Would you like to generate more realistic data?")
+        print("   1. Quick setup (10K records) - Recommended")
+        print("   2. Custom amount")
+        print("   3. Continue with existing data")
+        print("Choose option (1-3, default: 3): ", end="")
+        choice = input().strip() or "3"
+        
+        if choice == "1":
+            generate_sample_data(10000, 100)
+        elif choice == "2":
+            print("How many records would you like? (1000-1000000): ", end="")
+            try:
+                records = int(input().strip())
+                if 1000 <= records <= 1000000:
+                    users = max(50, records // 100)  # Reasonable user-to-record ratio
+                    generate_sample_data(records, users)
+                else:
+                    print("❌ Invalid number. Using existing data.")
+            except ValueError:
+                print("❌ Invalid input. Using existing data.")
     
     # Check config file
     if not os.path.exists('config.py'):
@@ -70,6 +105,61 @@ def show_ai_provider_info(provider):
         print("   Custom provider configuration")
     
     print()
+
+def setup_database():
+    """Set up the database with table creation."""
+    print("🔧 Setting up database...")
+    try:
+        # Create table
+        result = subprocess.run([sys.executable, 'vector_search/create_table.py'], 
+                              capture_output=True, text=True, cwd='.')
+        if result.returncode != 0:
+            print(f"❌ Failed to create table: {result.stderr}")
+            return False
+        print("✅ Database table created")
+        return True
+    except Exception as e:
+        print(f"❌ Database setup error: {e}")
+        return False
+
+def generate_sample_data(records, users):
+    """Generate sample data using the unified generator."""
+    print(f"🎯 Generating {records:,} records...")
+    
+    # Install dependencies if needed
+    try:
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', 'pandas', 'sentence-transformers'], 
+                      check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        print("⚠️  Could not install dependencies, continuing anyway...")
+    
+    try:
+        # Use the unified data generator directly
+        cmd = [
+            sys.executable, 'vector_search/dynamic_expenses.py',
+            '--records', str(records),
+            '--clear'
+        ]
+        
+        result = subprocess.run(cmd, cwd='.')
+        
+        if result.returncode == 0:
+            print(f"✅ Successfully generated {records:,} expense records!")
+        else:
+            print("❌ Data generation failed, using fallback method...")
+            # Fallback to legacy CSV method
+            try:
+                result = subprocess.run([sys.executable, 'vector_search/insert_data.py'], 
+                                      capture_output=True, text=True, cwd='.')
+                if result.returncode == 0:
+                    print("✅ Loaded legacy sample data")
+                else:
+                    print("❌ Fallback also failed")
+            except Exception as e:
+                print(f"❌ Fallback error: {e}")
+                
+    except Exception as e:
+        print(f"❌ Data generation error: {e}")
 
 def main():
     """Main application entry point."""

@@ -72,6 +72,77 @@ def check_database_connection():
     except Exception as e:
         return False, f"Database connection failed: {str(e)}", False, 0
 
+def auto_setup_data_if_needed():
+    """
+    Automatically set up data if the database is empty or has very few records.
+    This integrates seamlessly into the app startup.
+    """
+    try:
+        db_connected, db_message, table_exists, record_count = check_database_connection()
+        
+        if not db_connected:
+            print(f"❌ Database connection failed: {db_message}")
+            return False
+            
+        # Create table if it doesn't exist
+        if not table_exists:
+            print("🔧 Creating expenses table...")
+            try:
+                import subprocess
+                result = subprocess.run([sys.executable, 'vector_search/create_table.py'], 
+                                      capture_output=True, text=True, cwd='.')
+                if result.returncode == 0:
+                    print("✅ Expenses table created successfully")
+                    # Re-check the database status
+                    db_connected, db_message, table_exists, record_count = check_database_connection()
+                else:
+                    print(f"❌ Failed to create table: {result.stderr}")
+                    return False
+            except Exception as e:
+                print(f"❌ Table creation error: {e}")
+                return False
+            
+        # If we have very few records, offer to generate more
+        if record_count < 100:
+            print(f"🔍 Found {record_count} expense records")
+            print("🎯 Generating sample data for better demo experience...")
+            
+            try:
+                # Use the unified data generator
+                sys.path.append('vector_search')
+                from dynamic_expenses import DynamicExpenseGenerator
+                
+                generator = DynamicExpenseGenerator()
+                
+                # Generate a reasonable amount for demos (5K records)
+                generator.generate_expenses(5000)
+                
+                print("✅ Generated 5,000 realistic expense records")
+                return True
+                
+            except ImportError:
+                # Fallback to legacy CSV method
+                print("📁 Using legacy data loading...")
+                try:
+                    from vector_search.insert_data import read_csv_data, insert_content
+                    if os.path.exists('vector_search/expense_data.csv'):
+                        data = read_csv_data('vector_search/expense_data.csv')
+                        insert_content(data)
+                        print("✅ Loaded legacy sample data")
+                        return True
+                except Exception as e:
+                    print(f"⚠️  Could not load sample data: {e}")
+                    return False
+            except Exception as e:
+                print(f"⚠️  Data generation failed: {e}")
+                return False
+        
+        return True
+        
+    except Exception as e:
+        print(f"⚠️  Auto-setup error: {e}")
+        return False
+
 def get_ai_service_functions():
     """
     Get the appropriate search and RAG functions based on the configured AI service.
@@ -108,17 +179,40 @@ def chat():
     if request.method == 'POST':
         # Handle both 'message' and 'user_input' field names for compatibility
         user_message = request.form.get('user_input') or request.form.get('message')
+        response_language = request.form.get('response_language', 'en-US')
+        
         if user_message:
             session['chat'].append({'text': user_message, 'class': 'User'})
             prompt = user_message
             
+            # Map language codes to language names for AI prompt
+            language_map = {
+                'en-US': 'English',
+                'es-ES': 'Spanish', 
+                'fr-FR': 'French',
+                'de-DE': 'German',
+                'it-IT': 'Italian',
+                'pt-PT': 'Portuguese',
+                'ja-JP': 'Japanese',
+                'ko-KR': 'Korean',
+                'zh-CN': 'Chinese',
+                'hi-IN': 'Hindi'
+            }
+            
+            target_language = language_map.get(response_language, 'English')
+            
             try:
                 # Search for relevant expenses using the configured AI service
                 result = search_function(prompt)
-                print(f"Using {service_name} for response generation")
+                print(f"Using {service_name} for response generation in {target_language}")
                 
-                # Generate RAG response using the configured AI service
-                rag_response = rag_function(user_message, result)
+                # Generate RAG response with language preference
+                if target_language != 'English':
+                    enhanced_prompt = f"{user_message}\n\nPlease respond in {target_language}."
+                    rag_response = rag_function(enhanced_prompt, result)
+                else:
+                    rag_response = rag_function(user_message, result)
+                    
                 print(f"Response from {service_name}: {rag_response}")
                 
                 session['chat'].append({'text': rag_response, 'class': 'Assistant'})
@@ -253,18 +347,84 @@ def cache_cleanup():
     except Exception as e:
         return {'error': f'Cache cleanup failed: {str(e)}'}, 500
 
+@app.route('/diagnostics/watsonx')
+def watsonx_diagnostics():
+    """Watsonx connection diagnostics endpoint"""
+    import socket
+    import requests
+    
+    results = {
+        'dns_test': {'status': 'unknown', 'message': ''},
+        'http_test': {'status': 'unknown', 'message': ''},
+        'config_test': {'status': 'unknown', 'message': ''},
+        'overall_status': 'unknown',
+        'suggestions': []
+    }
+    
+    try:
+        # Test DNS resolution
+        socket.gethostbyname("iam.cloud.ibm.com")
+        results['dns_test'] = {'status': 'success', 'message': 'DNS resolution successful'}
+        
+        # Test HTTP connectivity
+        response = requests.get("https://iam.cloud.ibm.com", timeout=10)
+        results['http_test'] = {'status': 'success', 'message': f'HTTP connectivity successful (status: {response.status_code})'}
+        
+        # Test configuration
+        if WATSONX_AVAILABLE:
+            results['config_test'] = {'status': 'success', 'message': 'Watsonx configuration available'}
+            results['overall_status'] = 'healthy'
+        else:
+            results['config_test'] = {'status': 'warning', 'message': 'Watsonx not configured or unavailable'}
+            results['overall_status'] = 'degraded'
+            results['suggestions'].append('Configure WATSONX_API_KEY environment variable')
+            
+    except socket.gaierror as e:
+        results['dns_test'] = {'status': 'error', 'message': f'DNS resolution failed: {str(e)}'}
+        results['overall_status'] = 'unhealthy'
+        results['suggestions'].extend([
+            'Check your internet connection',
+            'Verify DNS settings',
+            'Try: nslookup iam.cloud.ibm.com'
+        ])
+    except requests.exceptions.ConnectionError as e:
+        results['http_test'] = {'status': 'error', 'message': f'Connection failed: {str(e)}'}
+        results['overall_status'] = 'unhealthy'
+        results['suggestions'].extend([
+            'Check firewall settings',
+            'Verify network connectivity',
+            'Switch to AWS Bedrock: export AI_SERVICE=aws'
+        ])
+    except requests.exceptions.Timeout as e:
+        results['http_test'] = {'status': 'error', 'message': f'Connection timeout: {str(e)}'}
+        results['overall_status'] = 'unhealthy'
+        results['suggestions'].append('Network is slow or IBM Cloud services are experiencing issues')
+    except Exception as e:
+        results['overall_status'] = 'error'
+        results['error'] = str(e)
+    
+    return results
+
 if __name__ == '__main__':
-    print("=== Banko AI Assistant Starting ===")
-    print(f"AI Service: {AI_SERVICE}")
-    print(f"Watsonx Available: {WATSONX_AVAILABLE}")
+    print("🏦 === Banko AI Assistant Starting === 🏦")
+    print(f"🤖 AI Service: {AI_SERVICE}")
+    print(f"🔧 Watsonx Available: {WATSONX_AVAILABLE}")
     
     # Get service info for startup
     _, _, service_name = get_ai_service_functions()
-    print(f"Active AI Service: {service_name}")
-    print("=====================================")
+    print(f"✅ Active AI Service: {service_name}")
+    print("=" * 45)
+    
+    # Auto-setup data if needed (seamless integration)
+    print("🔍 Checking database setup...")
+    auto_setup_data_if_needed()
     
     # Get port from environment variable or default to 5000
     port = int(os.environ.get("PORT", 5000))
+    
+    print(f"🚀 Starting server on http://localhost:{port}")
+    print("🎉 Banko AI is ready to help with your finances!")
+    print("=" * 45)
 
     # Run the app on all interfaces, using the configured port
     app.run(host='0.0.0.0', port=port, debug=True)

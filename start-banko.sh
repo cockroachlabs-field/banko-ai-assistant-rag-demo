@@ -192,11 +192,23 @@ init_database_data() {
         );"
         log_success "Expenses table created"
         
-        # Load sample data
-        log_info "Loading sample expense data..."
-        if [ -f "vector_search/expense_data.csv" ]; then
-            # Use Python to load data with embeddings
-            ${CONTAINER_CMD} exec -i banko-app python -c "
+        # Load sample data with new dynamic options
+        log_info "Setting up expense data..."
+        
+        # Use the unified data generator
+        log_info "🚀 Generating realistic sample data (10K records)..."
+        
+        # Install dependencies in container
+        ${CONTAINER_CMD} exec banko-app pip install -q pandas sentence-transformers
+        
+        # Generate data using the unified generator
+        ${CONTAINER_CMD} exec banko-app python vector_search/dynamic_expenses.py --records 10000 --clear
+        log_success "Sample data generated (10,000 realistic expense records)"
+        else
+            # Fallback to legacy method
+            log_info "Using legacy data loading..."
+            if [ -f "vector_search/expense_data.csv" ]; then
+                ${CONTAINER_CMD} exec -i banko-app python -c "
 import sys
 sys.path.append('/app/vector_search')
 from insert_data import read_csv_data, insert_content
@@ -205,9 +217,10 @@ data = read_csv_data('/app/vector_search/expense_data.csv')
 insert_content(data)
 print('Sample data loaded successfully!')
 "
-            log_success "Sample data loaded (3,000 expense records)"
-        else
-            log_warning "No sample data file found. You can add data manually later."
+                log_success "Sample data loaded (3,000 expense records)"
+            else
+                log_warning "No sample data file found. You can add data manually later."
+            fi
         fi
     else
         log_success "Database already contains expense data"

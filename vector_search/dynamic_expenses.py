@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Dynamic Expense Data Generator
-Simulates real-world expense generation with on-the-fly embedding creation.
-This is more realistic than pre-populated embeddings.
+Banko AI - Unified Data Generator
+Simple, single-purpose expense data generator with dynamic embeddings.
+Replaces all other generators for consistency and simplicity.
 """
 
 import pandas as pd
@@ -132,8 +132,44 @@ class DynamicExpenseGenerator:
             print(f"❌ Error adding expense: {e}")
             return False
     
+    def clear_expenses(self):
+        """Clear all existing expense data from the database."""
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text("DELETE FROM expenses"))
+                conn.commit()
+                print(f"🗑️  Cleared {result.rowcount} existing expense records")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not clear existing data: {e}")
+
+    def generate_expenses(self, count: int = 1000):
+        """Generate expense data at any scale with dynamic embeddings."""
+        print(f"🎯 Generating {count:,} expense records with dynamic embeddings...")
+        
+        batch_size = 100
+        total_added = 0
+        
+        for batch_start in range(0, count, batch_size):
+            batch_count = min(batch_size, count - batch_start)
+            expenses = self.generate_expense_batch(batch_count)
+            
+            batch_added = 0
+            for expense in expenses:
+                if self.add_expense_with_embedding(expense):
+                    batch_added += 1
+            
+            total_added += batch_added
+            print(f"📊 Progress: {total_added:,}/{count:,} records ({(total_added/count)*100:.1f}%)")
+        
+        print(f"✅ Generated {total_added:,} expense records with dynamic embeddings")
+        return total_added
+
     def simulate_real_time_expenses(self, count: int = 5):
-        """Simulate adding expenses in real-time (like a mobile app)"""
+        """Simulate adding expenses in real-time (like a mobile app) - for small demos"""
+        if count > 50:
+            # For larger datasets, use batch generation
+            return self.generate_expenses(count)
+            
         print(f"🔄 Simulating {count} real-time expense additions...")
         
         expenses = self.generate_expense_batch(count)
@@ -145,7 +181,7 @@ class DynamicExpenseGenerator:
             if success:
                 # Simulate some processing time
                 import time
-                time.sleep(0.5)
+                time.sleep(0.1)
         
         print(f"✅ Simulation complete! Added {count} expenses with dynamic embeddings")
     
@@ -188,29 +224,40 @@ class DynamicExpenseGenerator:
             return []
 
 def main():
-    """Demo the dynamic expense system"""
+    """Command-line interface for expense data generation."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Banko AI - Unified Expense Data Generator')
+    parser.add_argument('--records', '-r', type=int, default=1000, 
+                       help='Number of records to generate (default: 1000)')
+    parser.add_argument('--clear', '-c', action='store_true',
+                       help='Clear existing data before generating')
+    parser.add_argument('--demo', '-d', action='store_true',
+                       help='Run interactive demo with search')
+    
+    args = parser.parse_args()
+    
+    print("🏦 Banko AI - Unified Data Generator")
+    print("=" * 40)
+    
     generator = DynamicExpenseGenerator()
     
-    print("🏦 DYNAMIC EXPENSE SYSTEM DEMO")
-    print("=" * 50)
+    if args.clear:
+        generator.clear_expenses()
     
-    # 1. Simulate real-time expense additions
-    generator.simulate_real_time_expenses(count=3)
-    
-    print("\n" + "=" * 50)
-    
-    # 2. Demonstrate dynamic search
-    queries = [
-        "coffee and food purchases",
-        "gas station transactions", 
-        "grocery shopping"
-    ]
-    
-    for query in queries:
-        print(f"\n🔍 SEARCH: {query}")
-        print("-" * 30)
-        results = generator.search_expenses_dynamically(query, limit=3)
-        print()
+    if args.demo:
+        # Interactive demo
+        print("\n🎭 Running interactive demo...")
+        generator.simulate_real_time_expenses(5)
+        
+        print("\n🔍 Testing search functionality...")
+        queries = ["coffee", "groceries", "transportation"]
+        for query in queries:
+            results = generator.search_expenses_dynamically(query, limit=2)
+            print()
+    else:
+        # Generate data
+        generator.generate_expenses(args.records)
 
 if __name__ == "__main__":
     main()

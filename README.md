@@ -36,16 +36,29 @@
 ---
 ## ✨ Features
 
+### 🚀 **Core AI & Intelligence**
 - **🤖 Multi-AI Provider Support**: IBM Watsonx AI & AWS Bedrock with dynamic switching
 - **🔍 Vector Search**: Semantic expense search using CockroachDB with pgvector
-- **🎙️ Voice Assistant**: Speech-to-text input and text-to-speech output (toggleable)
-- **💬 Interactive Chat**: Real-time conversation with markdown rendering
 - **📊 Financial Insights**: Spending analysis, budget recommendations, transaction categorization
-- **🌍 Multi-language Support**: Voice input/output in 10+ languages
 - **⚡ Token Optimization**: Multi-layer caching system (50-80% token reduction)
+
+### 🎙️ **Voice & Language**
+- **🎤 Voice Assistant**: Speech-to-text input and text-to-speech output with visual toggle
+- **🌍 Multi-language Support**: Voice input/output + AI responses in 10+ languages (Hindi, Spanish, French, German, Italian, Portuguese, Japanese, Korean, Chinese)
+- **🔴 Smart Voice Toggle**: Red indicator when OFF, green when ON with keyboard shortcut (Ctrl+M)
+- **💾 Language Persistence**: Your language selection is remembered across sessions
+
+### 💬 **User Experience**
+- **🎯 Interactive Chat**: Real-time conversation with markdown rendering and loading animations
+- **⌨️ Keyboard Optimized**: Enter key and Send button both show amazing loading animation
 - **♿ Accessibility**: Keyboard shortcuts, screen reader support, voice navigation
+- **🏆 Partnership Branding**: Professional header showcasing IBM Watsonx × CockroachDB partnership
+
+### 🔧 **Development & Operations**
+- **🛠️ Zero-Config Setup**: Automatic table creation and data generation on startup
+- **🎯 Unified Data Generation**: Single, simple expense data generator with dynamic embeddings  
 - **🔍 Query Tracing**: Real-time database operation visibility for demos
-- **🔄 Dynamic Embeddings**: Real-world embedding generation on-the-fly
+- **📱 Production Ready**: CockroachDB favicon, responsive design, smooth animations
 
 ## 🚀 Quick Start
 
@@ -82,10 +95,32 @@ cd banko-ai-assistant-rag-demo
 cp config.example.py config.py
 # Edit config.py with your API keys
 
-# 3. Start everything
+# 3. Start everything (includes automatic data generation)
 ./start-banko.sh
 
 # 🎉 Access at http://localhost:5000
+```
+
+### 🌍 Multi-Language Usage
+
+1. **Change Voice Language**: Click the language dropdown (🇺🇸 EN) in the voice controls
+2. **AI Response Language**: AI will automatically respond in your selected language
+3. **Supported Languages**: English, Spanish, French, German, Italian, Portuguese, Japanese, Korean, Chinese, Hindi
+4. **Persistence**: Your language choice is saved and restored on next visit
+
+**Example:**
+- Switch to Hindi (🇮🇳 HI) 
+- Type: "hello" 
+- Get response: "नमस्ते! मैं बैंको हूँ..."
+
+### Manual Data Generation (Optional)
+```bash
+# Generate custom amount of data
+cd vector_search
+python dynamic_expenses.py --records 5000 --clear
+
+# Run interactive demo
+python dynamic_expenses.py --demo
 ```
 
 ### Manual Setup (Alternative)
@@ -255,13 +290,35 @@ python3 demo_token_optimization.py
 - **Shortcuts**: `Ctrl+Shift+V` (voice input), `Ctrl+Shift+S` (speech output), `Ctrl+Enter` (send)
 
 ### Database Query Tracing
+
+The query watcher now supports multiple deployment types with automatic detection:
+
 ```bash
-# Watch live SQL queries during demos
+# Auto-detect deployment and start monitoring
 ./scripts/watch-queries.sh
 
-# Or view raw logs
+# Force specific deployment type
+./scripts/watch-queries.sh --type container    # Docker/Podman
+./scripts/watch-queries.sh --type local       # Local CockroachDB binary
+./scripts/watch-queries.sh --type cloud       # CockroachDB Cloud
+
+# Advanced options
+./scripts/watch-queries.sh --help              # Show all options
+./scripts/watch-queries.sh --debug             # Show raw SQL queries
+./scripts/watch-queries.sh --sql-only          # Force SQL monitoring
+./scripts/watch-queries.sh --type local --logs /path/to/logs  # Try log files
+./scripts/watch-queries.sh --type cloud --url "postgresql://user:pass@host:26257/db"
+
+# Legacy method (container logs)
 docker logs -f banko-cockroachdb | grep --color=always "SELECT|INSERT|UPDATE"
 ```
+
+**Deployment Support:**
+- **🐳 Container**: Monitors Docker/Podman container logs (real-time)
+- **💻 Local Binary**: Uses SQL-based monitoring (recommended) or log files
+- **☁️ Cloud**: Uses SQL-based monitoring for CockroachDB Cloud (managed service)
+
+**💡 Note**: For local deployments, SQL-based monitoring is now the default as it's more reliable than log file monitoring, which requires specific CockroachDB logging configuration.
 
 ## 🔧 Advanced Usage
 
