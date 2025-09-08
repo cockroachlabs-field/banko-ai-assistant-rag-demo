@@ -1,0 +1,103 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = []
+
+[project]
+name = "banko-ai-assistant"
+version = "1.0.16"
+description = "AI-powered expense analysis and RAG system with CockroachDB vector search and multi-provider AI support"
+authors = [
+    { name="Virag Tripathi", email="virag.tripathi@gmail.com" }
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent"
+]
+keywords = ["ai", "rag", "vector-search", "cockroachdb", "expense-analysis", "financial-ai"]
+dependencies = [
+    "flask>=3.0.0,<4.0.0",
+    "werkzeug>=3.0.0,<4.0.0",
+    "jinja2>=3.1.0,<4.0.0",
+    "psycopg2-binary>=2.9.0,<3.0.0",
+    "sqlalchemy>=2.0.0,<3.0.0",
+    "sqlalchemy-cockroachdb>=2.0.0,<3.0.0",
+    "sentence-transformers>=2.2.0,<3.0.0",
+    "boto3>=1.34.0,<1.35.0",
+    "botocore>=1.34.0,<1.35.0",
+    "openai>=1.11.0,<2.0.0",
+    "requests>=2.32.4,<3.0.0",
+    "numpy>=1.26.0,<2.0.0",
+    "pandas>=2.2.0,<3.0.0",
+    "faker>=24.0.0,<25.0.0",
+    "python-dateutil>=2.8.0,<3.0.0",
+    "pytz>=2024.0,<2025.0",
+    "tqdm>=4.66.3,<5.0.0",
+    "tiktoken>=0.5.0,<1.0.0",
+    "google-cloud-aiplatform>=1.38.0,<2.0.0",
+    "google-auth>=2.23.0,<3.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0"
+]
+
+[project.scripts]
+banko-ai = "banko_ai.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo"
+Repository = "https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo"
+Documentation = "https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo#readme"
+"Bug Tracker" = "https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["banko_ai*"]
+
+[tool.setuptools.package-data]
+banko_ai = ["templates/*", "static/*", "*.html", "*.css", "*.js"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

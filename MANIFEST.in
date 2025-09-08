@@ -1,0 +1,14 @@
+include README.md
+include LICENSE
+include pyproject.toml
+recursive-include banko_ai/static *
+recursive-include banko_ai/templates *
+recursive-include banko_ai *.py
+recursive-include banko_ai *.html
+recursive-include banko_ai *.css
+recursive-include banko_ai *.js
+recursive-include banko_ai *.png
+recursive-include banko_ai *.jpg
+recursive-include banko_ai *.gif
+recursive-include banko_ai *.svg
+recursive-include banko_ai *.ico

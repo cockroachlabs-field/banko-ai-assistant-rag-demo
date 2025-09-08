@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   cockroachdb:
-    image: cockroachdb/cockroach:v25.2.4
+    image: cockroachdb/cockroach:v25.3.1
     container_name: banko-cockroachdb
     command: start-single-node --insecure
     ports:
@@ -25,7 +25,7 @@ services:
 
   # Database initialization service
   db-init:
-    image: cockroachdb/cockroach:v25.2.4
+    image: cockroachdb/cockroach:v25.3.1
     container_name: banko-db-init
     depends_on:
       cockroachdb:

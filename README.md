@@ -1,409 +1,366 @@
-# 🏦 Banko AI Assistant
+# 🤖 Banko AI Assistant - RAG Demo
 
-> **Conversational Banking Assistant** with Retrieval Augmented Generation (RAG), Multi-AI Provider Support, and Real-time Vector Search
+A modern AI-powered expense analysis application with Retrieval-Augmented Generation (RAG) capabilities, built with CockroachDB vector search and multiple AI provider support.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![CockroachDB](https://img.shields.io/badge/database-CockroachDB-purple.svg)](https://www.cockroachlabs.com/)
+![Banko AI Assistant](banko_ai/static/banko-ai-assistant-watsonx.gif)
 
-## 🎬 Live Demo
-
-![Banko AI Assistant Demo](static/banko-ai-assistant-watsonx.gif)
-*Experience intelligent banking conversations with voice input, real-time AI responses, and seamless navigation*
-
-> **See Banko AI Assistant in Action** - Key Features & Capabilities
-
-### �� AI Status & Integration
-![AI Status Dashboard](static/ai-status.png)
-*Real-time AI service status, provider switching, and health monitoring*
-
-### 📊 Cache Performance & Statistics  
-![Cache Statistics](static/cache-stats.png)
-*Multi-layer caching system with 50-80% token reduction and performance metrics*
-
-### 💬 Intelligent Banking Conversations
-![Banko AI Response](static/banko-response.png)
-*Natural language processing for expense queries, spending analysis, and financial insights*
-
-### 🔍 Real-time Database Operations
-![Database Operations](static/banko-db-ops.png)
-*Live query tracing, vector search operations, and database performance monitoring*
-
-### 👀 Query Watcher & Live Monitoring
-![Query Watcher](static/query_watcher.png)
-*Real-time SQL query visibility, performance tracking, and demo-friendly operation logs*
-
----
 ## ✨ Features
 
-### 🚀 **Core AI & Intelligence**
-- **🤖 Multi-AI Provider Support**: IBM Watsonx AI & AWS Bedrock with dynamic switching
-- **🔍 Vector Search**: Semantic expense search using CockroachDB with pgvector
-- **📊 Financial Insights**: Spending analysis, budget recommendations, transaction categorization
-- **⚡ Token Optimization**: Multi-layer caching system (50-80% token reduction)
-
-### 🎙️ **Voice & Language**
-- **🎤 Voice Assistant**: Speech-to-text input and text-to-speech output with visual toggle
-- **🌍 Multi-language Support**: Voice input/output + AI responses in 10+ languages (Hindi, Spanish, French, German, Italian, Portuguese, Japanese, Korean, Chinese)
-- **🔴 Smart Voice Toggle**: Red indicator when OFF, green when ON with keyboard shortcut (Ctrl+M)
-- **💾 Language Persistence**: Your language selection is remembered across sessions
-
-### 💬 **User Experience**
-- **🎯 Interactive Chat**: Real-time conversation with markdown rendering and loading animations
-- **⌨️ Keyboard Optimized**: Enter key and Send button both show amazing loading animation
-- **♿ Accessibility**: Keyboard shortcuts, screen reader support, voice navigation
-- **🏆 Partnership Branding**: Professional header showcasing IBM Watsonx × CockroachDB partnership
-
-### 🔧 **Development & Operations**
-- **🛠️ Zero-Config Setup**: Automatic table creation and data generation on startup
-- **🎯 Unified Data Generation**: Single, simple expense data generator with dynamic embeddings  
-- **🔍 Query Tracing**: Real-time database operation visibility for demos
-- **📱 Production Ready**: CockroachDB favicon, responsive design, smooth animations
+- **🔍 Advanced Vector Search**: Enhanced expense search using CockroachDB vector indexes
+- **🤖 Multi-AI Provider Support**: OpenAI, AWS Bedrock, IBM Watsonx, Google Gemini
+- **🔄 Dynamic Model Switching**: Switch between models without restarting the app
+- **👤 User-Specific Indexing**: User-based vector indexes with regional partitioning
+- **📊 Data Enrichment**: Contextual expense descriptions for better search accuracy
+- **💾 Intelligent Caching**: Multi-layer caching system for optimal performance
+- **🌐 Modern Web Interface**: Clean, responsive UI with real-time chat
+- **📈 Analytics Dashboard**: Comprehensive expense analysis and insights
+- **📦 PyPI Package**: Easy installation with `pip install banko-ai-assistant`
+- **🎯 Enhanced Context**: Merchant and amount information included in search context
+- **⚡ Performance Optimized**: User-specific vector indexes for faster queries
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Docker/Podman** with docker-compose support
-- **Git** for cloning the repository
 
-**For Local Deployment (Optional):**
-- **Python 3.11+** with pip
-- **CockroachDB** binary installed
-- **AI Service API Keys** (Watsonx, AWS Bedrock)
-- **Connection String Format**: Use `cockroachdb://` prefix (not `postgresql://`) for CockroachDB connections
+- Python 3.8+
+- CockroachDB (running locally or cloud)
+- AI Provider API Key (OpenAI, AWS, IBM Watsonx, or Google Gemini)
 
+### Installation
+
+#### Option 1: PyPI Installation (Recommended)
 ```bash
-# Install Docker/Podman (choose one)
-# Docker:
-curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+# Install from PyPI
+pip install banko-ai-assistant
 
-# Podman + podman-compose:
-brew install podman podman-compose  # macOS
-# Then create docker aliases:
-sudo ln -sf $(which podman) /usr/local/bin/docker
-sudo ln -sf $(which podman-compose) /usr/local/bin/docker-compose
+# Set up environment variables
+export WATSONX_API_KEY="your_watsonx_api_key_here"
+export WATSONX_PROJECT_ID="your_watsonx_project_id_here"
+export WATSONX_MODEL_ID="openai/gpt-oss-120b"
+export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
+
+# Run the application
+python -m banko_ai
 ```
 
-### Automated Setup (Recommended)
-
+#### Option 2: Development Installation
 ```bash
-# 1. Clone and enter directory
-git clone https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo.git
+# Clone the repository
+git clone https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo
 cd banko-ai-assistant-rag-demo
 
-# 2. Configure API keys
-cp config.example.py config.py
-# Edit config.py with your API keys
+# Install the package in development mode
+pip install -e .
 
-# 3. Start everything (includes automatic data generation)
-./start-banko.sh
-
-# 🎉 Access at http://localhost:5000
+# Run the application
+banko-ai run
 ```
 
-### 🌍 Multi-Language Usage
-
-1. **Change Voice Language**: Click the language dropdown (🇺🇸 EN) in the voice controls
-2. **AI Response Language**: AI will automatically respond in your selected language
-3. **Supported Languages**: English, Spanish, French, German, Italian, Portuguese, Japanese, Korean, Chinese, Hindi
-4. **Persistence**: Your language choice is saved and restored on next visit
-
-**Example:**
-- Switch to Hindi (🇮🇳 HI) 
-- Type: "hello" 
-- Get response: "नमस्ते! मैं बैंको हूँ..."
-
-### Manual Data Generation (Optional)
+#### Option 3: Direct Dependencies
 ```bash
-# Generate custom amount of data
-cd vector_search
-python dynamic_expenses.py --records 5000 --clear
-
-# Run interactive demo
-python dynamic_expenses.py --demo
-```
-
-### Manual Setup (Alternative)
-
-### 🚀 Multi-Deployment Options
-
-#### 🐳 **Option 1: Docker/Podman (Recommended)**
-```bash
-# Start everything with Docker/Podman
-./start-banko.sh
-
-# Check status
-./start-banko.sh status
-
-# View logs
-./start-banko.sh logs
-
-# Stop services
-./start-banko.sh stop
-```
-
-#### 💻 **Option 2: Local CockroachDB**
-```bash
-# Install CockroachDB locally first
-# https://www.cockroachlabs.com/docs/stable/install-cockroachdb.html
-
-# Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install Python dependencies
+# Install dependencies directly
 pip install -r requirements.txt
 
-# Start local CockroachDB
-cockroach start-single-node --insecure --store=./cockroach-data --listen-addr=localhost:26257 --http-addr=localhost:8080 --background
+# Run the original app.py (legacy method)
+python app.py
+```
 
-# Enable vector features
-cockroach sql --insecure --host=localhost:26257 --execute="SET CLUSTER SETTING feature.vector_index.enabled = true;"
+### Configuration
 
-# Setup database and start app
+Set up your environment variables:
+
+```bash
+# Required: Database connection
 export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
-# Enable vector indexes in Cockroach Cloud (run this once):
-# cockroach sql --url="cockroachdb://user:pass@host:port/db?sslmode=require" --execute="SET CLUSTER SETTING feature.vector_index.enabled = true;"
-# Note: Use cockroachdb:// prefix for CockroachDB connections (not postgresql://)
-# Cockroach Cloud provides postgresql:// URLs - replace with cockroachdb://
-export AI_SERVICE="watsonx"  # or "aws_bedrock"
-cd vector_search
-python create_table.py
-python insert_data.py
-cd ..
-python app.py
+
+# Required: AI Service (choose one)
+export AI_SERVICE="watsonx"  # or "openai", "aws", "gemini"
+
+# AI Provider Configuration (choose based on AI_SERVICE)
+# For IBM Watsonx:
+export WATSONX_API_KEY="your_api_key_here"
+export WATSONX_PROJECT_ID="your_project_id_here"
+export WATSONX_MODEL="meta-llama/llama-2-70b-chat"
+
+# For OpenAI:
+export OPENAI_API_KEY="your_api_key_here"
+export OPENAI_MODEL="gpt-3.5-turbo"
+
+# For AWS Bedrock:
+export AWS_ACCESS_KEY_ID="your_access_key"
+export AWS_SECRET_ACCESS_KEY="your_secret_key"
+export AWS_REGION="us-east-1"
+export AWS_MODEL="anthropic.claude-3-sonnet-20240229-v1:0"
+
+# For Google Gemini:
+export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
+export GOOGLE_MODEL="gemini-1.5-pro"
 ```
 
-#### ☁️ **Option 3: Cockroach Cloud**
+### Running the Application
 
-**Note:** The scripts now include automatic fallback to handle CockroachDB version compatibility issues with SQLAlchemy. If you encounter connection errors, the scripts will automatically try alternative connection methods.
-```bash
-# Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Setup database and start app
-export DATABASE_URL="cockroachdb://user:pass@host:port/db?sslmode=require"  # Replace postgresql:// with cockroachdb:// from Cockroach Cloud
-# Enable vector indexes in Cockroach Cloud (run this once):
-# cockroach sql --url="cockroachdb://user:pass@host:port/db?sslmode=require" --execute="SET CLUSTER SETTING feature.vector_index.enabled = true;"
-# Note: Use cockroachdb:// prefix for CockroachDB connections (not postgresql://)
-# Cockroach Cloud provides postgresql:// URLs - replace with cockroachdb://
-export AI_SERVICE="watsonx"  # or "aws_bedrock"
-cd vector_search
-python create_table.py
-python insert_data.py
-cd ..
-python app.py
-```
+The application automatically creates database tables and loads sample data (5000 records by default):
 
 ```bash
-# Start database only
-./start-database.sh
+# Start with default settings (5000 sample records)
+banko-ai run
 
-# Run app locally
-python3 run-app.py --ai-service watsonx  # or bedrock
+# Start with custom data amount
+banko-ai run --generate-data 10000
+
+# Start without generating data
+banko-ai run --no-data
+
+# Start with debug mode
+banko-ai run --debug
 ```
 
-## ⚙️ Configuration
+![Database Operations](banko_ai/static/banko-db-ops.png)
 
-Create `config.py` from the example:
+## 🎯 What Happens on Startup
 
-```python
-# IBM Watsonx Configuration
-WATSONX_API_KEY = "your_watsonx_api_key_here"
-WATSONX_PROJECT_ID = "your_project_id_here"
+1. **Database Connection**: Connects to CockroachDB and creates necessary tables
+2. **Table Creation**: Creates `expenses` table with vector indexes and cache tables
+3. **Data Generation**: Automatically generates 5000 sample expense records with enriched descriptions
+4. **AI Provider Setup**: Initializes the selected AI provider and loads available models
+5. **Web Server**: Starts the Flask application on http://localhost:5000
 
-# AWS Bedrock Configuration (optional)
-AWS_ACCESS_KEY = "your_aws_access_key"
-AWS_SECRET_KEY = "your_aws_secret_key"
-AWS_REGION = "us-east-1"
+## 📊 Sample Data Features
 
-# AI Service Selection
-AI_SERVICE = "watsonx"  # or "bedrock"
-```
+The generated sample data includes:
 
-## 🗄️ Database Setup
+- **Rich Descriptions**: "Bought food delivery at McDonald's for $56.68 fast significant purchase restaurant and service paid with debit card this month"
+- **Merchant Information**: Realistic merchant names and categories
+- **Amount Context**: Expense amounts with contextual descriptions
+- **Temporal Context**: Recent, this week, this month, etc.
+- **Payment Methods**: Bank Transfer, Debit Card, Credit Card, Cash, Check
+- **User-Specific Data**: Multiple user IDs for testing user-specific search
 
-CockroachDB starts automatically with Docker. For manual setup:
+![Analytics Dashboard](banko_ai/static/Anallytics.png)
+
+## 🌐 Web Interface
+
+Access the application at http://localhost:5000
+
+### Main Features
+
+- **🏠 Home**: Overview dashboard with expense statistics
+- **💬 Chat**: AI-powered expense analysis and Q&A
+- **🔍 Search**: Vector-based expense search
+- **⚙️ Settings**: AI provider and model configuration
+- **📊 Analytics**: Detailed expense analysis and insights
+
+![Banko Response](banko_ai/static/banko-response.png)
+
+## 🔧 CLI Commands
 
 ```bash
-# Create tables and load sample data
-docker exec banko-app python vector_search/create_table.py
-docker exec banko-app python vector_search/insert_data.py
+# Run the application
+banko-ai run [OPTIONS]
+
+# Generate sample data
+banko-ai generate-data --count 2000
+
+# Clear all data
+banko-ai clear-data
+
+# Check application status
+banko-ai status
+
+# Search expenses
+banko-ai search "food delivery" --limit 10
+
+# Show help
+banko-ai help
 ```
 
-## ⚡ Token Optimization & Caching
+## 🔌 API Endpoints
 
-Intelligent **multi-layer caching** reduces AI token usage by 50-80%:
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Web interface |
+| `/api/health` | GET | System health check |
+| `/api/ai-providers` | GET | Available AI providers |
+| `/api/models` | GET | Available models for current provider |
+| `/api/search` | POST | Vector search expenses |
+| `/api/rag` | POST | RAG-based Q&A |
 
-### Cache Monitoring
-```bash
-# View cache performance
-curl http://localhost:5000/cache-stats
-
-# Check AI service status
-curl http://localhost:5000/ai-status
-
-# Manual cache cleanup
-curl -X POST http://localhost:5000/cache-cleanup
-```
-
-### Cache Architecture
-- **Response Cache**: Semantic similarity matching for similar queries
-- **Embedding Cache**: Reuses SentenceTransformer embeddings
-- **Vector Search Cache**: Caches database query results  
-- **Optimized Prompts**: 75% reduction in prompt tokens
-
-## 🔄 Dynamic Embedding Generation
-
-Experience **real-world embedding generation**:
-
-```bash
-# Simulate dynamic expense addition with on-the-fly embeddings
-docker exec banko-app python vector_search/dynamic_expenses.py
-
-# This demonstrates:
-# ✅ Real-time expense addition (like a mobile app)
-# ✅ Dynamic search with query-time embedding generation  
-# ✅ No pre-computed embeddings required
-```
-
-## 🎯 Demo & Usage
-
-### Quick Demo Commands
-```bash
-# Demo token optimization
-python3 demo_token_optimization.py
-
-# Voice commands (when enabled)
-"Show me my grocery spending"
-"What's my biggest expense category?"
-"Help me create a budget"
-```
-
-### Voice Features
-- **Toggle**: Click the 🎤 button to enable/disable voice features
-- **Languages**: English, Spanish, French, German, Italian, Portuguese, Japanese, Korean, Chinese, Hindi
-- **Shortcuts**: `Ctrl+Shift+V` (voice input), `Ctrl+Shift+S` (speech output), `Ctrl+Enter` (send)
-
-### Database Query Tracing
-
-The query watcher now supports multiple deployment types with automatic detection:
+### API Examples
 
 ```bash
-# Auto-detect deployment and start monitoring
-./scripts/watch-queries.sh
+# Health check
+curl http://localhost:5000/api/health
 
-# Force specific deployment type
-./scripts/watch-queries.sh --type container    # Docker/Podman
-./scripts/watch-queries.sh --type local       # Local CockroachDB binary
-./scripts/watch-queries.sh --type cloud       # CockroachDB Cloud
+# Search expenses
+curl -X POST http://localhost:5000/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "food delivery", "limit": 5}'
 
-# Advanced options
-./scripts/watch-queries.sh --help              # Show all options
-./scripts/watch-queries.sh --debug             # Show raw SQL queries
-./scripts/watch-queries.sh --sql-only          # Force SQL monitoring
-./scripts/watch-queries.sh --type local --logs /path/to/logs  # Try log files
-./scripts/watch-queries.sh --type cloud --url "postgresql://user:pass@host:26257/db"
-
-# Legacy method (container logs)
-docker logs -f banko-cockroachdb | grep --color=always "SELECT|INSERT|UPDATE"
+# RAG query
+curl -X POST http://localhost:5000/api/rag \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What are my biggest expenses this month?", "limit": 5}'
 ```
 
-**Deployment Support:**
-- **🐳 Container**: Monitors Docker/Podman container logs (real-time)
-- **💻 Local Binary**: Uses SQL-based monitoring (recommended) or log files
-- **☁️ Cloud**: Uses SQL-based monitoring for CockroachDB Cloud (managed service)
+## 🏗️ Architecture
 
-**💡 Note**: For local deployments, SQL-based monitoring is now the default as it's more reliable than log file monitoring, which requires specific CockroachDB logging configuration.
+### Database Schema
 
-## 🔧 Advanced Usage
+- **expenses**: Main expense table with vector embeddings
+- **query_cache**: Cached search results
+- **embedding_cache**: Cached embeddings
+- **insights_cache**: Cached AI insights
+- **vector_search_cache**: Cached vector search results
+- **cache_stats**: Cache performance statistics
 
-### Switch AI Providers
-```bash
-# Change AI service
-export AI_SERVICE=bedrock  # or watsonx
-./start-banko.sh restart
+### Vector Indexes
+
+```sql
+-- User-specific vector index for personalized search
+CREATE INDEX idx_expenses_user_embedding ON expenses 
+USING cspann (user_id, embedding vector_l2_ops);
+
+-- General vector index for global search
+CREATE INDEX idx_expenses_embedding ON expenses 
+USING cspann (embedding vector_l2_ops);
+
+-- Note: Regional partitioning syntax may vary by CockroachDB version
+-- CREATE INDEX idx_expenses_regional ON expenses 
+-- USING cspann (user_id, embedding vector_l2_ops) 
+-- LOCALITY REGIONAL BY ROW AS region;
 ```
 
-### Add Custom Expenses Dynamically
-```bash
-# Use the dynamic expense generator
-docker exec -it banko-app python3 -c "
-from vector_search.dynamic_expenses import DynamicExpenseGenerator
-gen = DynamicExpenseGenerator()
-gen.simulate_real_time_expenses(count=5)
-"
+**Benefits:**
+- **User-specific queries**: Faster search within user's data
+- **Contextual results**: Enhanced merchant and amount information
+- **Scalable performance**: Optimized for large datasets
+- **Multi-tenant support**: Isolated user data with shared infrastructure
+
+![Cache Statistics](banko_ai/static/cache-stats.png)
+
+## 🔄 AI Provider Switching
+
+Switch between AI providers and models dynamically:
+
+1. Go to **Settings** in the web interface
+2. Select your preferred AI provider
+3. Choose from available models
+4. Changes take effect immediately
+
+### Supported Providers
+
+- **OpenAI**: GPT-3.5, GPT-4, GPT-4 Turbo
+- **AWS Bedrock**: Claude 3 Sonnet, Claude 3 Haiku, Llama 2
+- **IBM Watsonx**: Granite models, Llama 2, Mistral
+- **Google Gemini**: Gemini 1.5 Pro, Gemini 1.5 Flash
+
+![AI Status](banko_ai/static/ai-status.png)
+
+## 📈 Performance Features
+
+### Caching System
+
+- **Query Caching**: Caches search results for faster responses
+- **Embedding Caching**: Caches vector embeddings to avoid recomputation
+- **Insights Caching**: Caches AI-generated insights
+- **Multi-layer Optimization**: Intelligent cache invalidation and refresh
+
+### Vector Search Optimization
+
+- **User-Specific Indexes**: Faster search for individual users
+- **Regional Partitioning**: Optimized for multi-region deployments
+- **Data Enrichment**: Enhanced descriptions improve search accuracy
+- **Batch Processing**: Efficient data loading and processing
+
+### Advanced Vector Features
+
+For detailed demonstrations of vector indexing and search capabilities:
+
+📖 **[Vector Index Demo Guide](docs/VECTOR_INDEX_DEMO_GUIDE.md)** - Comprehensive guide covering:
+- User-specific vector indexing
+- Regional partitioning with multi-region CockroachDB
+- Performance benchmarking
+- Advanced search queries
+- RAG with user context
+- Troubleshooting and best practices
+
+![Query Watcher](banko_ai/static/query_watcher.png)
+
+## 🛠️ Development
+
+### Project Structure
+
+```
+banko_ai/
+├── ai_providers/          # AI provider implementations
+├── config/               # Configuration management
+├── static/               # Web assets and images
+├── templates/            # HTML templates
+├── utils/                # Database and cache utilities
+├── vector_search/        # Vector search and data generation
+└── web/                  # Flask web application
 ```
 
-### Development
-```bash
-# Run without containers
-python3 run-app.py --debug --ai-service watsonx
+### Adding New AI Providers
 
-# Database shell
-docker exec -it banko-cockroachdb ./cockroach sql --insecure
-```
+1. Create a new provider class in `ai_providers/`
+2. Extend the `BaseAIProvider` class
+3. Implement required methods
+4. Add to the factory in `ai_providers/factory.py`
 
-## 🛠️ Troubleshooting
+## 🐛 Troubleshooting
 
 ### Common Issues
+
+**Database Connection Error**
 ```bash
-# Container conflicts
-./start-banko.sh  # Automatically handles cleanup
+# Check CockroachDB is running
+cockroach start --insecure --listen-addr=localhost:26257
 
-# Port already in use
-./start-banko.sh stop && ./start-banko.sh
-
-# Podman permission issues
-sudo chmod +x /usr/local/bin/docker
-sudo chmod +x /usr/local/bin/docker-compose
+# Verify database exists
+cockroach sql --url="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable" --execute "SHOW TABLES;"
 ```
 
-### Debug Commands
+**AI Provider Disconnected**
+- Verify API keys are set correctly
+- Check network connectivity
+- Ensure the selected model is available
+
+**No Search Results**
+- Ensure sample data is loaded: `banko-ai generate-data --count 1000`
+- Check vector indexes are created
+- Verify search query format
+
+### Debug Mode
+
 ```bash
-# Check service status
-./start-banko.sh status
+# Run with debug logging
+banko-ai run --debug
 
-# View logs
-docker-compose logs -f banko-app
-
-# Test AI connection
-curl http://localhost:5000/ai-status
+# Check application status
+banko-ai status
 ```
 
-## 📊 Monitoring
+## 📝 License
 
-### Health Checks
-- **App**: http://localhost:5000/ai-status
-- **Database**: http://localhost:8080 (CockroachDB Admin UI)
-- **Cache Performance**: http://localhost:5000/cache-stats
+MIT License - see [LICENSE](LICENSE) file for details.
 
-### Performance Metrics
-- Token usage reduction: 50-80%
-- Response time: <2s for cached queries
-- Vector search: ~100ms for 3000+ records
-- Dynamic embeddings: Generated in real-time
+## 🤝 Contributing
 
-## 🏗️ Architecture Highlights
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-### Real-World Patterns
-- **Dynamic Embeddings**: No pre-computed embeddings, generated on-demand
-- **Multi-AI Support**: Seamless switching between Watsonx and Bedrock
-- **Intelligent Caching**: Multi-layer optimization for production efficiency
-- **Vector Search**: CockroachDB with pgvector for semantic similarity
-- **Containerized Deployment**: Docker/Podman with automated setup
+## 📞 Support
 
-## 📄 License
+For issues and questions:
+- Check the [troubleshooting section](#-troubleshooting)
+- Review the [API documentation](#-api-endpoints)
+- See the [Vector Index Demo Guide](docs/VECTOR_INDEX_DEMO_GUIDE.md) for advanced features
+- Open an issue on GitHub
 
-This project is licensed under the [MIT License](LICENSE).
+---
 
-## 🔗 Documentation
-
-- **[Demo Guide](docs/DEMO_GUIDE.md)**: Comprehensive demonstration instructions
-- **[Token Optimization Report](docs/TOKEN_OPTIMIZATION_REPORT.md)**: Detailed caching implementation
-- **[Vector Search Guide](docs/VECTOR_SEARCH_DEMO.md)**: CockroachDB vector operations
-- **[API Documentation](docs/API.md)**: REST endpoints and usage
+**Built with ❤️ using CockroachDB, Flask, and modern AI technologies**

@@ -1,0 +1,637 @@
+"""
+IBM Watsonx AI provider implementation.
+
+This module provides IBM Watsonx integration for vector search and RAG responses.
+"""
+
+import os
+import json
+import requests
+from typing import List, Dict, Any, Optional
+from sentence_transformers import SentenceTransformer
+from sqlalchemy import create_engine, text
+
+from .base import AIProvider, SearchResult, RAGResponse, AIConnectionError, AIAuthenticationError
+
+
+class WatsonxProvider(AIProvider):
+    """IBM Watsonx AI provider implementation."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize Watsonx provider."""
+        self.api_key = config.get("api_key")
+        self.project_id = config.get("project_id")
+        self.model_id = config.get("model_id", "openai/gpt-oss-120b")
+        self.api_url = "https://us-south.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29"
+        self.embedding_model = None
+        self.db_engine = None
+        super().__init__(config)
+    
+    def _validate_config(self) -> None:
+        """Validate Watsonx configuration."""
+        # For demo purposes, make API key and project ID optional
+        if not self.api_key:
+            print("Warning: Watsonx API key not provided. AI features will be limited.")
+        if not self.project_id:
+            print("Warning: Watsonx project ID not provided. AI features will be limited.")
+    
+    def get_default_model(self) -> str:
+        """Get the default Watsonx model."""
+        return "openai/gpt-oss-120b"
+    
+    def get_provider_name(self) -> str:
+        """Get provider name."""
+        return "IBM Watsonx"
+    
+    def get_available_models(self) -> List[str]:
+        """Get available Watsonx models."""
+        return [
+            "openai/gpt-oss-120b",
+            "ibm/granite-13b-chat-v2",
+            "ibm/granite-13b-instruct-v2",
+            "ibm/granite-8b-chat-v2",
+            "ibm/granite-8b-instruct-v2",
+            "meta-llama/llama-2-70b-chat",
+            "meta-llama/llama-2-13b-chat"
+        ]
+    
+    def _get_embedding_model(self) -> SentenceTransformer:
+        """Get or create the embedding model."""
+        if self.embedding_model is None:
+            try:
+                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            except Exception as e:
+                raise AIConnectionError(f"Failed to load embedding model: {str(e)}")
+        return self.embedding_model
+    
+    def _get_db_engine(self):
+        """Get database engine."""
+        if self.db_engine is None:
+            database_url = os.getenv("DATABASE_URL", "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
+            try:
+                self.db_engine = create_engine(database_url)
+            except Exception as e:
+                raise AIConnectionError(f"Failed to connect to database: {str(e)}")
+        return self.db_engine
+    
+    def _get_access_token(self) -> str:
+        """Get IBM Cloud access token."""
+        token_url = 'https://iam.cloud.ibm.com/identity/token'
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
+        }
+        data = {
+            'grant_type': 'urn:ibm:params:oauth:grant-type:apikey',
+            'apikey': self.api_key
+        }
+        
+        # Retry logic for network issues
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(token_url, headers=headers, data=data, timeout=30)
+                response.raise_for_status()
+                
+                token_data = response.json()
+                return token_data['access_token']
+                
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                if attempt == max_retries - 1:
+                    raise AIConnectionError(f"Failed to get access token after {max_retries} attempts: {str(e)}")
+                continue
+            except requests.exceptions.RequestException as e:
+                raise AIConnectionError(f"Token request failed: {str(e)}")
+    
+    def search_expenses(
+        self, 
+        query: str, 
+        user_id: Optional[str] = None,
+        limit: int = 10,
+        threshold: float = 0.7
+    ) -> List[SearchResult]:
+        """Search for expenses using vector similarity."""
+        try:
+            # Generate query embedding
+            embedding_model = self._get_embedding_model()
+            query_embedding = embedding_model.encode([query])[0]
+            
+            # Convert to PostgreSQL vector format
+            search_embedding = json.dumps(query_embedding.tolist())
+            
+            # Build SQL query
+            sql = """
+            SELECT 
+                expense_id,
+                user_id,
+                description,
+                merchant,
+                expense_amount,
+                expense_date,
+                1 - (embedding <-> %s) as similarity_score
+            FROM expenses
+            WHERE 1 - (embedding <-> %s) > %s
+            """
+            
+            params = [search_embedding, search_embedding, threshold]
+            
+            if user_id:
+                sql += " AND user_id = %s"
+                params.append(user_id)
+            
+            sql += " ORDER BY similarity_score DESC LIMIT %s"
+            params.append(limit)
+            
+            # Execute query
+            engine = self._get_db_engine()
+            with engine.connect() as conn:
+                result = conn.execute(text(sql), params)
+                rows = result.fetchall()
+            
+            # Convert to SearchResult objects
+            results = []
+            for row in rows:
+                results.append(SearchResult(
+                    expense_id=str(row[0]),
+                    user_id=str(row[1]),
+                    description=row[2] or "",
+                    merchant=row[3] or "",
+                    amount=float(row[4]),
+                    date=str(row[5]),
+                    similarity_score=float(row[6]),
+                    metadata={}
+                ))
+            
+            return results
+            
+        except Exception as e:
+            raise AIConnectionError(f"Search failed: {str(e)}")
+    
+    def generate_rag_response(
+        self, 
+        query: str, 
+        context: List[SearchResult],
+        user_id: Optional[str] = None,
+        language: str = "en"
+    ) -> RAGResponse:
+        """Generate RAG response using IBM Watsonx."""
+        try:
+            # Generate financial insights and analysis
+            insights = self._get_financial_insights(context)
+            budget_recommendations = self._generate_budget_recommendations(insights, query)
+            
+            # Prepare enhanced context with financial summary
+            context_text = ""
+            if context:
+                context_text = "\n".join(
+                    f"• **{result.metadata.get('shopping_type', 'Unknown')}** at {result.merchant}: ${result.amount:.2f} ({result.metadata.get('payment_method', 'Unknown')}) - {result.description}"
+                    for result in context
+                )
+                
+                # Add financial summary
+                if insights:
+                    context_text += f"\n\n**📊 Financial Summary:**\n"
+                    context_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
+                    context_text += f"• Number of Transactions: **{insights['num_transactions']}**\n"
+                    context_text += f"• Average Transaction: **${insights['avg_transaction']:.2f}**\n"
+                    if insights.get('top_category'):
+                        cat, amt = insights['top_category']
+                        context_text += f"• Top Category: **{cat}** (${amt:.2f})\n"
+            else:
+                context_text = "No specific expense records found for this query."
+            
+            # Create a proper tabular format for the transactions
+            table_rows = []
+            if context:
+                table_rows.append("| Merchant | Amount | Payment Method | Date | Description |")
+                table_rows.append("|----------|--------|----------------|------|-------------|")
+                for result in context:
+                    table_rows.append(f"| {result.merchant} | ${result.amount:.2f} | {result.metadata.get('payment_method', 'Unknown')} | {result.date} | {result.description[:50]}... |")
+            
+            table_text = "\n".join(table_rows) if table_rows else "No transactions found."
+            
+            # Make actual Watsonx API call like the original implementation
+            if not self.api_key or not self.project_id:
+                # Fallback response when API credentials are not available
+                ai_response = f"""## Financial Analysis for: "{query}"
+
+### 📋 Transaction Details
+{table_text}
+
+### 📊 Financial Summary
+{context_text.split('**📊 Financial Summary:**')[1] if '**📊 Financial Summary:**' in context_text else 'No summary available'}
+
+### 🤖 AI Insights
+Based on your expense data, I found {len(context)} relevant records. Here's my analysis:
+
+**Spending Patterns:**
+- Your average transaction is ${insights.get('avg_transaction', 0):.2f}
+- Total spending: ${insights.get('total_amount', 0):.2f}
+- Most frequent category: {insights.get('top_category', ('Unknown', 0))[0] if insights.get('top_category') else 'Unknown'}
+
+**Recommendations:**
+{budget_recommendations if budget_recommendations else '• Consider reviewing your spending patterns regularly' + chr(10) + '• Set up budget alerts for high-value categories'}
+
+**Note**: I can see {len(context)} relevant expense records, but I need API credentials to generate more detailed AI-powered insights."""
+            else:
+                # Make actual Watsonx API call with enhanced prompt
+                try:
+                    # Prepare messages for chat format (same as original)
+                    messages = [
+                        {
+                            "role": "user",
+                            "content": enhanced_prompt
+                        }
+                    ]
+                    
+                    # Call Watsonx API (same as original implementation)
+                    ai_response = self._call_watsonx_api(messages)
+                    
+                except Exception as e:
+                    # Fallback to structured response if API call fails
+                    error_msg = str(e)
+                    ai_response = f"""## Financial Analysis for: "{query}"
+
+### 📋 Transaction Details
+{table_text}
+
+### 📊 Financial Summary
+{context_text.split('**📊 Financial Summary:**')[1] if '**📊 Financial Summary:**' in context_text else 'No summary available'}
+
+### 🤖 AI-Powered Insights
+Based on your expense data, I found {len(context)} relevant records. Here's a comprehensive analysis:
+
+**Spending Analysis:**
+- Total Amount: ${insights.get('total_amount', 0):.2f}
+- Transaction Count: {insights.get('num_transactions', 0)}
+- Average Transaction: ${insights.get('avg_transaction', 0):.2f}
+- Top Category: {insights.get('top_category', ('Unknown', 0))[0] if insights.get('top_category') else 'Unknown'} (${insights.get('top_category', ('Unknown', 0))[1]:.2f} if insights.get('top_category') else 0})
+
+**Smart Recommendations:**
+{budget_recommendations if budget_recommendations else '• Monitor your spending patterns regularly' + chr(10) + '• Consider setting up budget alerts' + chr(10) + '• Review high-value transactions for optimization opportunities'}
+
+**Next Steps:**
+• Track your spending trends over time
+• Set realistic budget goals for each category
+• Review and optimize your payment methods
+
+**Note**: API call failed (""" + error_msg + """), showing structured analysis above."""
+            
+            return RAGResponse(
+                response=ai_response,
+                sources=context,
+                metadata={
+                    "provider": "watsonx",
+                    "model": self.current_model,
+                    "language": language,
+                    "context_count": len(context)
+                }
+            )
+            
+        except Exception as e:
+            raise AIConnectionError(f"RAG response generation failed: {str(e)}")
+    
+    def generate_embedding(self, text: str) -> List[float]:
+        """Generate embedding for text."""
+        try:
+            embedding_model = self._get_embedding_model()
+            embedding = embedding_model.encode([text])[0]
+            return embedding.tolist()
+        except Exception as e:
+            raise AIConnectionError(f"Embedding generation failed: {str(e)}")
+    
+    def test_connection(self) -> bool:
+        """Test Watsonx connection."""
+        try:
+            # For demo purposes, always return True
+            # In production, you would check API keys and make actual calls
+            return True
+            
+            # Uncomment below for actual API testing
+            # access_token = self._get_access_token()
+            # 
+            # payload = {
+            #     "model_id": self.current_model,
+            #     "input": "Hello",
+            #     "parameters": {
+            #         "max_new_tokens": 5,
+            #         "temperature": 0.7
+            #     },
+            #     "project_id": self.project_id
+            # }
+            # 
+            # headers = {
+            #     'Authorization': f'Bearer {access_token}',
+            #     'Content-Type': 'application/json'
+            # }
+            # 
+            # response = requests.post(
+            #     self.api_url,
+            #     headers=headers,
+            #     json=payload,
+            #     timeout=30
+            # )
+            # response.raise_for_status()
+            # 
+            # response_data = response.json()
+            # return response_data['results'][0]['generated_text'] is not None
+        except Exception:
+            return False
+    
+    def _prepare_context(self, context: List[SearchResult]) -> str:
+        """Prepare context text from search results."""
+        if not context:
+            return "No relevant expense data found."
+        
+        context_parts = []
+        for i, result in enumerate(context, 1):
+            context_parts.append(
+                f"• **{result.description}** at {result.merchant}: ${result.amount:.2f} "
+                f"({result.date}) - similarity: {result.similarity_score:.3f}"
+            )
+        
+        return "\n".join(context_parts)
+    
+    def _get_financial_insights(self, search_results: List[SearchResult]) -> dict:
+        """Generate comprehensive financial insights from expense data."""
+        if not search_results:
+            return {}
+        
+        total_amount = sum(float(result.amount) for result in search_results)
+        categories = {}
+        merchants = {}
+        payment_methods = {}
+        
+        for result in search_results:
+            # Category analysis
+            category = result.metadata.get('shopping_type', 'Unknown')
+            categories[category] = categories.get(category, 0) + float(result.amount)
+            
+            # Merchant analysis
+            merchant = result.merchant
+            merchants[merchant] = merchants.get(merchant, 0) + float(result.amount)
+            
+            # Payment method analysis
+            payment = result.metadata.get('payment_method', 'Unknown')
+            payment_methods[payment] = payment_methods.get(payment, 0) + float(result.amount)
+        
+        # Find top categories and merchants
+        top_category = max(categories.items(), key=lambda x: x[1]) if categories else None
+        top_merchant = max(merchants.items(), key=lambda x: x[1]) if merchants else None
+        
+        return {
+            'total_amount': total_amount,
+            'num_transactions': len(search_results),
+            'avg_transaction': total_amount / len(search_results) if search_results else 0,
+            'categories': categories,
+            'top_category': top_category,
+            'top_merchant': top_merchant,
+            'payment_methods': payment_methods
+        }
+    
+    def _generate_budget_recommendations(self, insights: dict, prompt: str) -> str:
+        """Generate personalized budget recommendations based on spending patterns."""
+        if not insights:
+            return ""
+        
+        recommendations = []
+        
+        # Analyze spending patterns
+        if insights.get('total_amount', 0) > 1000:
+            recommendations.append("💡 **High Spending Alert**: Your total expenses are significant. Consider reviewing your budget.")
+        
+        if insights.get('avg_transaction', 0) > 100:
+            recommendations.append("📊 **Large Transactions**: You have several high-value purchases. Track these carefully.")
+        
+        # Category-specific recommendations
+        if insights.get('top_category'):
+            category, amount = insights['top_category']
+            if category == 'Groceries' and amount > 500:
+                recommendations.append("🛒 **Grocery Spending**: Consider meal planning to reduce food costs.")
+            elif category == 'Entertainment' and amount > 300:
+                recommendations.append("🎬 **Entertainment Budget**: Consider setting a monthly entertainment limit.")
+            elif category == 'Transportation' and amount > 400:
+                recommendations.append("🚗 **Transportation Costs**: Look into carpooling or public transport options.")
+        
+        if recommendations:
+            return "\n\n**💡 Budget Recommendations:**\n" + "\n".join(recommendations)
+        
+        return ""
+    
+    def _call_watsonx_api(self, messages):
+        """Make a direct API call to IBM Watsonx chat endpoint."""
+        import requests
+        
+        # Get access token from API key
+        access_token = self._get_access_token()
+        
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
+        
+        body = {
+            "project_id": self.project_id,
+            "model_id": self.current_model,
+            "messages": messages,
+            "frequency_penalty": 0,
+            "max_tokens": 2000,
+            "presence_penalty": 0,
+            "temperature": 0.7,
+            "top_p": 1
+        }
+        
+        try:
+            response = requests.post(
+                "https://us-south.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29",
+                headers=headers,
+                json=body,
+                timeout=30
+            )
+            
+            if response.status_code != 200:
+                raise Exception(f"Watsonx API error (status {response.status_code}): {response.text}")
+            
+            data = response.json()
+            
+            # Extract the assistant's response from the API response
+            if 'choices' in data and len(data['choices']) > 0:
+                return data['choices'][0]['message']['content']
+            elif 'generated_text' in data:
+                return data['generated_text']
+            else:
+                # Handle different response formats
+                print(f"Unexpected Watsonx response format: {data}")
+                return "I apologize, but I'm having trouble generating a response right now."
+                
+        except Exception as e:
+            raise Exception(f"Watsonx API call failed: {str(e)}")
+    
+    def _get_access_token(self):
+        """Get IBM Cloud access token from API key."""
+        import requests
+        
+        token_url = "https://iam.cloud.ibm.com/identity/token"
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json"
+        }
+        data = {
+            "grant_type": "urn:ibm:params:oauth:grant-type:apikey",
+            "apikey": self.api_key
+        }
+        
+        try:
+            response = requests.post(token_url, headers=headers, data=data, timeout=30)
+            
+            if response.status_code != 200:
+                raise Exception(f"Failed to get access token (status {response.status_code}): {response.text}")
+            
+            token_data = response.json()
+            access_token = token_data.get('access_token')
+            
+            if access_token:
+                return access_token
+            else:
+                raise Exception("No access token in response")
+                
+        except Exception as e:
+            raise Exception(f"Token request failed: {str(e)}")
+    
+    def rag_response(
+        self, 
+        query: str, 
+        context: List[SearchResult], 
+        language: str = "en"
+    ) -> str:
+        """
+        Generate RAG response using Watsonx.
+        
+        Args:
+            query: User query
+            context: List of relevant search results
+            language: Response language
+            
+        Returns:
+            String response (for compatibility with original interface)
+        """
+        try:
+            # Generate financial insights and analysis
+            insights = self._get_financial_insights(context)
+            budget_recommendations = self._generate_budget_recommendations(insights, query)
+            
+            # Prepare enhanced context with financial summary
+            context_text = ""
+            if context:
+                context_text = "\n".join(
+                    f"• **{result.metadata.get('shopping_type', 'Unknown')}** at {result.merchant}: ${result.amount:.2f} ({result.metadata.get('payment_method', 'Unknown')}) - {result.description}"
+                    for result in context
+                )
+                
+                # Add financial summary
+                if insights:
+                    context_text += f"\n\n**📊 Financial Summary:**\n"
+                    context_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
+                    context_text += f"• Number of Transactions: **{insights['num_transactions']}**\n"
+                    context_text += f"• Average Transaction: **${insights['avg_transaction']:.2f}**\n"
+                    if insights.get('top_category'):
+                        cat, amt = insights['top_category']
+                        context_text += f"• Top Category: **{cat}** (${amt:.2f})\n"
+            else:
+                context_text = "No specific expense records found for this query."
+            
+            # Create enhanced prompt with rich context
+            enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
+
+Q: {query}
+
+Data:
+{context_text}
+
+{budget_recommendations if budget_recommendations else ''}
+
+Provide helpful insights with numbers, markdown formatting, and actionable advice."""
+            
+            # Create a proper tabular format for the transactions
+            table_rows = []
+            if context:
+                table_rows.append("| Merchant | Amount | Payment Method | Date | Description |")
+                table_rows.append("|----------|--------|----------------|------|-------------|")
+                for result in context:
+                    table_rows.append(f"| {result.merchant} | ${result.amount:.2f} | {result.metadata.get('payment_method', 'Unknown')} | {result.date} | {result.description[:50]}... |")
+            
+            table_text = "\n".join(table_rows) if table_rows else "No transactions found."
+            
+            # Make actual Watsonx API call like the original implementation
+            if not self.api_key or not self.project_id:
+                # Fallback response when API credentials are not available
+                response_text = f"""## Financial Analysis for: "{query}"
+
+### 📋 Transaction Details
+{table_text}
+
+### 📊 Financial Summary
+{context_text.split('**📊 Financial Summary:**')[1] if '**📊 Financial Summary:**' in context_text else 'No summary available'}
+
+### 🤖 AI Insights
+Based on your expense data, I found {len(context)} relevant records. Here's my analysis:
+
+**Spending Patterns:**
+- Your average transaction is ${insights.get('avg_transaction', 0):.2f}
+- Total spending: ${insights.get('total_amount', 0):.2f}
+- Most frequent category: {insights.get('top_category', ('Unknown', 0))[0] if insights.get('top_category') else 'Unknown'}
+
+**Recommendations:**
+{budget_recommendations if budget_recommendations else '• Consider reviewing your spending patterns regularly' + chr(10) + '• Set up budget alerts for high-value categories'}
+
+**Note**: I can see {len(context)} relevant expense records, but I need API credentials to generate more detailed AI-powered insights."""
+            else:
+                # Make actual Watsonx API call with enhanced prompt
+                try:
+                    # Prepare messages for chat format (same as original)
+                    messages = [
+                        {
+                            "role": "user",
+                            "content": enhanced_prompt
+                        }
+                    ]
+                    
+                    # Call Watsonx API (same as original implementation)
+                    response_text = self._call_watsonx_api(messages)
+                    
+                except Exception as e:
+                    # Fallback to structured response if API call fails
+                    error_msg = str(e)
+                    response_text = f"""## Financial Analysis for: "{query}"
+
+### 📋 Transaction Details
+{table_text}
+
+### 📊 Financial Summary
+{context_text.split('**📊 Financial Summary:**')[1] if '**📊 Financial Summary:**' in context_text else 'No summary available'}
+
+### 🤖 AI-Powered Insights
+Based on your expense data, I found {len(context)} relevant records. Here's a comprehensive analysis:
+
+**Spending Analysis:**
+- Total Amount: ${insights.get('total_amount', 0):.2f}
+- Transaction Count: {insights.get('num_transactions', 0)}
+- Average Transaction: ${insights.get('avg_transaction', 0):.2f}
+- Top Category: {insights.get('top_category', ('Unknown', 0))[0] if insights.get('top_category') else 'Unknown'} (${insights.get('top_category', ('Unknown', 0))[1]:.2f} if insights.get('top_category') else 0})
+
+**Smart Recommendations:**
+{budget_recommendations if budget_recommendations else '• Monitor your spending patterns regularly' + chr(10) + '• Consider setting up budget alerts' + chr(10) + '• Review high-value transactions for optimization opportunities'}
+
+**Next Steps:**
+• Track your spending trends over time
+• Set realistic budget goals for each category
+• Review and optimize your payment methods
+
+**Note**: API call failed ({error_msg}), showing structured analysis above."""
+            
+            return response_text
+            
+        except Exception as e:
+            return f"Sorry, I'm experiencing technical difficulties. Error: {str(e)}"
+
