@@ -452,7 +452,9 @@ def create_app() -> Flask:
             # Check AI provider
             ai_status = "unknown"
             current_model = "unknown"
+            ai_provider_available = False
             if ai_provider:
+                ai_provider_available = True
                 ai_status = "connected" if ai_provider.test_connection() else "disconnected"
                 current_model = ai_provider.get_current_model()
             
@@ -461,7 +463,8 @@ def create_app() -> Flask:
                 'database': 'connected',
                 'ai_provider': ai_status,
                 'ai_service': config.ai_service,
-                'current_model': current_model
+                'current_model': current_model,
+                'ai_provider_available': ai_provider_available
             })
             
         except Exception as e:

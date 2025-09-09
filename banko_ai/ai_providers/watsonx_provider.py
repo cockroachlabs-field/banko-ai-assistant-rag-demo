@@ -159,10 +159,12 @@ class WatsonxProvider(AIProvider):
             return False
         
         try:
-            test_messages = [{"role": "user", "content": "Hello, this is a test message."}]
-            response = self._call_watsonx_api(test_messages)
-            return True
+            # Just test if we can get an access token - this is faster and more reliable
+            # than making a full API call for status checks
+            access_token = self._get_access_token()
+            return access_token is not None
         except Exception as e:
+            # If token request fails, the connection is not available
             return False
     
     def _get_access_token(self):
