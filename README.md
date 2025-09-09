@@ -22,9 +22,48 @@ A modern AI-powered expense analysis application with Retrieval-Augmented Genera
 
 ### Prerequisites
 
-- Python 3.8+
-- CockroachDB (running locally or cloud)
-- AI Provider API Key (OpenAI, AWS, IBM Watsonx, or Google Gemini)
+- **Python 3.8+**
+- **CockroachDB v25.2.4+** (recommended: [v25.3.1](https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-1))
+- **Vector Index Feature Enabled** (required for vector search)
+- **AI Provider API Key** (OpenAI, AWS, IBM Watsonx, or Google Gemini)
+
+#### CockroachDB Setup
+
+1. **Download and Install CockroachDB**:
+   ```bash
+   # Download CockroachDB v25.3.1 (recommended)
+   # Visit: https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-1
+   
+   # Or install via package manager
+   brew install cockroachdb/tap/cockroach  # macOS
+   ```
+
+2. **Start CockroachDB Single Node**:
+   ```bash
+   # Start a single-node cluster (for development)
+   cockroach start-single-node \
+     --insecure \
+     --store=./cockroach-data \
+     --listen-addr=localhost:26257 \
+     --http-addr=localhost:8080 \
+     --background
+   ```
+
+3. **Enable Vector Index Feature**:
+   ```sql
+   -- Connect to the database
+   cockroach sql --url="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
+   
+   -- Enable vector index feature (required for vector search)
+   SET CLUSTER SETTING feature.vector_index.enabled = true;
+   ```
+
+4. **Verify Setup**:
+   ```sql
+   -- Check if vector index is enabled
+   SHOW CLUSTER SETTING feature.vector_index.enabled;
+   -- Should return: true
+   ```
 
 ### Installation
 
@@ -40,7 +79,7 @@ export WATSONX_MODEL_ID="openai/gpt-oss-120b"
 export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
 
 # Run the application
-python -m banko_ai
+python -m banko-ai
 ```
 
 #### Option 2: Development Installation
@@ -176,14 +215,14 @@ banko-ai help
 
 ## 🔌 API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Web interface |
-| `/api/health` | GET | System health check |
-| `/api/ai-providers` | GET | Available AI providers |
-| `/api/models` | GET | Available models for current provider |
-| `/api/search` | POST | Vector search expenses |
-| `/api/rag` | POST | RAG-based Q&A |
+| Endpoint            | Method | Description                           |
+|---------------------|--------|---------------------------------------|
+| `/`                 | GET    | Web interface                         |
+| `/api/health`       | GET    | System health check                   |
+| `/api/ai-providers` | GET    | Available AI providers                |
+| `/api/models`       | GET    | Available models for current provider |
+| `/api/search`       | POST   | Vector search expenses                |
+| `/api/rag`          | POST   | RAG-based Q&A                         |
 
 ### API Examples
 
@@ -312,10 +351,36 @@ banko_ai/
 
 ### Common Issues
 
+**CockroachDB Version Issues**
+```bash
+# Check CockroachDB version (must be v25.2.4+)
+cockroach version
+
+# If version is too old, download v25.3.1:
+# https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-1
+```
+
+**Vector Index Feature Not Enabled**
+```bash
+# Connect to database and enable vector index feature
+cockroach sql --url="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
+
+# Enable vector index feature
+SET CLUSTER SETTING feature.vector_index.enabled = true;
+
+# Verify it's enabled
+SHOW CLUSTER SETTING feature.vector_index.enabled;
+```
+
 **Database Connection Error**
 ```bash
-# Check CockroachDB is running
-cockroach start --insecure --listen-addr=localhost:26257
+# Start CockroachDB single node
+cockroach start-single-node \
+  --insecure \
+  --store=./cockroach-data \
+  --listen-addr=localhost:26257 \
+  --http-addr=localhost:8080 \
+  --background
 
 # Verify database exists
 cockroach sql --url="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable" --execute "SHOW TABLES;"
@@ -363,4 +428,4 @@ For issues and questions:
 
 ---
 
-**Built with ❤️ using CockroachDB, Flask, and modern AI technologies**
+**Built with ❤️ using CockroachDB, Flask, and modern AI technologies such as **
