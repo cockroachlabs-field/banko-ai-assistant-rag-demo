@@ -153,10 +153,10 @@ class GeminiProvider(AIProvider):
             embedding_model = self._get_embedding_model()
             query_embedding = embedding_model.encode([query])[0]
             
-            # Convert to PostgreSQL vector format
+            # Convert to PostgreSQL vector format (JSON string)
             search_embedding = json.dumps(query_embedding.tolist())
             
-            # Build SQL query
+            # Build SQL query using named parameters (e.g., :search_embedding)
             sql = """
             SELECT 
                 expense_id,
@@ -165,21 +165,20 @@ class GeminiProvider(AIProvider):
                 merchant,
                 expense_amount,
                 expense_date,
-                1 - (embedding <-> %s) as similarity_score
+                embedding <=> :search_embedding as similarity_score
             FROM expenses
-            WHERE 1 - (embedding <-> %s) > %s
+            ORDER BY embedding <=> :search_embedding
+            LIMIT :limit
             """
             
-            params = [search_embedding, search_embedding, threshold]
+            # Build the parameters dictionary
+            params = {
+                "search_embedding": search_embedding,
+                "threshold": threshold,
+                "limit": limit
+            }
             
-            if user_id:
-                sql += " AND user_id = %s"
-                params.append(user_id)
-            
-            sql += " ORDER BY similarity_score DESC LIMIT %s"
-            params.append(limit)
-            
-            # Execute query
+            # Execute query using the dictionary of parameters
             engine = self._get_db_engine()
             with engine.connect() as conn:
                 result = conn.execute(text(sql), params)
@@ -204,6 +203,84 @@ class GeminiProvider(AIProvider):
         except Exception as e:
             raise AIConnectionError(f"Search failed: {str(e)}")
     
+    def _get_financial_insights(self, search_results) -> dict:
+        """Generate comprehensive financial insights from expense data (handles both SearchResult objects and dicts)."""
+        if not search_results:
+            return {}
+        
+        total_amount = 0
+        categories = {}
+        merchants = {}
+        payment_methods = {}
+        
+        for result in search_results:
+            # Handle both SearchResult objects and dictionaries
+            if hasattr(result, 'amount'):
+                # It's a SearchResult object
+                amount = float(result.amount)
+                merchant = result.merchant
+                category = result.metadata.get('shopping_type', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
+                payment = result.metadata.get('payment_method', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
+            else:
+                # It's a dictionary
+                amount = float(result.get('expense_amount', 0))
+                merchant = result.get('merchant', 'Unknown')
+                category = result.get('shopping_type', 'Unknown')
+                payment = result.get('payment_method', 'Unknown')
+            
+            total_amount += amount
+            
+            # Category analysis
+            categories[category] = categories.get(category, 0) + amount
+            
+            # Merchant analysis
+            merchants[merchant] = merchants.get(merchant, 0) + amount
+            
+            # Payment method analysis
+            payment_methods[payment] = payment_methods.get(payment, 0) + amount
+        
+        # Find top categories and merchants
+        top_category = max(categories.items(), key=lambda x: x[1]) if categories else None
+        top_merchant = max(merchants.items(), key=lambda x: x[1]) if merchants else None
+        
+        return {
+            'total_amount': total_amount,
+            'num_transactions': len(search_results),
+            'avg_transaction': total_amount / len(search_results) if search_results else 0,
+            'categories': categories,
+            'top_category': top_category,
+            'top_merchant': top_merchant,
+            'payment_methods': payment_methods
+        }
+    
+    def _generate_budget_recommendations(self, insights: dict, prompt: str) -> str:
+        """Generate personalized budget recommendations based on spending patterns (following WatsonX pattern)."""
+        if not insights:
+            return ""
+        
+        recommendations = []
+        
+        # High spending category recommendations
+        if insights.get('top_category'):
+            category, amount = insights['top_category']
+            recommendations.append(f"Your highest spending category is **{category}** at **${amount:.2f}**. Consider setting a monthly budget limit for this category.")
+        
+        # Average transaction analysis
+        avg_amount = insights.get('avg_transaction', 0)
+        if avg_amount > 100:
+            recommendations.append(f"Your average transaction is **${avg_amount:.2f}**. Consider reviewing larger purchases to identify potential savings.")
+        
+        # Merchant frequency analysis
+        if insights.get('top_merchant'):
+            merchant, amount = insights['top_merchant']
+            recommendations.append(f"You frequently shop at **{merchant}** (${amount:.2f} total). Look for loyalty programs or discounts at this merchant.")
+        
+        # General budgeting tips
+        if insights.get('total_amount', 0) > 500:
+            recommendations.append("💡 **Budget Tip**: Consider the 50/30/20 rule: 50% for needs, 30% for wants, 20% for savings and debt repayment.")
+        
+        return "\n".join(recommendations) if recommendations else ""
+    
     def generate_rag_response(
         self, 
         query: str, 
@@ -211,29 +288,50 @@ class GeminiProvider(AIProvider):
         user_id: Optional[str] = None,
         language: str = "en"
     ) -> RAGResponse:
-        """Generate RAG response using Google Gemini."""
+        """Generate RAG response using Google Gemini (following WatsonX pattern)."""
         try:
             print(f"\n🤖 GOOGLE GEMINI RAG (with caching):")
             print(f"1. Query: '{query[:60]}...'")
+            
+            # DEBUG: Check what we received
+            print(f"DEBUG: Context type: {type(context)}")
+            print(f"DEBUG: Context length: {len(context)}")
+            if context:
+                print(f"DEBUG: First item type: {type(context[0])}")
+                print(f"DEBUG: First item: {context[0]}")
+                if hasattr(context[0], '__dict__'):
+                    print(f"DEBUG: First item attributes: {context[0].__dict__}")
             
             # Check for cached response first
             if self.cache_manager:
                 # Convert SearchResult objects to dict format for cache lookup
                 search_results_dict = []
-                for result in context:
-                    search_results_dict.append({
-                        'expense_id': result.expense_id,
-                        'user_id': result.user_id,
-                        'description': result.description,
-                        'merchant': result.merchant,
-                        'expense_amount': result.amount,
-                        'expense_date': result.date,
-                        'similarity_score': result.similarity_score,
-                        'shopping_type': result.metadata.get('shopping_type'),
-                        'payment_method': result.metadata.get('payment_method'),
-                        'recurring': result.metadata.get('recurring'),
-                        'tags': result.metadata.get('tags')
-                    })
+                for i, result in enumerate(context):
+                    print(f"DEBUG: Processing context item {i}: type={type(result)}")
+                    try:
+                        # Handle both SearchResult objects and dictionaries
+                        if hasattr(result, 'expense_id'):
+                            # It's a SearchResult object
+                            search_results_dict.append({
+                                'expense_id': result.expense_id,
+                                'user_id': result.user_id,
+                                'description': result.description,
+                                'merchant': result.merchant,
+                                'expense_amount': result.amount,
+                                'expense_date': result.date,
+                                'similarity_score': result.similarity_score,
+                                'shopping_type': result.metadata.get('shopping_type'),
+                                'payment_method': result.metadata.get('payment_method'),
+                                'recurring': result.metadata.get('recurring'),
+                                'tags': result.metadata.get('tags')
+                            })
+                        else:
+                            # It's already a dictionary - use it as is
+                            search_results_dict.append(result)
+                    except Exception as e:
+                        print(f"DEBUG: Error processing context item {i}: {e}")
+                        print(f"DEBUG: Item content: {result}")
+                        raise
                 
                 cached_response = self.cache_manager.get_cached_response(
                     query, search_results_dict, "gemini"
@@ -255,83 +353,186 @@ class GeminiProvider(AIProvider):
             else:
                 print(f"2. No cache manager available, generating fresh response")
             
-            # Prepare context
-            context_text = self._prepare_context(context)
+            # Generate financial insights from search results (following WatsonX pattern)
+            print(f"DEBUG: About to call _get_financial_insights with {len(context)} items")
+            try:
+                insights = self._get_financial_insights(context)
+                print(f"DEBUG: Financial insights generated successfully: {insights}")
+            except Exception as e:
+                print(f"DEBUG: Error in _get_financial_insights: {e}")
+                insights = {}
             
-            # Prepare the prompt
-            prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
+            try:
+                budget_recommendations = self._generate_budget_recommendations(insights, query)
+                print(f"DEBUG: Budget recommendations generated successfully")
+            except Exception as e:
+                print(f"DEBUG: Error in _generate_budget_recommendations: {e}")
+                budget_recommendations = ""
+            
+            # Prepare the search results context with enhanced analysis (handles both objects and dicts)
+            search_results_text = ""
+            if context:
+                context_parts = []
+                for result in context:
+                    # Handle both SearchResult objects and dictionaries
+                    if hasattr(result, 'amount'):
+                        # It's a SearchResult object
+                        description = result.description
+                        merchant = result.merchant
+                        amount = result.amount
+                        shopping_type = result.metadata.get('shopping_type', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
+                        payment_method = result.metadata.get('payment_method', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
+                    else:
+                        # It's a dictionary
+                        description = result.get('description', '')
+                        merchant = result.get('merchant', 'Unknown')
+                        amount = result.get('expense_amount', 0)
+                        shopping_type = result.get('shopping_type', 'Unknown')
+                        payment_method = result.get('payment_method', 'Unknown')
+                    
+                    context_parts.append(
+                        f"• **{shopping_type}** at {merchant}: ${amount} ({payment_method}) - {description}"
+                    )
+                
+                search_results_text = "\n".join(context_parts)
+                
+                # Add financial summary
+                if insights:
+                    search_results_text += f"\n\n**📊 Financial Summary:**\n"
+                    search_results_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
+                    search_results_text += f"• Number of Transactions: **{insights['num_transactions']}**\n"
+                    search_results_text += f"• Average Transaction: **${insights['avg_transaction']:.2f}**\n"
+                    if insights.get('top_category'):
+                        cat, amt = insights['top_category']
+                        search_results_text += f"• Top Category: **{cat}** (${amt:.2f})\n"
+            else:
+                search_results_text = "No specific expense records found for this query."
+            
+            # Create optimized prompt (following WatsonX pattern)
+            enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
 
 Q: {query}
 
 Data:
-{context_text}
+{search_results_text}
+
+{budget_recommendations if budget_recommendations else ''}
 
 Provide helpful insights with numbers, markdown formatting, and actionable advice."""
             
             # Generate response using either Vertex AI or Generative AI client
-            if self.use_vertex_ai and self.vertex_client:
-                from vertexai.generative_models import GenerationConfig
-                
-                generation_config = GenerationConfig(
-                    temperature=0.7,
-                    max_output_tokens=1000,
-                    top_p=0.9,
-                    top_k=40
-                )
-                
-                # Make the request with Vertex AI
-                response = self.vertex_client.generate_content(
-                    prompt,
-                    generation_config=generation_config
-                )
-                
-                # Extract response text
-                if response and response.text:
-                    ai_response = response.text
-                else:
-                    ai_response = "I apologize, but I couldn't generate a response at this time."
+            ai_response = ""
+            try:
+                if self.use_vertex_ai and self.vertex_client:
+                    from vertexai.generative_models import GenerationConfig
                     
-            elif self.genai_client:
-                # Use Generative AI API
-                response = self.genai_client.generate_content(
-                    prompt,
-                    generation_config={
-                        'temperature': 0.7,
-                        'max_output_tokens': 1000,
-                        'top_p': 0.9,
-                        'top_k': 40
-                    }
-                )
-                
-                # Extract response text
-                if response and response.text:
-                    ai_response = response.text
+                    generation_config = GenerationConfig(
+                        temperature=0.7,
+                        max_output_tokens=1000,
+                        top_p=0.9,
+                        top_k=40
+                    )
+                    
+                    # Make the request with Vertex AI
+                    response = self.vertex_client.generate_content(
+                        enhanced_prompt,
+                        generation_config=generation_config
+                    )
+                    
+                    # Extract response text
+                    if response and response.text:
+                        ai_response = response.text
+                    else:
+                        ai_response = "I apologize, but I couldn't generate a response at this time."
+                        
+                elif self.genai_client:
+                    # Use Generative AI API
+                    response = self.genai_client.generate_content(
+                        enhanced_prompt,
+                        generation_config={
+                            'temperature': 0.7,
+                            'max_output_tokens': 1000,
+                            'top_p': 0.9,
+                            'top_k': 40
+                        }
+                    )
+                    
+                    # Extract response text
+                    if response and response.text:
+                        ai_response = response.text
+                    else:
+                        ai_response = "I apologize, but I couldn't generate a response at this time."
                 else:
-                    ai_response = "I apologize, but I couldn't generate a response at this time."
-            else:
-                ai_response = "No Gemini client available."
+                    ai_response = "No Gemini client available."
+                
+            except Exception as e:
+                # Fallback to structured response if API call fails (following WatsonX pattern)
+                print(f"⚠️ Gemini API call failed: {e}")
+                ai_response = f"""## Financial Analysis for: "{query}"
+
+### 📋 Transaction Details
+{search_results_text}
+
+### 📊 Financial Summary
+${insights.get('total_amount', 0):.2f} total across {insights.get('num_transactions', 0)} transactions
+
+### 🤖 AI-Powered Insights
+Based on your expense data, I found {len(context)} relevant records. Here's a comprehensive analysis:
+
+**Spending Analysis:**
+- Total Amount: ${insights.get('total_amount', 0):.2f}
+- Transaction Count: {insights.get('num_transactions', 0)}
+- Average Transaction: ${insights.get('avg_transaction', 0):.2f}
+- Top Category: {insights.get('top_category', ('Unknown', 0))[0] if insights.get('top_category') else 'Unknown'} (${insights.get('top_category', ('Unknown', 0))[1] if insights.get('top_category') else 0:.2f})
+
+**Smart Recommendations:**
+{budget_recommendations if budget_recommendations else '• Monitor your spending patterns regularly\n• Consider setting up budget alerts\n• Review high-value transactions for optimization opportunities'}
+
+**Next Steps:**
+• Track your spending trends over time
+• Set realistic budget goals for each category
+• Review and optimize your payment methods
+
+**Note**: API call failed, showing structured analysis above."""
             
             # Cache the response for future similar queries
             if self.cache_manager and ai_response:
-                # Convert SearchResult objects to dict format for caching
+                # Convert context items to dict format for caching (handle both objects and dicts)
                 search_results_dict = []
                 for result in context:
-                    search_results_dict.append({
-                        'expense_id': result.expense_id,
-                        'user_id': result.user_id,
-                        'description': result.description,
-                        'merchant': result.merchant,
-                        'expense_amount': result.amount,
-                        'expense_date': result.date,
-                        'similarity_score': result.similarity_score,
-                        'shopping_type': result.metadata.get('shopping_type'),
-                        'payment_method': result.metadata.get('payment_method'),
-                        'recurring': result.metadata.get('recurring'),
-                        'tags': result.metadata.get('tags')
-                    })
+                    if hasattr(result, 'expense_id'):
+                        # It's a SearchResult object
+                        search_results_dict.append({
+                            'expense_id': result.expense_id,
+                            'user_id': result.user_id,
+                            'description': result.description,
+                            'merchant': result.merchant,
+                            'expense_amount': result.amount,
+                            'expense_date': result.date,
+                            'similarity_score': result.similarity_score,
+                            'shopping_type': result.metadata.get('shopping_type') if result.metadata else None,
+                            'payment_method': result.metadata.get('payment_method') if result.metadata else None,
+                            'recurring': result.metadata.get('recurring') if result.metadata else None,
+                            'tags': result.metadata.get('tags') if result.metadata else None
+                        })
+                    else:
+                        # It's already a dictionary - use it as is or ensure it has the right keys
+                        search_results_dict.append({
+                            'expense_id': result.get('expense_id', ''),
+                            'user_id': result.get('user_id', ''),
+                            'description': result.get('description', ''),
+                            'merchant': result.get('merchant', ''),
+                            'expense_amount': result.get('expense_amount', 0),
+                            'expense_date': result.get('expense_date', ''),
+                            'similarity_score': result.get('similarity_score', 0),
+                            'shopping_type': result.get('shopping_type'),
+                            'payment_method': result.get('payment_method'),
+                            'recurring': result.get('recurring'),
+                            'tags': result.get('tags')
+                        })
                 
                 # Estimate token usage (rough approximation for Gemini)
-                prompt_tokens = len(query.split()) * 1.3  # ~1.3 tokens per word
+                prompt_tokens = len(enhanced_prompt.split()) * 1.3  # ~1.3 tokens per word
                 response_tokens = len(ai_response.split()) * 1.3
                 
                 self.cache_manager.cache_response(
@@ -355,7 +556,18 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
             )
             
         except Exception as e:
-            raise AIConnectionError(f"RAG response generation failed: {str(e)}")
+            # Return a structured error response like WatsonX does
+            return RAGResponse(
+                response=f"Sorry, I'm experiencing technical difficulties with Google Gemini. Error: {str(e)}",
+                sources=context,
+                metadata={
+                    'provider': 'gemini',
+                    'model': self.model_name,
+                    'user_id': user_id,
+                    'language': language,
+                    'error': str(e)
+                }
+            )
     
     def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for text."""
@@ -401,17 +613,3 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
         except Exception as e:
             print(f"❌ Gemini connection test failed: {str(e)}")
             return False
-    
-    def _prepare_context(self, context: List[SearchResult]) -> str:
-        """Prepare context text from search results."""
-        if not context:
-            return "No relevant expense data found."
-        
-        context_parts = []
-        for i, result in enumerate(context, 1):
-            context_parts.append(
-                f"• **{result.description}** at {result.merchant}: ${result.amount:.2f} "
-                f"({result.date}) - similarity: {result.similarity_score:.3f}"
-            )
-        
-        return "\n".join(context_parts)
