@@ -142,6 +142,22 @@ def status():
     config = get_config()
     generator = EnhancedExpenseGenerator(config.database_url)
     
+    # Show current configuration
+    click.echo("🔧 Current Configuration:")
+    click.echo(f"   AI Service: {config.ai_service}")
+    click.echo(f"   Database: {config.database_url}")
+    
+    if config.ai_service == 'gemini':
+        click.echo(f"   Google Project: {config.google_project_id}")
+        click.echo(f"   Google Model: {config.google_model}")
+        click.echo(f"   Google Location: {config.google_location}")
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        api_key = os.getenv("GOOGLE_API_KEY")
+        click.echo(f"   Service Account: {'✅' if creds_path else '❌'} {creds_path or 'Not set'}")
+        click.echo(f"   API Key Fallback: {'✅' if api_key else '❌'} {'Set' if api_key else 'Not set'}")
+    
+    click.echo()
+    
     # Check database connection
     try:
         count = generator.get_expense_count()
@@ -161,6 +177,9 @@ def status():
         
         if ai_provider.test_connection():
             click.echo(f"✅ AI provider ({config.ai_service}) connected")
+            if hasattr(ai_provider, 'use_vertex_ai'):
+                api_type = "Vertex AI" if ai_provider.use_vertex_ai else "Generative AI API"
+                click.echo(f"   Using: {api_type}")
         else:
             click.echo(f"❌ AI provider ({config.ai_service}) disconnected")
     except Exception as e:
@@ -289,9 +308,21 @@ QUICK START:
    export AWS_REGION="us-east-1"
    export AWS_MODEL="anthropic.claude-3-sonnet-20240229-v1:0"
 
-   For Google Gemini:
+   For Google Gemini (Two Options):
+   
+   Option 1 - Vertex AI (Recommended):
    export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
+   export GOOGLE_PROJECT_ID="your-google-cloud-project-id"
    export GOOGLE_MODEL="gemini-1.5-pro"
+   export GOOGLE_LOCATION="us-central1"  # optional, defaults to us-central1
+   Note: Requires Vertex AI API enabled in Google Cloud Console
+   
+   Option 2 - Generative AI API (Fallback):
+   export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
+   export GOOGLE_PROJECT_ID="your-google-cloud-project-id"
+   export GOOGLE_MODEL="gemini-1.5-pro"
+   export GOOGLE_API_KEY="your-gemini-api-key"  # Get from https://makersuite.google.com/app/apikey
+   Note: Will automatically fallback to this if Vertex AI is unavailable
 
 3. Start the application:
    banko-ai run                    # Normal mode with full output
@@ -336,6 +367,12 @@ TROUBLESHOOTING:
 - AI provider errors: Verify API keys and configuration
 - Model switching: Use the Settings tab in the web interface
 - Vector search: Ensure database has expense data
+
+Gemini-Specific Issues:
+- "404 Publisher Model not found": Enable Vertex AI API in Google Cloud Console
+- "Permission denied to enable service": Use your main Google account, not service account
+- Vertex AI unavailable: Provider will auto-fallback to Generative AI API if GOOGLE_API_KEY is set
+- Service account issues: Ensure the JSON file path is correct and accessible
 
 For more information, visit: https://github.com/your-repo/banko-ai-assistant
 """)

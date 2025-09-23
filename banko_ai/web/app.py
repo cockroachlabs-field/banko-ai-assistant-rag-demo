@@ -28,6 +28,66 @@ from ..utils.cache_manager import BankoCacheManager
 from .auth import UserManager
 
 
+def get_provider_display_info(ai_service, ai_provider=None, current_model=None, connection_status=None):
+    """Get display information for the current AI provider including proper icons."""
+    service = ai_service.lower()
+    
+    # Provider-specific configurations
+    provider_configs = {
+        'watsonx': {
+            'name': 'IBM Watsonx',
+            'icon_file': 'watsonx-icon.svg',
+            'icon_alt': 'IBM Watsonx'
+        },
+        'gemini': {
+            'name': 'Google Gemini',
+            'icon_file': 'google-gemini-icon.svg',
+            'icon_alt': 'Google Gemini'
+        },
+        'aws': {
+            'name': 'AWS Bedrock',
+            'icon_file': 'aws-bedrock-icon.svg',
+            'icon_alt': 'AWS Bedrock'
+        },
+        'openai': {
+            'name': 'OpenAI',
+            'icon_file': 'watsonx-icon.svg',  # Fallback to watsonx icon for now
+            'icon_alt': 'OpenAI'
+        }
+    }
+    
+    # Get provider config or use default
+    config = provider_configs.get(service, {
+        'name': 'Unknown Provider',
+        'icon_file': 'watsonx-icon.svg',
+        'icon_alt': 'AI Provider'
+    })
+    
+    # Get current model if not provided
+    if current_model is None and ai_provider:
+        current_model = getattr(ai_provider, 'current_model', 'Unknown')
+    
+    # Get connection status if not provided
+    if connection_status is None and ai_provider:
+        # Check if we have API credentials without making a call
+        has_credentials = bool(
+            getattr(ai_provider, 'api_key', None) or 
+            getattr(ai_provider, 'access_key_id', None) or
+            getattr(ai_provider, 'project_id', None)
+        )
+        connection_status = 'connected' if has_credentials else 'demo'
+    
+    return {
+        'name': config['name'],
+        'current_service': ai_service.upper(),
+        'current_model': current_model or 'Unknown',
+        'status': connection_status or 'disconnected',
+        'icon_file': config['icon_file'],
+        'icon_alt': config['icon_alt'],
+        'icon': '🧠'  # Keep emoji as fallback
+    }
+
+
 def check_database_connection(database_url: str):
     """
     Check if the database is accessible and has the required table.
@@ -480,11 +540,7 @@ def create_app() -> Flask:
             session['chat'] = []
         
         # Get AI provider info for display
-        ai_provider_display = {
-            'name': 'IBM Watsonx',
-            'current_service': 'WATSONX',
-            'icon': '🧠'
-        }
+        ai_provider_display = get_provider_display_info(config.ai_service, ai_provider)
         
         if request.method == 'POST':
             # Handle both 'message' and 'user_input' field names for compatibility
@@ -608,13 +664,7 @@ def create_app() -> Flask:
             current_model = 'Unknown'
             connection_status = 'disconnected'
         
-        ai_provider_display = {
-            'name': provider_name,
-            'current_model': current_model,
-            'current_service': config.ai_service.upper(),
-            'status': connection_status,
-            'icon': '🧠' if config.ai_service.lower() == 'watsonx' else '☁️'
-        }
+        ai_provider_display = get_provider_display_info(config.ai_service, ai_provider, current_model, connection_status)
         return render_template('dashboard.html', 
                              current_page='settings',
                              ai_provider=ai_provider_display)

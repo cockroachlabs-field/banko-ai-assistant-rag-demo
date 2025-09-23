@@ -378,8 +378,8 @@
                         <span class="text-white font-medium">Powered in partnership with</span>
                         <div class="provider-badges flex items-center space-x-3">
                             <span class="provider-badge badge-ai flex items-center space-x-2 bg-white text-gray-800 px-3 py-1 rounded-full shadow-sm">
-                                <img src="{{ url_for('static', filename='watsonx-icon.svg') }}" alt="IBM Watsonx" class="w-4 h-4" />
-                                <span class="font-medium">IBM Watsonx</span>
+                                <img src="{{ url_for('static', filename=ai_provider.icon_file) }}" alt="{{ ai_provider.icon_alt }}" class="w-4 h-4" />
+                                <span class="font-medium">{{ ai_provider.name }}</span>
                             </span>
                             <span class="text-white/70">×</span>
                             <span class="provider-badge badge-db flex items-center space-x-2 bg-white text-gray-800 px-3 py-1 rounded-full shadow-sm">

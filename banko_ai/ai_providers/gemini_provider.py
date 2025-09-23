@@ -13,6 +13,9 @@ from sqlalchemy import create_engine, text
 try:
     from google.cloud import aiplatform
     from google.oauth2 import service_account
+    import vertexai
+    from vertexai.generative_models import GenerativeModel
+    import google.generativeai as genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -26,16 +29,19 @@ class GeminiProvider(AIProvider):
     def __init__(self, config: Dict[str, Any], cache_manager=None):
         """Initialize Gemini provider."""
         if not GEMINI_AVAILABLE:
-            raise AIConnectionError("Google Cloud AI Platform not available. Install with: pip install google-cloud-aiplatform")
+            raise AIConnectionError("Google Cloud AI Platform not available. Install with: pip install google-cloud-aiplatform vertexai")
         
         self.cache_manager = cache_manager
         
-        self.project_id = config.get("project_id")
-        self.location = config.get("location", "us-central1")
-        self.model_name = "gemini-1.5-pro"
+        self.project_id = config.get("project_id") or os.getenv("GOOGLE_PROJECT_ID")
+        self.location = config.get("location") or os.getenv("GOOGLE_LOCATION", "us-central1")
+        self.model_name = config.get("model") or os.getenv("GOOGLE_MODEL", "gemini-1.5-pro")
         self.embedding_model = None
         self.db_engine = None
         self.vertex_client = None
+        self.genai_client = None
+        self.credentials = None
+        self.use_vertex_ai = True  # Try Vertex AI first, fallback to Generative AI
         super().__init__(config)
     
     def _validate_config(self) -> None:
@@ -43,12 +49,63 @@ class GeminiProvider(AIProvider):
         if not self.project_id:
             raise AIAuthenticationError("Google project ID is required")
         
-        # Initialize Vertex AI
+        # Set up authentication from service account key file
         try:
-            aiplatform.init(project=self.project_id, location=self.location)
-            self.vertex_client = aiplatform.gapic.PredictionServiceClient()
+            credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            if credentials_path and os.path.exists(credentials_path):
+                self.credentials = service_account.Credentials.from_service_account_file(credentials_path)
+                print(f"✅ Loaded Google credentials from: {credentials_path}")
+                
+                # Try Vertex AI first
+                try:
+                    vertexai.init(
+                        project=self.project_id, 
+                        location=self.location, 
+                        credentials=self.credentials
+                    )
+                    
+                    # Create the generative model using the correct model name
+                    model_name = self.model_name
+                    if model_name == "gemini-1.5-pro":
+                        model_name = "gemini-1.5-pro-001"
+                    elif model_name == "gemini-1.5-flash":
+                        model_name = "gemini-1.5-flash-001"
+                    elif model_name == "gemini-1.0-pro":
+                        model_name = "gemini-1.0-pro-001"
+                        
+                    self.vertex_client = GenerativeModel(model_name)
+                    self.use_vertex_ai = True
+                    print(f"✅ Initialized Vertex AI with project: {self.project_id}, location: {self.location}, model: {self.model_name}")
+                    
+                except Exception as vertex_error:
+                    print(f"⚠️  Vertex AI initialization failed: {vertex_error}")
+                    print("🔄 Falling back to Generative AI API...")
+                    
+                    # Fallback to Generative AI API
+                    try:
+                        # Check if there's a GOOGLE_API_KEY environment variable
+                        api_key = os.getenv("GOOGLE_API_KEY")
+                        if api_key:
+                            genai.configure(api_key=api_key)
+                            self.genai_client = genai.GenerativeModel(self.model_name)
+                            self.use_vertex_ai = False
+                            print(f"✅ Initialized Generative AI API with model: {self.model_name}")
+                        else:
+                            print("❌ No GOOGLE_API_KEY found for Generative AI API fallback")
+                            raise AIConnectionError("Both Vertex AI and Generative AI API initialization failed - no API key")
+                        
+                    except Exception as genai_error:
+                        print(f"❌ Generative AI API initialization failed: {genai_error}")
+                        raise AIConnectionError(f"Failed to initialize both Vertex AI and Generative AI: {vertex_error}")
+                        
+            else:
+                print("❌ No GOOGLE_APPLICATION_CREDENTIALS found")
+                raise AIAuthenticationError("Google credentials are required")
+                
         except Exception as e:
-            raise AIConnectionError(f"Failed to initialize Vertex AI: {str(e)}")
+            if isinstance(e, (AIConnectionError, AIAuthenticationError)):
+                raise
+            raise AIConnectionError(f"Failed to initialize Gemini provider: {str(e)}")
     
     def get_default_model(self) -> str:
         """Get the default Gemini model."""
@@ -66,7 +123,9 @@ class GeminiProvider(AIProvider):
         """Get or create the embedding model."""
         if self.embedding_model is None:
             try:
-                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                # Use configurable embedding model from environment or default
+                embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+                self.embedding_model = SentenceTransformer(embedding_model_name)
             except Exception as e:
                 raise AIConnectionError(f"Failed to load embedding model: {str(e)}")
         return self.embedding_model
@@ -209,38 +268,48 @@ Data:
 
 Provide helpful insights with numbers, markdown formatting, and actionable advice."""
             
-            # Prepare the request
-            endpoint = f"projects/{self.project_id}/locations/{self.location}/publishers/google/models/{self.current_model}"
-            
-            instances = [{
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
+            # Generate response using either Vertex AI or Generative AI client
+            if self.use_vertex_ai and self.vertex_client:
+                from vertexai.generative_models import GenerationConfig
+                
+                generation_config = GenerationConfig(
+                    temperature=0.7,
+                    max_output_tokens=1000,
+                    top_p=0.9,
+                    top_k=40
+                )
+                
+                # Make the request with Vertex AI
+                response = self.vertex_client.generate_content(
+                    prompt,
+                    generation_config=generation_config
+                )
+                
+                # Extract response text
+                if response and response.text:
+                    ai_response = response.text
+                else:
+                    ai_response = "I apologize, but I couldn't generate a response at this time."
+                    
+            elif self.genai_client:
+                # Use Generative AI API
+                response = self.genai_client.generate_content(
+                    prompt,
+                    generation_config={
+                        'temperature': 0.7,
+                        'max_output_tokens': 1000,
+                        'top_p': 0.9,
+                        'top_k': 40
                     }
-                ]
-            }]
-            
-            parameters = {
-                "temperature": 0.7,
-                "maxOutputTokens": 1000,
-                "topP": 0.9,
-                "topK": 40
-            }
-            
-            # Make prediction request
-            response = self.vertex_client.predict(
-                endpoint=endpoint,
-                instances=instances,
-                parameters=parameters
-            )
-            
-            # Extract response
-            predictions = response.predictions
-            if predictions and len(predictions) > 0:
-                ai_response = predictions[0].get("candidates", [{}])[0].get("content", "")
+                )
+                
+                # Extract response text
+                if response and response.text:
+                    ai_response = response.text
+                else:
+                    ai_response = "I apologize, but I couldn't generate a response at this time."
             else:
-                ai_response = "I apologize, but I couldn't generate a response at this time."
+                ai_response = "No Gemini client available."
             
             # Cache the response for future similar queries
             if self.cache_manager and ai_response:
@@ -275,10 +344,13 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                 response=ai_response,
                 sources=context,
                 metadata={
+                    'provider': 'gemini',
                     "model": self.model_name,
                     "project_id": self.project_id,
                     "location": self.location,
-                    "language": language
+                    "language": language,
+                    'user_id': user_id,
+                    'cached': False
                 }
             )
             
@@ -297,32 +369,37 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
     def test_connection(self) -> bool:
         """Test Gemini connection."""
         try:
-            # Test with a simple completion
-            endpoint = f"projects/{self.project_id}/locations/{self.location}/publishers/google/models/{self.current_model}"
-            
-            instances = [{
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Hello"
+            # Test with a simple completion using the appropriate client
+            if self.use_vertex_ai and self.vertex_client:
+                from vertexai.generative_models import GenerationConfig
+                
+                generation_config = GenerationConfig(
+                    temperature=0.7,
+                    max_output_tokens=5
+                )
+                
+                response = self.vertex_client.generate_content(
+                    "Hello",
+                    generation_config=generation_config
+                )
+                
+                return response and response.text is not None
+                
+            elif self.genai_client:
+                response = self.genai_client.generate_content(
+                    "Hello",
+                    generation_config={
+                        'temperature': 0.7,
+                        'max_output_tokens': 5
                     }
-                ]
-            }]
-            
-            parameters = {
-                "temperature": 0.7,
-                "maxOutputTokens": 5
-            }
-            
-            response = self.vertex_client.predict(
-                endpoint=endpoint,
-                instances=instances,
-                parameters=parameters
-            )
-            
-            predictions = response.predictions
-            return predictions and len(predictions) > 0 and predictions[0].get("candidates")
-        except Exception:
+                )
+                
+                return response and response.text is not None
+            else:
+                return False
+                
+        except Exception as e:
+            print(f"❌ Gemini connection test failed: {str(e)}")
             return False
     
     def _prepare_context(self, context: List[SearchResult]) -> str:

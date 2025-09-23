@@ -7,8 +7,8 @@ py-modules = []
 
 [project]
 name = "banko-ai-assistant"
-version = "1.0.18"
-description = "AI-powered expense analysis and RAG system with CockroachDB vector search and multi-provider AI support"
+version = "1.0.20"
+description = "AI-powered expense analysis and RAG system with CockroachDB vector search and multi-provider AI support (OpenAI, AWS Bedrock, IBM Watsonx, Google Gemini)"
 authors = [
     { name="Virag Tripathi", email="virag.tripathi@gmail.com" }
 ]
@@ -50,7 +50,9 @@ dependencies = [
     "tqdm>=4.66.3,<5.0.0",
     "tiktoken>=0.5.0,<1.0.0",
     "google-cloud-aiplatform>=1.38.0,<2.0.0",
-    "google-auth>=2.23.0,<3.0.0"
+    "google-auth>=2.23.0,<3.0.0",
+    "vertexai>=1.43.0,<2.0.0",
+    "google-generativeai>=0.8.0,<1.0.0"
 ]
 
 [project.optional-dependencies]
