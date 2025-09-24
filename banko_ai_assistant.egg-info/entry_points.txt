@@ -1,0 +1,2 @@
+[console_scripts]
+banko-ai = banko_ai.cli:main

@@ -51,14 +51,14 @@ def get_provider_display_info(ai_service, ai_provider=None, current_model=None, 
         },
         'openai': {
             'name': 'OpenAI',
-            'icon_file': 'watsonx-icon.svg',  # Fallback to watsonx icon for now
+            'icon_file': 'openai-icon.svg',  # Fallback to watsonx icon for now
             'icon_alt': 'OpenAI'
         }
     }
     
     # Get provider config or use default
     config = provider_configs.get(service, {
-        'name': 'Unknown Provider',
+        'name': 'IBM Watsonx',
         'icon_file': 'watsonx-icon.svg',
         'icon_alt': 'AI Provider'
     })
@@ -248,9 +248,12 @@ def create_app() -> Flask:
         user_id = user_manager.get_current_user()['id'] if user_manager.get_current_user() else None
         current_user = user_manager.get_current_user()
         
+        # Get AI provider info for display
+        ai_provider_display = get_provider_display_info(config.ai_service, ai_provider)
+        
         return render_template('index.html', 
                              user=current_user,
-                             ai_provider=ai_provider)
+                             ai_provider=ai_provider_display)
     
     @app.route('/login', methods=['GET', 'POST'])
     def login():

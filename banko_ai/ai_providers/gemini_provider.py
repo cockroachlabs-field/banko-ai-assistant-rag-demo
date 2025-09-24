@@ -35,7 +35,7 @@ class GeminiProvider(AIProvider):
 
         self.project_id = config.get("project_id") or os.getenv("GOOGLE_PROJECT_ID")
         self.location = config.get("location") or os.getenv("GOOGLE_LOCATION", "us-central1")
-        self.model_name = config.get("model") or os.getenv("GOOGLE_MODEL", "gemini-1.5-pro")
+        self.model_name = config.get("model") or os.getenv("GOOGLE_MODEL", "gemini-2.0-flash-001")
         self.embedding_model = None
         self.db_engine = None
         self.vertex_client = None
