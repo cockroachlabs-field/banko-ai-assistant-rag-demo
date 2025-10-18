@@ -438,6 +438,103 @@ class BankoCacheManager:
         except Exception as e:
             print(f"⚠️ Error caching vector search: {e}")
     
+    def get_cached_insights(self, expense_data: List[Dict]) -> Optional[Dict]:
+        """
+        Get cached financial insights for a set of expense data.
+        
+        Args:
+            expense_data: List of expense dictionaries
+            
+        Returns:
+            Cached insights dictionary if found, None otherwise
+        """
+        expense_hash = self._generate_hash(safe_json_dumps(expense_data, sort_keys=True))
+        
+        insights_query = text("""
+            SELECT total_amount, num_transactions, avg_transaction, 
+                   top_categories, insights_json
+            FROM insights_cache 
+            WHERE expense_data_hash = :expense_hash
+              AND expires_at > now()
+        """)
+        
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(insights_query, {'expense_hash': expense_hash})
+                row = result.fetchone()
+                
+                if row:
+                    self._log_cache_stat('insights', 'hit', tokens_saved=200)
+                    print(f"🎯 Insights Cache HIT! Expense hash: {expense_hash[:8]}...")
+                    return {
+                        'total_amount': float(row.total_amount),
+                        'num_transactions': row.num_transactions,
+                        'avg_transaction': float(row.avg_transaction),
+                        'top_categories': json.loads(row.top_categories) if isinstance(row.top_categories, str) else row.top_categories,
+                        'insights': json.loads(row.insights_json) if isinstance(row.insights_json, str) else row.insights_json
+                    }
+        except Exception as e:
+            print(f"⚠️ Error getting cached insights: {e}")
+        
+        self._log_cache_stat('insights', 'miss')
+        return None
+    
+    def cache_insights(self, expense_data: List[Dict], insights: Dict):
+        """
+        Cache financial insights for expense data.
+        
+        Args:
+            expense_data: List of expense dictionaries
+            insights: Dictionary containing financial insights
+        """
+        expense_hash = self._generate_hash(safe_json_dumps(expense_data, sort_keys=True))
+        expires_at = datetime.utcnow() + timedelta(hours=self.cache_ttl_hours)
+        
+        # Calculate summary statistics
+        total_amount = sum(float(e.get('expense_amount', 0)) for e in expense_data)
+        num_transactions = len(expense_data)
+        avg_transaction = total_amount / num_transactions if num_transactions > 0 else 0
+        
+        # Get top categories
+        categories = {}
+        for exp in expense_data:
+            cat = exp.get('shopping_type', 'Unknown')
+            categories[cat] = categories.get(cat, 0) + 1
+        top_categories = dict(sorted(categories.items(), key=lambda x: x[1], reverse=True)[:5])
+        
+        try:
+            with engine.connect() as conn:
+                insert_query = text("""
+                    INSERT INTO insights_cache (
+                        expense_data_hash, total_amount, num_transactions, 
+                        avg_transaction, top_categories, insights_json, expires_at
+                    ) VALUES (
+                        :expense_hash, :total_amount, :num_transactions,
+                        :avg_transaction, :top_categories, :insights_json, :expires_at
+                    )
+                    ON CONFLICT (expense_data_hash) DO UPDATE SET
+                        total_amount = EXCLUDED.total_amount,
+                        num_transactions = EXCLUDED.num_transactions,
+                        avg_transaction = EXCLUDED.avg_transaction,
+                        top_categories = EXCLUDED.top_categories,
+                        insights_json = EXCLUDED.insights_json,
+                        expires_at = EXCLUDED.expires_at,
+                        created_at = now()
+                """)
+                conn.execute(insert_query, {
+                    'expense_hash': expense_hash,
+                    'total_amount': total_amount,
+                    'num_transactions': num_transactions,
+                    'avg_transaction': avg_transaction,
+                    'top_categories': safe_json_dumps(top_categories),
+                    'insights_json': safe_json_dumps(insights),
+                    'expires_at': expires_at
+                })
+                conn.commit()
+                self._log_cache_stat('insights', 'write')
+        except Exception as e:
+            print(f"⚠️ Error caching insights: {e}")
+    
     def _log_cache_stat(self, cache_type: str, operation: str, tokens_saved: int = 0, details: Dict = None):
         """Log cache statistics for monitoring."""
         try:

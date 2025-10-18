@@ -19,27 +19,38 @@ class OpenAIProvider(AIProvider):
     
     def __init__(self, config: Dict[str, Any], cache_manager=None):
         """Initialize OpenAI provider."""
-        self.api_key = config.get("api_key")
+        # Support both config and environment variables with defaults
+        self.api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY")
+        self.model_id = config.get("model") or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self.client = None
         self.embedding_model = None
         self.db_engine = None
         self.cache_manager = cache_manager
+        
+        # Make API key optional for demo mode
+        if not self.api_key:
+            print("⚠️ OPENAI_API_KEY not found - running in demo mode")
+        
         super().__init__(config)
     
     def _validate_config(self) -> None:
         """Validate OpenAI configuration."""
+        # Configuration is optional for demo mode
         if not self.api_key:
-            raise AIAuthenticationError("OpenAI API key is required")
+            print("⚠️ OpenAI running without API key (demo mode)")
+            return
         
         # Initialize OpenAI client
         try:
             self.client = OpenAI(api_key=self.api_key)
+            print(f"✅ Initialized OpenAI with model: {self.model_id}")
         except Exception as e:
-            raise AIConnectionError(f"Failed to initialize OpenAI client: {str(e)}")
+            print(f"⚠️ Failed to initialize OpenAI client: {str(e)}")
+            print("Running in demo mode without OpenAI")
     
     def get_default_model(self) -> str:
         """Get the default OpenAI model."""
-        return "gpt-3.5-turbo"
+        return "gpt-4o-mini"
     
     def get_available_models(self) -> List[str]:
         """Get available OpenAI models."""

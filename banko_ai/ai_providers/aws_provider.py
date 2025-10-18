@@ -19,19 +19,30 @@ class AWSProvider(AIProvider):
     
     def __init__(self, config: Dict[str, Any], cache_manager=None):
         """Initialize AWS provider."""
-        self.access_key_id = config.get("access_key_id")
-        self.secret_access_key = config.get("secret_access_key")
-        self.region = config.get("region", "us-east-1")
+        # Support both config and environment variables with defaults
+        self.access_key_id = config.get("access_key_id") or os.getenv("AWS_ACCESS_KEY_ID")
+        self.secret_access_key = config.get("secret_access_key") or os.getenv("AWS_SECRET_ACCESS_KEY")
+        self.region = config.get("region") or os.getenv("AWS_REGION", "us-east-1")
+        self.model_id = config.get("model") or os.getenv("AWS_MODEL_ID", "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
         self.bedrock_client = None
         self.embedding_model = None
         self.db_engine = None
         self.cache_manager = cache_manager
+        
+        # Make credentials optional for demo mode
+        if not self.access_key_id:
+            print("⚠️ AWS_ACCESS_KEY_ID not found - running in demo mode")
+        if not self.secret_access_key:
+            print("⚠️ AWS_SECRET_ACCESS_KEY not found - running in demo mode")
+        
         super().__init__(config)
     
     def _validate_config(self) -> None:
         """Validate AWS configuration."""
+        # Configuration is optional for demo mode
         if not self.access_key_id or not self.secret_access_key:
-            raise AIAuthenticationError("AWS access key ID and secret access key are required")
+            print("⚠️ AWS Bedrock running without credentials (demo mode)")
+            return
         
         # Initialize Bedrock client
         try:
@@ -41,8 +52,10 @@ class AWSProvider(AIProvider):
                 aws_secret_access_key=self.secret_access_key,
                 region_name=self.region
             )
+            print(f"✅ Initialized AWS Bedrock with region: {self.region}, model: {self.model_id}")
         except Exception as e:
-            raise AIConnectionError(f"Failed to initialize AWS Bedrock client: {str(e)}")
+            print(f"⚠️ Failed to initialize AWS Bedrock client: {str(e)}")
+            print("Running in demo mode without AWS Bedrock")
     
     def get_default_model(self) -> str:
         """Get the default AWS model."""

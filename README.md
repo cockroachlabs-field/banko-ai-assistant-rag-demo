@@ -1,3 +1,8 @@
+[![PyPI version](https://img.shields.io/pypi/v/banko-ai-assistant)](https://pypi.org/project/banko-ai-assistant/)
+[![Python versions](https://img.shields.io/pypi/pyversions/banko-ai-assistant)](https://pypi.org/project/banko-ai-assistant/)
+[![License](https://img.shields.io/pypi/l/banko-ai-assistant)](https://pypi.org/project/banko-ai-assistant/)
+[![Downloads](https://img.shields.io/pypi/dm/banko-ai-assistant)](https://pypi.org/project/banko-ai-assistant/)
+
 # 🤖 Banko AI Assistant - RAG Demo
 
 A modern AI-powered expense analysis application with Retrieval-Augmented Generation (RAG) capabilities, built with CockroachDB vector search and multiple AI provider support.

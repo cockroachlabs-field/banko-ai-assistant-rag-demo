@@ -139,25 +139,16 @@ def auto_setup_data_if_needed(database_url: str):
         if not table_exists:
             print("🔧 Creating expenses table...")
             try:
-                import subprocess
-                import sys
-                import os
-                # Get the project root directory
-                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-                create_table_script = os.path.join(project_root, 'vector_search', 'create_table.py')
+                # Use the unified DatabaseManager
+                from ..utils.database import DatabaseManager
+                db_manager = DatabaseManager(database_url)
                 
-                if os.path.exists(create_table_script):
-                    result = subprocess.run([sys.executable, create_table_script], 
-                                          capture_output=True, text=True, cwd=project_root)
-                    if result.returncode == 0:
-                        print("✅ Expenses table created successfully")
-                        # Re-check the database status
-                        db_connected, db_message, table_exists, record_count = check_database_connection(database_url)
-                    else:
-                        print(f"❌ Failed to create table: {result.stderr}")
-                        return False
+                if db_manager.create_tables():
+                    print("✅ Expenses table created successfully")
+                    # Re-check the database status
+                    db_connected, db_message, table_exists, record_count = check_database_connection(database_url)
                 else:
-                    print(f"❌ Table creation script not found: {create_table_script}")
+                    print(f"❌ Failed to create table")
                     return False
             except Exception as e:
                 print(f"❌ Table creation error: {e}")
@@ -539,7 +530,10 @@ def create_app() -> Flask:
     @app.route('/banko', methods=['GET', 'POST'])
     def chat():
         """Main chat interface - using original simple logic."""
-        if 'chat' not in session:
+        # Clear chat history on GET request (fresh start)
+        if request.method == 'GET':
+            session['chat'] = []
+        elif 'chat' not in session:
             session['chat'] = []
         
         # Get AI provider info for display
