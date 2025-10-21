@@ -24,6 +24,7 @@ class AWSProvider(AIProvider):
         self.secret_access_key = config.get("secret_access_key") or os.getenv("AWS_SECRET_ACCESS_KEY")
         self.region = config.get("region") or os.getenv("AWS_REGION", "us-east-1")
         self.model_id = config.get("model") or os.getenv("AWS_MODEL_ID", "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+        
         self.bedrock_client = None
         self.embedding_model = None
         self.db_engine = None
@@ -39,23 +40,41 @@ class AWSProvider(AIProvider):
     
     def _validate_config(self) -> None:
         """Validate AWS configuration."""
-        # Configuration is optional for demo mode
-        if not self.access_key_id or not self.secret_access_key:
-            print("⚠️ AWS Bedrock running without credentials (demo mode)")
-            return
-        
-        # Initialize Bedrock client
         try:
+            # Let boto3 automatically discover credentials
             self.bedrock_client = boto3.client(
                 'bedrock-runtime',
-                aws_access_key_id=self.access_key_id,
-                aws_secret_access_key=self.secret_access_key,
                 region_name=self.region
             )
-            print(f"✅ Initialized AWS Bedrock with region: {self.region}, model: {self.model_id}")
+            print(f"✅ AWS Bedrock client created (region: {self.region}, model: {self.model_id})")
+            
+            # Verify credentials by getting caller identity
+            print("🔍 Verifying AWS credentials...")
+            sts = boto3.client('sts', region_name=self.region)
+            identity = sts.get_caller_identity()
+            print(f"✅ AWS Identity verified: {identity['Arn']}")
+            print(f"   Account: {identity['Account']}")
+            
         except Exception as e:
-            print(f"⚠️ Failed to initialize AWS Bedrock client: {str(e)}")
-            print("Running in demo mode without AWS Bedrock")
+            error_msg = str(e)
+            print(f"\n⚠️ AWS Bedrock initialization failed!")
+            print(f"   Error: {error_msg}")
+            
+            # Provide specific help based on error type
+            if 'ExpiredToken' in error_msg or 'expired' in error_msg.lower():
+                print("\n❌ Your AWS credentials have EXPIRED")
+                print("\n💡 To fix:")
+                print("   1. Get fresh credentials from AWS Console")
+                print("   2. Or run: aws sso login (if using SSO)")
+            elif 'NoCredentials' in error_msg or 'Unable to locate credentials' in error_msg:
+                print("\n❌ No AWS credentials found")
+                print("   Set credentials via:")
+                print("   - export AWS_ACCESS_KEY_ID=...")
+                print("   - export AWS_SECRET_ACCESS_KEY=...")
+                print("   - Or configure ~/.aws/credentials")
+            
+            self.bedrock_client = None
+            print()
     
     def get_default_model(self) -> str:
         """Get the default AWS model."""
@@ -103,10 +122,10 @@ class AWSProvider(AIProvider):
             embedding_model = self._get_embedding_model()
             query_embedding = embedding_model.encode([query])[0]
             
-            # Convert to PostgreSQL vector format
+            # Convert to PostgreSQL vector format (JSON string)
             search_embedding = json.dumps(query_embedding.tolist())
             
-            # Build SQL query
+            # FIXED: Use named parameters with a dictionary instead of %s with a list
             sql = """
             SELECT 
                 expense_id,
@@ -115,21 +134,37 @@ class AWSProvider(AIProvider):
                 merchant,
                 expense_amount,
                 expense_date,
-                1 - (embedding <-> %s) as similarity_score
+                embedding <=> :search_embedding as similarity_score
             FROM expenses
-            WHERE 1 - (embedding <-> %s) > %s
+            ORDER BY embedding <=> :search_embedding
+            LIMIT :limit
             """
             
-            params = [search_embedding, search_embedding, threshold]
+            # Build the parameters dictionary
+            params = {
+                "search_embedding": search_embedding,
+                "limit": limit
+            }
             
+            # Conditionally add user_id filter if provided
             if user_id:
-                sql += " AND user_id = %s"
-                params.append(user_id)
+                sql = """
+                SELECT 
+                    expense_id,
+                    user_id,
+                    description,
+                    merchant,
+                    expense_amount,
+                    expense_date,
+                    embedding <=> :search_embedding as similarity_score
+                FROM expenses
+                WHERE user_id = :user_id
+                ORDER BY embedding <=> :search_embedding
+                LIMIT :limit
+                """
+                params["user_id"] = user_id
             
-            sql += " ORDER BY similarity_score DESC LIMIT %s"
-            params.append(limit)
-            
-            # Execute query
+            # Execute query using the dictionary of parameters
             engine = self._get_db_engine()
             with engine.connect() as conn:
                 result = conn.execute(text(sql), params)
@@ -154,6 +189,71 @@ class AWSProvider(AIProvider):
         except Exception as e:
             raise AIConnectionError(f"Search failed: {str(e)}")
     
+    def _get_financial_insights(self, search_results) -> dict:
+        """Generate comprehensive financial insights from expense data."""
+        if not search_results:
+            return {}
+        
+        total_amount = 0
+        categories = {}
+        merchants = {}
+        payment_methods = {}
+        
+        for result in search_results:
+            # Handle both SearchResult objects and dictionaries
+            if hasattr(result, 'amount'):
+                amount = float(result.amount)
+                merchant = result.merchant
+                category = result.metadata.get('shopping_type', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
+                payment = result.metadata.get('payment_method', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
+            else:
+                amount = float(result.get('expense_amount', 0))
+                merchant = result.get('merchant', 'Unknown')
+                category = result.get('shopping_type', 'Unknown')
+                payment = result.get('payment_method', 'Unknown')
+            
+            total_amount += amount
+            categories[category] = categories.get(category, 0) + amount
+            merchants[merchant] = merchants.get(merchant, 0) + amount
+            payment_methods[payment] = payment_methods.get(payment, 0) + amount
+        
+        top_category = max(categories.items(), key=lambda x: x[1]) if categories else None
+        top_merchant = max(merchants.items(), key=lambda x: x[1]) if merchants else None
+        
+        return {
+            'total_amount': total_amount,
+            'num_transactions': len(search_results),
+            'avg_transaction': total_amount / len(search_results) if search_results else 0,
+            'categories': categories,
+            'top_category': top_category,
+            'top_merchant': top_merchant,
+            'payment_methods': payment_methods
+        }
+    
+    def _generate_budget_recommendations(self, insights: dict, prompt: str) -> str:
+        """Generate personalized budget recommendations based on spending patterns."""
+        if not insights:
+            return ""
+        
+        recommendations = []
+        
+        if insights.get('top_category'):
+            category, amount = insights['top_category']
+            recommendations.append(f"Your highest spending category is **{category}** at **${amount:.2f}**. Consider setting a monthly budget limit for this category.")
+        
+        avg_amount = insights.get('avg_transaction', 0)
+        if avg_amount > 100:
+            recommendations.append(f"Your average transaction is **${avg_amount:.2f}**. Consider reviewing larger purchases to identify potential savings.")
+        
+        if insights.get('top_merchant'):
+            merchant, amount = insights['top_merchant']
+            recommendations.append(f"You frequently shop at **{merchant}** (${amount:.2f} total). Look for loyalty programs or discounts at this merchant.")
+        
+        if insights.get('total_amount', 0) > 500:
+            recommendations.append("💡 **Budget Tip**: Consider the 50/30/20 rule: 50% for needs, 30% for wants, 20% for savings and debt repayment.")
+        
+        return "\n".join(recommendations) if recommendations else ""
+    
     def generate_rag_response(
         self, 
         query: str, 
@@ -168,22 +268,25 @@ class AWSProvider(AIProvider):
             
             # Check for cached response first
             if self.cache_manager:
-                # Convert SearchResult objects to dict format for cache lookup
+                # Convert context to dict format for cache lookup (handle both objects and dicts)
                 search_results_dict = []
                 for result in context:
-                    search_results_dict.append({
-                        'expense_id': result.expense_id,
-                        'user_id': result.user_id,
-                        'description': result.description,
-                        'merchant': result.merchant,
-                        'expense_amount': result.amount,
-                        'expense_date': result.date,
-                        'similarity_score': result.similarity_score,
-                        'shopping_type': result.metadata.get('shopping_type'),
-                        'payment_method': result.metadata.get('payment_method'),
-                        'recurring': result.metadata.get('recurring'),
-                        'tags': result.metadata.get('tags')
-                    })
+                    if hasattr(result, 'expense_id'):
+                        search_results_dict.append({
+                            'expense_id': result.expense_id,
+                            'user_id': result.user_id,
+                            'description': result.description,
+                            'merchant': result.merchant,
+                            'expense_amount': result.amount,
+                            'expense_date': result.date,
+                            'similarity_score': result.similarity_score,
+                            'shopping_type': result.metadata.get('shopping_type') if result.metadata else None,
+                            'payment_method': result.metadata.get('payment_method') if result.metadata else None,
+                            'recurring': result.metadata.get('recurring') if result.metadata else None,
+                            'tags': result.metadata.get('tags') if result.metadata else None
+                        })
+                    else:
+                        search_results_dict.append(result)
                 
                 cached_response = self.cache_manager.get_cached_response(
                     query, search_results_dict, "aws"
@@ -205,16 +308,54 @@ class AWSProvider(AIProvider):
             else:
                 print(f"2. No cache manager available, generating fresh response")
             
-            # Prepare context
-            context_text = self._prepare_context(context)
+            # Generate financial insights
+            insights = self._get_financial_insights(context)
+            budget_recommendations = self._generate_budget_recommendations(insights, query)
             
-            # Prepare the prompt
-            prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
+            # Prepare the search results context with enhanced analysis
+            search_results_text = ""
+            if context:
+                context_parts = []
+                for result in context:
+                    if hasattr(result, 'amount'):
+                        description = result.description
+                        merchant = result.merchant
+                        amount = result.amount
+                        shopping_type = result.metadata.get('shopping_type', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
+                        payment_method = result.metadata.get('payment_method', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
+                    else:
+                        description = result.get('description', '')
+                        merchant = result.get('merchant', 'Unknown')
+                        amount = result.get('expense_amount', 0)
+                        shopping_type = result.get('shopping_type', 'Unknown')
+                        payment_method = result.get('payment_method', 'Unknown')
+                    
+                    context_parts.append(
+                        f"• **{shopping_type}** at {merchant}: ${amount} ({payment_method}) - {description}"
+                    )
+                
+                search_results_text = "\n".join(context_parts)
+                
+                if insights:
+                    search_results_text += f"\n\n**📊 Financial Summary:**\n"
+                    search_results_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
+                    search_results_text += f"• Number of Transactions: **{insights['num_transactions']}**\n"
+                    search_results_text += f"• Average Transaction: **${insights['avg_transaction']:.2f}**\n"
+                    if insights.get('top_category'):
+                        cat, amt = insights['top_category']
+                        search_results_text += f"• Top Category: **{cat}** (${amt:.2f})\n"
+            else:
+                search_results_text = "No specific expense records found for this query."
+            
+            # Create enhanced prompt
+            enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
 
 Q: {query}
 
 Data:
-{context_text}
+{search_results_text}
+
+{budget_recommendations if budget_recommendations else ''}
 
 Provide helpful insights with numbers, markdown formatting, and actionable advice."""
             
@@ -232,7 +373,7 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                         "content": [
                             {
                                 "type": "text",
-                                "text": prompt
+                                "text": enhanced_prompt
                             }
                         ]
                     }
@@ -259,25 +400,27 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
             
             # Cache the response for future similar queries
             if self.cache_manager and ai_response:
-                # Convert SearchResult objects to dict format for caching
                 search_results_dict = []
                 for result in context:
-                    search_results_dict.append({
-                        'expense_id': result.expense_id,
-                        'user_id': result.user_id,
-                        'description': result.description,
-                        'merchant': result.merchant,
-                        'expense_amount': result.amount,
-                        'expense_date': result.date,
-                        'similarity_score': result.similarity_score,
-                        'shopping_type': result.metadata.get('shopping_type'),
-                        'payment_method': result.metadata.get('payment_method'),
-                        'recurring': result.metadata.get('recurring'),
-                        'tags': result.metadata.get('tags')
-                    })
+                    if hasattr(result, 'expense_id'):
+                        search_results_dict.append({
+                            'expense_id': result.expense_id,
+                            'user_id': result.user_id,
+                            'description': result.description,
+                            'merchant': result.merchant,
+                            'expense_amount': result.amount,
+                            'expense_date': result.date,
+                            'similarity_score': result.similarity_score,
+                            'shopping_type': result.metadata.get('shopping_type') if result.metadata else None,
+                            'payment_method': result.metadata.get('payment_method') if result.metadata else None,
+                            'recurring': result.metadata.get('recurring') if result.metadata else None,
+                            'tags': result.metadata.get('tags') if result.metadata else None
+                        })
+                    else:
+                        search_results_dict.append(result)
                 
-                # Estimate token usage (rough approximation for AWS)
-                prompt_tokens = len(query.split()) * 1.3  # ~1.3 tokens per word
+                # Estimate token usage
+                prompt_tokens = len(enhanced_prompt.split()) * 1.3
                 response_tokens = len(ai_response.split()) * 1.3
                 
                 self.cache_manager.cache_response(
@@ -290,9 +433,12 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                 response=ai_response,
                 sources=context,
                 metadata={
-                    "model": "claude-3-5-sonnet",
+                    "provider": "aws",
+                    "model": model_id,
                     "region": self.region,
-                    "language": language
+                    "language": language,
+                    "user_id": user_id,
+                    "cached": False
                 }
             )
             
@@ -311,7 +457,6 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
     def test_connection(self) -> bool:
         """Test AWS Bedrock connection."""
         try:
-            # Test with a simple completion
             payload = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 5,
@@ -332,19 +477,6 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
             
             response_body = json.loads(response['body'].read())
             return response_body['content'][0]['text'] is not None
+            
         except Exception:
             return False
-    
-    def _prepare_context(self, context: List[SearchResult]) -> str:
-        """Prepare context text from search results."""
-        if not context:
-            return "No relevant expense data found."
-        
-        context_parts = []
-        for i, result in enumerate(context, 1):
-            context_parts.append(
-                f"• **{result.description}** at {result.merchant}: ${result.amount:.2f} "
-                f"({result.date}) - similarity: {result.similarity_score:.3f}"
-            )
-        
-        return "\n".join(context_parts)

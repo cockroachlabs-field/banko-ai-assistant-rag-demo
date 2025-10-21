@@ -28,7 +28,7 @@ A modern AI-powered expense analysis application with Retrieval-Augmented Genera
 ### Prerequisites
 
 - **Python 3.8+**
-- **CockroachDB v25.2.4+** (recommended: [v25.3.1](https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-1))
+- **CockroachDB v25.2.4+** (recommended: [v25.3.3](https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-3))
 - **Vector Index Feature Enabled** (required for vector search)
 - **AI Provider API Key** (OpenAI, AWS, IBM Watsonx, or Google Gemini)
 
@@ -36,8 +36,8 @@ A modern AI-powered expense analysis application with Retrieval-Augmented Genera
 
 1. **Download and Install CockroachDB**:
    ```bash
-   # Download CockroachDB v25.3.1 (recommended)
-   # Visit: https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-1
+   # Download CockroachDB v25.3.3 (recommended)
+   # Visit: https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-3
    
    # Or install via package manager
    brew install cockroachdb/tap/cockroach  # macOS
@@ -77,14 +77,14 @@ A modern AI-powered expense analysis application with Retrieval-Augmented Genera
 # Install from PyPI
 pip install banko-ai-assistant
 
-# Set up environment variables
-export WATSONX_API_KEY="your_watsonx_api_key_here"
-export WATSONX_PROJECT_ID="your_watsonx_project_id_here"
-export WATSONX_MODEL_ID="openai/gpt-oss-120b"
+# Set up environment variables (example with OpenAI)
+export AI_SERVICE="openai"
+export OPENAI_API_KEY="your_openai_api_key_here"
+export OPENAI_MODEL="gpt-4o-mini"
 export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
 
 # Run the application
-python -m banko-ai
+banko-ai run
 ```
 
 #### Option 2: Development Installation
@@ -102,11 +102,11 @@ banko-ai run
 
 #### Option 3: Direct Dependencies
 ```bash
-# Install dependencies directly
-pip install -r requirements.txt
+# Install dependencies from pyproject.toml
+pip install -e .
 
-# Run the original app.py (legacy method)
-python app.py
+# Run the application
+banko-ai run
 ```
 
 ### Configuration
@@ -128,13 +128,13 @@ export WATSONX_MODEL="meta-llama/llama-2-70b-chat"
 
 # For OpenAI:
 export OPENAI_API_KEY="your_api_key_here"
-export OPENAI_MODEL="gpt-3.5-turbo"
+export OPENAI_MODEL="gpt-4o-mini"  # Options: gpt-4o-mini (default), gpt-4o, gpt-4-turbo, gpt-3.5-turbo
 
 # For AWS Bedrock:
 export AWS_ACCESS_KEY_ID="your_access_key"
 export AWS_SECRET_ACCESS_KEY="your_secret_key"
 export AWS_REGION="us-east-1"
-export AWS_MODEL="anthropic.claude-3-sonnet-20240229-v1:0"
+export AWS_MODEL="us.anthropic.claude-3-5-sonnet-20241022-v2:0"  # Claude 3.5 Sonnet (default)
 
 # For Google Gemini:
 export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
@@ -293,10 +293,10 @@ Switch between AI providers and models dynamically:
 
 ### Supported Providers
 
-- **OpenAI**: GPT-3.5, GPT-4, GPT-4 Turbo
-- **AWS Bedrock**: Claude 3 Sonnet, Claude 3 Haiku, Llama 2
-- **IBM Watsonx**: Granite models, Llama 2, Mistral
-- **Google Gemini**: Gemini 1.5 Pro, Gemini 1.5 Flash
+- **OpenAI**: GPT-4o-mini (default), GPT-4o, GPT-4 Turbo, GPT-4, GPT-3.5 Turbo
+- **AWS Bedrock**: Claude 3.5 Sonnet (default), Claude 3.5 Haiku, Claude 3 Opus, Claude 3 Sonnet
+- **IBM Watsonx**: GPT-OSS-120B (default), Llama 2 (70B, 13B, 7B), Granite models
+- **Google Gemini**: Gemini 1.5 Pro (default), Gemini 1.5 Flash, Gemini 1.0 Pro
 
 ![AI Status](banko_ai/static/ai-status.png)
 
@@ -361,8 +361,8 @@ banko_ai/
 # Check CockroachDB version (must be v25.2.4+)
 cockroach version
 
-# If version is too old, download v25.3.1:
-# https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-1
+# If version is too old, download v25.3.3:
+# https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-3
 ```
 
 **Vector Index Feature Not Enabled**
@@ -433,4 +433,4 @@ For issues and questions:
 
 ---
 
-**Built with ❤️ using CockroachDB, Flask, and modern AI technologies such as **
+**Built with ❤️ using CockroachDB, Flask, and modern AI technologies such as watsonx.ai**
