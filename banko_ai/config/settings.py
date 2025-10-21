@@ -26,7 +26,7 @@ class Config:
     # AI Service Configuration
     ai_service: str = "watsonx"  # openai, aws, watsonx, gemini
     openai_api_key: Optional[str] = None
-    openai_model: str = "gpt-3.5-turbo"  # gpt-3.5-turbo, gpt-4, gpt-4-turbo
+    openai_model: str = "gpt-4o-mini"  # gpt-4o-mini (default), gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
     aws_region: str = "us-east-1"
@@ -104,7 +104,7 @@ class Config:
             # AI Services
             ai_service=ai_service,
             openai_api_key=os.getenv("OPENAI_API_KEY"),
-            openai_model=os.getenv("OPENAI_MODEL", "gpt-3.5-turbo"),
+            openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
             aws_region=os.getenv("AWS_REGION", "us-east-1"),
@@ -204,7 +204,8 @@ class Config:
         
         # Validate AI service specific requirements
         if self.ai_service == "openai" and not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY is required for OpenAI service")
+            # For demo purposes, make OpenAI API key optional
+            print("Warning: OPENAI_API_KEY not provided. AI features will be limited.")
         elif self.ai_service == "aws" and (not self.aws_access_key_id or not self.aws_secret_access_key):
             raise ValueError("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required for AWS service")
         elif self.ai_service == "watsonx" and not self.watsonx_api_key:
