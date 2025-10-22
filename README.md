@@ -7,7 +7,7 @@
 
 A modern AI-powered expense analysis application with Retrieval-Augmented Generation (RAG) capabilities, built with CockroachDB vector search and multiple AI provider support.
 
-![Banko AI Assistant](banko_ai/static/banko-ai-assistant-watsonx.gif)
+![Banko AI Assistant](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/banko-ai-assistant-watsonx.gif)
 
 ## ✨ Features
 
@@ -159,7 +159,7 @@ banko-ai run --no-data
 banko-ai run --debug
 ```
 
-![Database Operations](banko_ai/static/banko-db-ops.png)
+![Database Operations](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/banko-db-ops.png)
 
 ## 🎯 What Happens on Startup
 
@@ -180,7 +180,7 @@ The generated sample data includes:
 - **Payment Methods**: Bank Transfer, Debit Card, Credit Card, Cash, Check
 - **User-Specific Data**: Multiple user IDs for testing user-specific search
 
-![Analytics Dashboard](banko_ai/static/Anallytics.png)
+![Analytics Dashboard](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/Anallytics.png)
 
 ## 🌐 Web Interface
 
@@ -194,7 +194,7 @@ Access the application at http://localhost:5000
 - **⚙️ Settings**: AI provider and model configuration
 - **📊 Analytics**: Detailed expense analysis and insights
 
-![Banko Response](banko_ai/static/banko-response.png)
+![Banko Response](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/banko-response.png)
 
 ## 🔧 CLI Commands
 
@@ -280,7 +280,7 @@ USING cspann (embedding vector_l2_ops);
 - **Scalable performance**: Optimized for large datasets
 - **Multi-tenant support**: Isolated user data with shared infrastructure
 
-![Cache Statistics](banko_ai/static/cache-stats.png)
+![Cache Statistics](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/cache-stats.png)
 
 ## 🔄 AI Provider Switching
 
@@ -298,7 +298,7 @@ Switch between AI providers and models dynamically:
 - **IBM Watsonx**: GPT-OSS-120B (default), Llama 2 (70B, 13B, 7B), Granite models
 - **Google Gemini**: Gemini 1.5 Pro (default), Gemini 1.5 Flash, Gemini 1.0 Pro
 
-![AI Status](banko_ai/static/ai-status.png)
+![AI Status](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/ai-status.png)
 
 ## 📈 Performance Features
 
@@ -328,7 +328,7 @@ For detailed demonstrations of vector indexing and search capabilities:
 - RAG with user context
 - Troubleshooting and best practices
 
-![Query Watcher](banko_ai/static/query_watcher.png)
+![Query Watcher](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/query_watcher.png)
 
 ## 🛠️ Development
 
