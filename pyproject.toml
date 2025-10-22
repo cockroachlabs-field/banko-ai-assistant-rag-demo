@@ -7,7 +7,7 @@ py-modules = []
 
 [project]
 name = "banko-ai-assistant"
-version = "1.0.25"
+version = "1.0.28"
 description = "AI-powered expense analysis and RAG system with CockroachDB vector search and multi-provider AI support (OpenAI, AWS Bedrock, IBM Watsonx, Google Gemini)"
 authors = [
     { name="Virag Tripathi", email="virag.tripathi@gmail.com" }
@@ -78,7 +78,7 @@ where = ["."]
 include = ["banko_ai*"]
 
 [tool.setuptools.package-data]
-banko_ai = ["templates/*", "static/*", "*.html", "*.css", "*.js"]
+banko_ai = ["templates/*", "static/*", "static/**/*", "*.html", "*.css", "*.js"]
 
 [tool.black]
 line-length = 88
