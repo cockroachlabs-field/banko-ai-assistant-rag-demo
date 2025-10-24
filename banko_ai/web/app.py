@@ -573,7 +573,7 @@ def create_app() -> Flask:
                         # Fallback to search engine simple method
                         search_results = search_engine.simple_search_expenses(prompt, limit=10)
                     
-                    print(f"Using watsonx for response generation in {target_language}")
+                    print(f"Using {config.ai_service} for response generation in {target_language}")
                     
                     # Convert SearchResult objects to dictionaries if needed
                     if search_results and hasattr(search_results[0], 'description'):
@@ -604,13 +604,13 @@ def create_app() -> Flask:
                             rag_response = ai_provider.generate_rag_response(user_message, search_results, None, response_language)
                             rag_response_text = rag_response.response if hasattr(rag_response, 'response') else str(rag_response)
                     
-                    print(f"Response from watsonx: {rag_response_text}")
+                    print(f"Response from {config.ai_service}: {rag_response_text}")
                     
                     session['chat'].append({'text': rag_response_text, 'class': 'Assistant'})
                     
                 except Exception as e:
                     error_message = f"Sorry, I'm experiencing technical difficulties. Error: {str(e)}"
-                    print(f"Error with watsonx: {str(e)}")
+                    print(f"Error with {config.ai_service}: {str(e)}")
                     session['chat'].append({'text': error_message, 'class': 'Assistant'})
                     
         return render_template('index.html', 

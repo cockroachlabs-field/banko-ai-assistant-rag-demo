@@ -23,7 +23,10 @@ import requests
 import json
 import numpy as np
 from typing import List, Optional, Dict, Any
-from ..ai_providers.base import AIProvider, RAGResponse, SearchResult
+from sqlalchemy.exc import OperationalError, DBAPIError
+import psycopg2
+from ..ai_providers.base import AIProvider, RAGResponse, SearchResult, AIConnectionError
+from ..utils.db_retry import db_retry, TRANSIENT_ERRORS
 
 
 class WatsonxProvider(AIProvider):
@@ -69,6 +72,7 @@ class WatsonxProvider(AIProvider):
             print(f"Error generating embedding: {e}")
             return []
     
+    @db_retry(max_attempts=3, initial_delay=0.5)
     def search_expenses(
         self, 
         query: str, 
@@ -131,9 +135,12 @@ class WatsonxProvider(AIProvider):
                 
                 return results_list
                 
+        except TRANSIENT_ERRORS:
+            # Let database errors bubble up so @db_retry decorator can handle them
+            raise
         except Exception as e:
             print(f"Error in search_expenses: {e}")
-            return []
+            raise AIConnectionError(f"Search failed: {str(e)}")
     
     def get_available_models(self) -> List[str]:
         """Get list of available Watsonx models."""

@@ -10,8 +10,11 @@ from typing import List, Dict, Any, Optional
 import boto3
 from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError, DBAPIError
+import psycopg2
 
 from .base import AIProvider, SearchResult, RAGResponse, AIConnectionError, AIAuthenticationError
+from ..utils.db_retry import db_retry, TRANSIENT_ERRORS
 
 
 class AWSProvider(AIProvider):
@@ -109,6 +112,7 @@ class AWSProvider(AIProvider):
                 raise AIConnectionError(f"Failed to connect to database: {str(e)}")
         return self.db_engine
     
+    @db_retry(max_attempts=3, initial_delay=0.5)
     def search_expenses(
         self, 
         query: str, 
@@ -186,6 +190,9 @@ class AWSProvider(AIProvider):
             
             return results
             
+        except TRANSIENT_ERRORS:
+            # Let database errors bubble up so @db_retry decorator can handle them
+            raise
         except Exception as e:
             raise AIConnectionError(f"Search failed: {str(e)}")
     

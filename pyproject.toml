@@ -7,7 +7,7 @@ py-modules = []
 
 [project]
 name = "banko-ai-assistant"
-version = "1.0.31"
+version = "1.0.32"
 description = "AI-powered expense analysis and RAG system with CockroachDB vector search and multi-provider AI support (OpenAI, AWS Bedrock, IBM Watsonx, Google Gemini)"
 authors = [
     { name="Virag Tripathi", email="virag.tripathi@gmail.com" }

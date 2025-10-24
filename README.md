@@ -316,18 +316,6 @@ Switch between AI providers and models dynamically:
 - **Data Enrichment**: Enhanced descriptions improve search accuracy
 - **Batch Processing**: Efficient data loading and processing
 
-### Advanced Vector Features
-
-For detailed demonstrations of vector indexing and search capabilities:
-
-📖 **[Vector Index Demo Guide](docs/VECTOR_INDEX_DEMO_GUIDE.md)** - Comprehensive guide covering:
-- User-specific vector indexing
-- Regional partitioning with multi-region CockroachDB
-- Performance benchmarking
-- Advanced search queries
-- RAG with user context
-- Troubleshooting and best practices
-
 ![Query Watcher](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/query_watcher.png)
 
 ## 🛠️ Development
@@ -410,26 +398,6 @@ banko-ai run --debug
 # Check application status
 banko-ai status
 ```
-
-## 📝 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📞 Support
-
-For issues and questions:
-- Check the [troubleshooting section](#-troubleshooting)
-- Review the [API documentation](#-api-endpoints)
-- See the [Vector Index Demo Guide](docs/VECTOR_INDEX_DEMO_GUIDE.md) for advanced features
-- Open an issue on GitHub
 
 ---
 
