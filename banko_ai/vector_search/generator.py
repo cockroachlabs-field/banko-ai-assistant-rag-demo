@@ -430,14 +430,46 @@ class EnhancedExpenseGenerator:
             return 0
     
     def _ensure_tables_exist(self):
-        """Ensure database tables exist."""
-        try:
-            from ..utils.database import DatabaseManager
-            db_manager = DatabaseManager(self.database_url)
-            db_manager.create_tables()
-        except Exception as e:
-            print(f"Error creating tables: {e}")
-            # Continue anyway - tables might already exist
+        """Ensure database tables exist with correct schema."""
+        from ..utils.database import DatabaseManager
+        from sqlalchemy import text
+        
+        print("   Checking expenses table schema...")
+        db_manager = DatabaseManager(self.database_url)
+        
+        # Check if expenses table exists and has correct schema
+        if db_manager.table_exists('expenses'):
+            print("   ✓ Table exists, verifying schema...")
+            # Check embedding column type
+            with db_manager.engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT column_name, data_type, udt_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'expenses' AND column_name = 'embedding'
+                """))
+                row = result.fetchone()
+                if row:
+                    data_type = row[2] if row[2] else row[1]  # Use udt_name first
+                    print(f"   ✓ embedding column type: {data_type}")
+                    if 'vector' not in data_type.lower():
+                        print(f"\n❌ ERROR: expenses table has WRONG schema!")
+                        print(f"   embedding column is '{data_type}', should be 'VECTOR(384)'")
+                        print(f"   This will cause vector search to fail!")
+                        print(f"\n   To fix, run: DROP TABLE expenses CASCADE;")
+                        print(f"   Then re-run this command.\n")
+                        raise Exception(f"Invalid schema: embedding is {data_type}, not VECTOR(384)")
+                else:
+                    print("   ⚠️  embedding column not found!")
+        else:
+            print("   ✓ Table doesn't exist, will create with correct schema...")
+        
+        # Create tables with correct schema (IF NOT EXISTS will skip if already exists)
+        print("   Creating/verifying table structure...")
+        success = db_manager.create_tables()
+        if success:
+            print("   ✅ Table structure verified/created successfully")
+        else:
+            print("   ⚠️  Table creation returned False (may already exist with correct schema)")
     
     def generate_and_save(
         self, 
@@ -446,7 +478,18 @@ class EnhancedExpenseGenerator:
         clear_existing: bool = False
     ) -> int:
         """Generate and save expenses to the database."""
+        print("\n" + "="*60)
+        print("🔧 ENSURING CORRECT DATABASE SCHEMA BEFORE DATA GENERATION")
+        print("="*60)
+        
+        # CRITICAL: Ensure table with correct schema exists BEFORE generating data
+        self._ensure_tables_exist()
+        
+        print("✅ Schema verification complete")
+        print("="*60 + "\n")
+        
         if clear_existing:
+            print("🗑️  Clearing existing expenses...")
             self.clear_expenses()
         
         expenses = self.generate_expenses(count, user_id)
