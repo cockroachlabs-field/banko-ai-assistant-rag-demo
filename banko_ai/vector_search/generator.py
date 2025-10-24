@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
 from .enrichment import DataEnricher
+from ..utils.db_retry import create_resilient_engine
 
 
 class EnhancedExpenseGenerator:
@@ -30,10 +31,10 @@ class EnhancedExpenseGenerator:
     
     @property
     def engine(self):
-        """Get SQLAlchemy engine (lazy import)."""
+        """Get SQLAlchemy engine with resilience settings (lazy import)."""
         if self._engine is None:
-            from sqlalchemy import create_engine
-            self._engine = create_engine(self.database_url)
+            database_url = self.database_url.replace("cockroachdb://", "postgresql://")
+            self._engine = create_resilient_engine(database_url)
         return self._engine
     
     @property
@@ -198,14 +199,96 @@ class EnhancedExpenseGenerator:
         }
     
     def generate_expenses(self, count: int, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Generate multiple enriched expense records."""
-        expenses = []
+        """Generate multiple enriched expense records with batch embedding for performance."""
+        import time
+        print(f"🚀 Generating {count} expense records with batch embedding...")
+        start_time = time.time()
         
-        for _ in range(count):
-            expense = self.generate_expense(user_id)
+        # Step 1: Generate expense data WITHOUT embeddings (fast)
+        expenses = []
+        print("📝 Step 1/2: Generating expense data...")
+        for i in range(count):
+            expense = self._generate_expense_without_embedding(user_id)
             expenses.append(expense)
+            
+            # Show progress every 10%
+            if (i + 1) % max(1, count // 10) == 0:
+                progress = ((i + 1) / count) * 100
+                print(f"   Progress: {progress:.0f}% ({i + 1}/{count} records)")
+        
+        data_gen_time = time.time() - start_time
+        print(f"✅ Data generation completed in {data_gen_time:.2f}s")
+        
+        # Step 2: Generate embeddings in batches (much faster)
+        print("🧠 Step 2/2: Generating embeddings in batches...")
+        embedding_start = time.time()
+        batch_size = 1000  # Process 1000 embeddings at once
+        
+        for i in range(0, len(expenses), batch_size):
+            batch = expenses[i:i + batch_size]
+            texts = [exp['searchable_text'] for exp in batch]
+            
+            # Generate embeddings for entire batch at once
+            embeddings = self.embedding_model.encode(texts, show_progress_bar=False)
+            
+            # Assign embeddings back to expenses
+            for j, embedding in enumerate(embeddings):
+                expenses[i + j]['embedding'] = embedding.tolist()
+            
+            # Show progress
+            progress = min(100, ((i + batch_size) / len(expenses)) * 100)
+            print(f"   Progress: {progress:.0f}% ({min(i + batch_size, len(expenses))}/{len(expenses)} embeddings)")
+        
+        embedding_time = time.time() - embedding_start
+        total_time = time.time() - start_time
+        
+        print(f"✅ Embedding generation completed in {embedding_time:.2f}s")
+        print(f"🎉 Total generation time: {total_time:.2f}s ({count/total_time:.0f} records/sec)")
         
         return expenses
+    
+    def _generate_expense_without_embedding(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """Generate a single expense record WITHOUT embedding (for batch processing)."""
+        # Select category and get associated data
+        category = random.choice(list(self.categories.keys()))
+        category_data = self.categories[category]
+        
+        # Select merchant from category-specific merchants
+        merchant = random.choice(category_data["merchants"])
+        
+        # Generate amount within category range
+        amount = round(random.uniform(*category_data["amount_range"]), 2)
+        
+        # Select item from category items
+        item = random.choice(category_data["items"])
+        
+        # Generate date (last 90 days)
+        days_ago = random.randint(0, 90)
+        expense_date = (datetime.now() - timedelta(days=days_ago)).date()
+        
+        # Generate additional metadata
+        payment_method = random.choice(self.payment_methods)
+        recurring = random.choice([True, False]) if category in ["Subscription", "Coffee"] else False
+        tags = [category.lower(), merchant.lower().replace(" ", "_")]
+        
+        # Create enriched description
+        enriched_description = f"Spent ${amount:.2f} on {category.lower()} at {merchant} using {payment_method}."
+        searchable_text = enriched_description
+        
+        return {
+            "expense_id": str(uuid.uuid4()),
+            "user_id": user_id or random.choice(self.user_ids),
+            "expense_date": expense_date,
+            "expense_amount": amount,
+            "shopping_type": category,
+            "description": enriched_description,
+            "merchant": merchant,
+            "payment_method": payment_method,
+            "recurring": recurring,
+            "tags": tags,
+            "embedding": None,  # Will be filled in batch
+            "searchable_text": searchable_text
+        }
     
     def save_expenses_to_database(self, expenses: List[Dict[str, Any]]) -> int:
         """Save expenses to the database with retry logic for CockroachDB."""

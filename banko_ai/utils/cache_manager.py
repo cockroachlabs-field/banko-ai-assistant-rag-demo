@@ -23,6 +23,7 @@ from sqlalchemy import create_engine, text, MetaData, Table, Column, String, Int
 from sqlalchemy import Text as TextColumn
 from sqlalchemy.dialects.postgresql import JSONB
 import os
+from .db_retry import db_retry, create_resilient_engine
 
 # Database configuration
 DB_URI = os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
@@ -41,7 +42,7 @@ PGDialect._get_server_version_info = patched_get_server_version_info
 
 # Convert cockroachdb:// to postgresql:// for SQLAlchemy compatibility
 database_url = DB_URI.replace("cockroachdb://", "postgresql://")
-engine = create_engine(database_url)
+engine = create_resilient_engine(database_url)
 
 class CustomJSONEncoder(json.JSONEncoder):
     """Custom JSON encoder to handle Decimal and UUID objects"""
@@ -170,6 +171,7 @@ class BankoCacheManager:
         """Generate a consistent hash for content."""
         return hashlib.md5(content.encode('utf-8')).hexdigest()
     
+    @db_retry(max_attempts=3, initial_delay=0.5)
     def _get_embedding_with_cache(self, input_text: str) -> np.ndarray:
         """Get embedding for text, using cache when possible."""
         text_hash = self._generate_hash(input_text)
@@ -180,27 +182,22 @@ class BankoCacheManager:
             FROM embedding_cache 
             WHERE text_hash = :text_hash
         """)
-        
-        try:
-            with engine.connect() as conn:
-                result = conn.execute(cache_query, {'text_hash': text_hash})
-                row = result.fetchone()
+        with engine.connect() as conn:
+            result = conn.execute(cache_query, {'text_hash': text_hash})
+            row = result.fetchone()
+            
+            if row:
+                # Cache hit - update access count
+                update_query = text("""
+                    UPDATE embedding_cache 
+                    SET access_count = access_count + 1 
+                    WHERE text_hash = :text_hash
+                """)
+                conn.execute(update_query, {'text_hash': text_hash})
+                conn.commit()
                 
-                if row:
-                    # Cache hit - update access count
-                    update_query = text("""
-                        UPDATE embedding_cache 
-                        SET access_count = access_count + 1 
-                        WHERE text_hash = :text_hash
-                    """)
-                    conn.execute(update_query, {'text_hash': text_hash})
-                    conn.commit()
-                    
-                    self._log_cache_stat('embedding', 'hit', tokens_saved=10)
-                    return np.array(json.loads(row.embedding))
-                
-        except Exception as e:
-            print(f"⚠️ Error reading embedding cache: {e}")
+                self._log_cache_stat('embedding', 'hit', tokens_saved=10)
+                return np.array(json.loads(row.embedding))
         
         # Cache miss - generate embedding and store
         model = self._get_model()
@@ -229,6 +226,7 @@ class BankoCacheManager:
         
         return embedding
     
+    @db_retry(max_attempts=3, initial_delay=0.5)
     def get_cached_response(self, query: str, expense_data: List[Dict], ai_service: str) -> Optional[str]:
         """
         Check if we have a cached response for a similar query.
@@ -357,6 +355,7 @@ class BankoCacheManager:
         except Exception as e:
             print(f"⚠️ Error caching response: {e}")
     
+    @db_retry(max_attempts=3, initial_delay=0.5)
     def get_cached_vector_search(self, query_embedding: np.ndarray, limit: int = 5) -> Optional[List[Dict]]:
         """Get cached vector search results."""
         embedding_hash = self._generate_hash(json.dumps(query_embedding.tolist()))
