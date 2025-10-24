@@ -296,6 +296,7 @@ class EnhancedExpenseGenerator:
         import time
         import random
         from sqlalchemy.exc import OperationalError
+        from ..utils.db_retry import is_transient_error
         
         # Prepare data for insertion
         data_to_insert = []
@@ -343,23 +344,26 @@ class EnhancedExpenseGenerator:
                     break  # Success, exit retry loop
                         
                 except OperationalError as e:
-                    # Check if it's a CockroachDB serialization failure (SQL state 40001)
-                    if "40001" in str(e) or "SerializationFailure" in str(e) or "restart transaction" in str(e).lower():
+                    # Check if it's a transient error (connection issues, serialization conflicts, etc.)
+                    if is_transient_error(e):
                         retry_count += 1
                         if retry_count < max_retries:
                             # Exponential backoff with jitter
                             base_delay = 0.1 * (2 ** retry_count)
                             jitter = random.uniform(0, 0.1)
                             delay = base_delay + jitter
-                            print(f"Transaction conflict detected, retrying in {delay:.2f}s (attempt {retry_count}/{max_retries})")
+                            error_type = "Connection" if "connection" in str(e).lower() else "Transaction"
+                            print(f"⚠️  {error_type} error detected, retrying in {delay:.2f}s (attempt {retry_count}/{max_retries})")
+                            print(f"   Error: {str(e)[:100]}...")
                             time.sleep(delay)
                             continue
                         else:
-                            print(f"Max retries exceeded for batch {i//batch_size + 1}: {e}")
+                            print(f"❌ Max retries ({max_retries}) exceeded for batch {i//batch_size + 1}")
+                            print(f"   Last error: {e}")
                             return total_inserted
                     else:
                         # Non-retryable error
-                        print(f"Non-retryable database error: {e}")
+                        print(f"❌ Non-retryable database error: {e}")
                         return total_inserted
                         
                 except Exception as e:
@@ -374,6 +378,7 @@ class EnhancedExpenseGenerator:
         import random
         from sqlalchemy import text
         from sqlalchemy.exc import OperationalError
+        from ..utils.db_retry import is_transient_error
         
         max_retries = 5
         retry_count = 0
@@ -386,23 +391,23 @@ class EnhancedExpenseGenerator:
                     return True
                     
             except OperationalError as e:
-                # Check if it's a CockroachDB serialization failure (SQL state 40001)
-                if "40001" in str(e) or "SerializationFailure" in str(e) or "restart transaction" in str(e).lower():
+                # Check if it's a transient error (connection issues, serialization conflicts, etc.)
+                if is_transient_error(e):
                     retry_count += 1
                     if retry_count < max_retries:
                         # Exponential backoff with jitter
                         base_delay = 0.1 * (2 ** retry_count)
                         jitter = random.uniform(0, 0.1)
                         delay = base_delay + jitter
-                        print(f"Transaction conflict detected while clearing, retrying in {delay:.2f}s (attempt {retry_count}/{max_retries})")
+                        print(f"⚠️  Transient error while clearing, retrying in {delay:.2f}s (attempt {retry_count}/{max_retries})")
                         time.sleep(delay)
                         continue
                     else:
-                        print(f"Max retries exceeded while clearing expenses: {e}")
+                        print(f"❌ Max retries exceeded while clearing expenses: {e}")
                         return False
                 else:
                     # Non-retryable error
-                    print(f"Non-retryable database error while clearing: {e}")
+                    print(f"❌ Non-retryable database error while clearing: {e}")
                     return False
                     
             except Exception as e:

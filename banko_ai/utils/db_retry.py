@@ -31,6 +31,10 @@ TRANSIENT_ERROR_MESSAGES = (
     "Connection refused",
     "connection reset by peer",
     "broken pipe",
+    "restart transaction",
+    "TransactionRetryError",
+    "SerializationFailure",
+    "40001",  # PostgreSQL/CockroachDB serialization failure code
 )
 
 
