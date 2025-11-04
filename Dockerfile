@@ -30,8 +30,10 @@ COPY pyproject.toml ./
 RUN mkdir -p /root/.cache
 
 # Install build dependencies and the package
+# Install CPU-only PyTorch first to avoid CUDA bloat (saves ~3GB per architecture)
 RUN pip install --upgrade pip setuptools wheel && \
     pip install build && \
+    pip install torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install -e .
 
 # Pre-download sentence transformer models to avoid runtime downloads
