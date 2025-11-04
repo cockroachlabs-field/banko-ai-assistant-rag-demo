@@ -26,13 +26,18 @@ WORKDIR /build
 # Copy only dependency files first for better caching
 COPY pyproject.toml ./
 
+# Create cache directory structure
+RUN mkdir -p /root/.cache
+
 # Install build dependencies and the package
 RUN pip install --upgrade pip setuptools wheel && \
     pip install build && \
     pip install -e .
 
 # Pre-download sentence transformer models to avoid runtime downloads
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" && \
+    echo "Model downloaded successfully" && \
+    ls -la /root/.cache/
 
 # Stage 3: Runtime stage - minimal production image
 FROM base AS runtime
@@ -48,13 +53,9 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy cache directories if they exist (sentence transformers models)
-RUN mkdir -p /home/bankoai/.cache/torch /home/bankoai/.cache/huggingface
-COPY --from=builder /root/.cache /tmp/build-cache/ 2>/dev/null || true
-RUN if [ -d /tmp/build-cache ]; then \
-        cp -r /tmp/build-cache/* /home/bankoai/.cache/ 2>/dev/null || true; \
-        rm -rf /tmp/build-cache; \
-    fi
+# Copy cache directories (sentence transformers models)
+RUN mkdir -p /home/bankoai/.cache
+COPY --from=builder /root/.cache /home/bankoai/.cache
 
 # Copy application code
 COPY --chown=bankoai:bankoai . .
