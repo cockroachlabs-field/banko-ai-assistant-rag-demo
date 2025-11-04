@@ -42,7 +42,9 @@ class VectorSearchEngine:
             pool_size=10,
             max_overflow=20
         )
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        # Use configurable embedding model from environment or default
+        embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        self.embedding_model = SentenceTransformer(embedding_model_name)
     
     @db_retry(max_attempts=3, initial_delay=0.5)
     def simple_search_expenses(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:

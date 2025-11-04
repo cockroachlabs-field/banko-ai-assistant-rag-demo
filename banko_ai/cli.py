@@ -12,8 +12,18 @@ from .web.app import create_app
 
 
 @click.group()
-def cli():
-    """Banko AI Assistant - AI-powered expense analysis and RAG system."""
+@click.pass_context
+def cli(ctx):
+    """Banko AI Assistant - AI-powered expense analysis and RAG system.
+    
+    For detailed configuration and environment variables, run:
+      banko-ai help
+    
+    Quick start:
+      export AI_SERVICE=watsonx
+      export DATABASE_URL=cockroachdb://root@localhost:26257/banko_ai
+      banko-ai run
+    """
     pass
 
 
@@ -285,10 +295,79 @@ PREREQUISITES:
 - Vector index feature enabled: SET CLUSTER SETTING feature.vector_index.enabled = true;
 - Start single node: cockroach start-single-node --insecure --store=./cockroach-data --listen-addr=localhost:26257 --http-addr=localhost:8080 --background
 
+ENVIRONMENT VARIABLES:
+---------------------
+Required:
+  DATABASE_URL              Database connection string
+                            - Single node: cockroachdb://root@localhost:26257/banko_ai
+                            - With load balancer: cockroachdb://root@haproxy:26257/banko_ai
+  AI_SERVICE                AI provider: watsonx, openai, aws, gemini
+
+IBM Watsonx:
+  WATSONX_API_KEY          IBM Cloud API key
+  WATSONX_PROJECT_ID       Watsonx project ID
+  WATSONX_MODEL_ID         Model to use (default: openai/gpt-oss-120b)
+  WATSONX_API_URL          API endpoint (default: us-south region)
+  WATSONX_TOKEN_URL        IAM token endpoint
+  WATSONX_TIMEOUT          Request timeout in seconds (default: 30)
+
+OpenAI:
+  OPENAI_API_KEY           OpenAI API key
+  OPENAI_MODEL             Model to use (default: gpt-4o-mini)
+
+AWS Bedrock:
+  AWS_ACCESS_KEY_ID        AWS access key
+  AWS_SECRET_ACCESS_KEY    AWS secret key
+  AWS_REGION               AWS region (default: us-east-1)
+  AWS_MODEL_ID             Model to use (default: claude-3-5-sonnet)
+
+Google Gemini:
+  GOOGLE_APPLICATION_CREDENTIALS  Path to service account JSON
+  GOOGLE_PROJECT_ID        Google Cloud project ID
+  GOOGLE_MODEL             Model to use (default: gemini-2.0-flash-001)
+  GOOGLE_LOCATION          Region (default: us-central1)
+  GOOGLE_API_KEY           API key (fallback if Vertex AI unavailable)
+
+Optional - Global:
+  EMBEDDING_MODEL          Embedding model for all providers (default: all-MiniLM-L6-v2)
+  FLASK_ENV                Flask environment: development, production
+  SECRET_KEY               Flask secret key for sessions
+
+Database Connection Pool (all optional):
+  DB_POOL_SIZE             Base connection pool size (default: 100)
+  DB_MAX_OVERFLOW          Max overflow connections (default: 100)
+  DB_POOL_TIMEOUT          Timeout for connection in seconds (default: 30)
+  DB_POOL_RECYCLE          Recycle connections after N seconds (default: 3600)
+  DB_POOL_PRE_PING         Test connections before use (default: true)
+  DB_CONNECT_TIMEOUT       Database connection timeout (default: 10)
+  
+  Pool size recommendations:
+  - Low traffic (<10 QPS): 10-50 connections
+  - Medium (10-100 QPS): 100-500 connections
+  - High (100+ QPS): 500-1000+ connections
+  - For 1000 connections: DB_POOL_SIZE=500 DB_MAX_OVERFLOW=500
+
+Response Caching (all optional):
+  CACHE_SIMILARITY_THRESHOLD  Similarity threshold for cache matching (default: 0.75)
+                              Range: 0.0-1.0. Lower = more cache hits, higher = more accuracy
+  CACHE_TTL_HOURS             Cache time-to-live in hours (default: 24)
+  CACHE_STRICT_MODE           Require exact expense data match (default: true)
+                              true = accurate (requires matching data)
+                              false = aggressive caching (similarity only)
+  
+  Caching presets:
+  - Demo mode (high cache hits): CACHE_THRESHOLD=0.75 CACHE_STRICT_MODE=false
+  - Balanced (recommended): CACHE_THRESHOLD=0.75 CACHE_STRICT_MODE=true
+  - Conservative (accuracy): CACHE_THRESHOLD=0.85 CACHE_STRICT_MODE=true
+  
+  Quick start scripts:
+  - ./start_demo_mode.sh      # Aggressive caching for demos
+  - ./start_production_mode.sh  # Balanced for production
+
 QUICK START:
 -----------
-1. Set up your environment variables:
-   export AI_SERVICE="watsonx"  # or "openai", "aws", "gemini"
+1. Set up required variables:
+   export AI_SERVICE="watsonx"
    export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
 
 2. Configure your AI provider:
@@ -296,33 +375,32 @@ QUICK START:
    For Watsonx (IBM):
    export WATSONX_API_KEY="your_api_key_here"
    export WATSONX_PROJECT_ID="your_project_id_here"
-   export WATSONX_MODEL="meta-llama/llama-2-70b-chat"
+   export WATSONX_MODEL_ID="meta-llama/llama-2-70b-chat"
+   
+   # Optional - Regional/Advanced:
+   export WATSONX_API_URL="https://eu-de.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29"
+   export WATSONX_TIMEOUT="60"
 
    For OpenAI:
    export OPENAI_API_KEY="your_api_key_here"
-   export OPENAI_MODEL="gpt-3.5-turbo"
+   export OPENAI_MODEL="gpt-4o-mini"
 
    For AWS Bedrock:
    export AWS_ACCESS_KEY_ID="your_access_key"
    export AWS_SECRET_ACCESS_KEY="your_secret_key"
    export AWS_REGION="us-east-1"
-   export AWS_MODEL="anthropic.claude-3-sonnet-20240229-v1:0"
+   export AWS_MODEL_ID="us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 
-   For Google Gemini (Two Options):
-   
-   Option 1 - Vertex AI (Recommended):
+   For Google Gemini:
    export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
    export GOOGLE_PROJECT_ID="your-google-cloud-project-id"
    export GOOGLE_MODEL="gemini-1.5-pro"
-   export GOOGLE_LOCATION="us-central1"  # optional, defaults to us-central1
-   Note: Requires Vertex AI API enabled in Google Cloud Console
-   
-   Option 2 - Generative AI API (Fallback):
-   export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
-   export GOOGLE_PROJECT_ID="your-google-cloud-project-id"
-   export GOOGLE_MODEL="gemini-1.5-pro"
-   export GOOGLE_API_KEY="your-gemini-api-key"  # Get from https://makersuite.google.com/app/apikey
-   Note: Will automatically fallback to this if Vertex AI is unavailable
+   export GOOGLE_LOCATION="us-central1"
+   # Optional fallback:
+   export GOOGLE_API_KEY="your-gemini-api-key"
+
+   Optional - Global Configuration:
+   export EMBEDDING_MODEL="all-MiniLM-L6-v2"  # Use custom embedding model
 
 3. Start the application:
    banko-ai run                    # Normal mode with full output

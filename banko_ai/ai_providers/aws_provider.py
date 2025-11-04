@@ -14,7 +14,7 @@ from sqlalchemy.exc import OperationalError, DBAPIError
 import psycopg2
 
 from .base import AIProvider, SearchResult, RAGResponse, AIConnectionError, AIAuthenticationError
-from ..utils.db_retry import db_retry, TRANSIENT_ERRORS
+from ..utils.db_retry import db_retry, create_resilient_engine, TRANSIENT_ERRORS
 
 
 class AWSProvider(AIProvider):
@@ -97,17 +97,22 @@ class AWSProvider(AIProvider):
         """Get or create the embedding model."""
         if self.embedding_model is None:
             try:
-                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                # Use configurable embedding model from environment or default
+                embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+                self.embedding_model = SentenceTransformer(embedding_model_name)
             except Exception as e:
                 raise AIConnectionError(f"Failed to load embedding model: {str(e)}")
         return self.embedding_model
     
     def _get_db_engine(self):
-        """Get database engine."""
+        """Get database engine with proper connection pooling."""
         if self.db_engine is None:
             database_url = os.getenv("DATABASE_URL", "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
             try:
-                self.db_engine = create_engine(database_url)
+                # Convert cockroachdb:// to postgresql:// for SQLAlchemy compatibility
+                db_url = database_url.replace("cockroachdb://", "postgresql://")
+                # Use resilient engine with connection pooling
+                self.db_engine = create_resilient_engine(db_url)
             except Exception as e:
                 raise AIConnectionError(f"Failed to connect to database: {str(e)}")
         return self.db_engine
@@ -120,11 +125,42 @@ class AWSProvider(AIProvider):
         limit: int = 10,
         threshold: float = 0.7
     ) -> List[SearchResult]:
-        """Search for expenses using vector similarity."""
+        """Search for expenses using vector similarity with caching."""
         try:
-            # Generate query embedding
-            embedding_model = self._get_embedding_model()
-            query_embedding = embedding_model.encode([query])[0]
+            print(f"\n🔍 AWS BEDROCK VECTOR SEARCH (with caching):")
+            print(f"1. Query: '{query}' | Limit: {limit}")
+            
+            # Generate query embedding with cache support
+            if self.cache_manager:
+                query_embedding = self.cache_manager._get_embedding_with_cache(query)
+                print(f"2. Embedding generated (with cache support)")
+                
+                # Check vector_search_cache for cached results
+                cached_results = self.cache_manager.get_cached_vector_search(query_embedding, limit)
+                if cached_results:
+                    print(f"3. ✅ Vector search cache HIT! Found {len(cached_results)} cached results")
+                    # Convert cached dict results to SearchResult objects
+                    results_list = []
+                    for result in cached_results[:limit]:
+                        results_list.append(SearchResult(
+                            expense_id=result.get('expense_id', ''),
+                            user_id=result.get('user_id', ''),
+                            description=result.get('description', ''),
+                            merchant=result.get('merchant', ''),
+                            amount=result.get('expense_amount', 0),
+                            date=result.get('expense_date', ''),
+                            similarity_score=result.get('similarity_score', 0),
+                            metadata={
+                                'shopping_type': result.get('shopping_type', 'Unknown'),
+                                'payment_method': result.get('payment_method', 'Unknown')
+                            }
+                        ))
+                    return results_list
+                print(f"3. ❌ Vector search cache MISS, querying database")
+            else:
+                embedding_model = self._get_embedding_model()
+                query_embedding = embedding_model.encode([query])[0]
+                print(f"2. Embedding generated (no cache available)")
             
             # Convert to PostgreSQL vector format (JSON string)
             search_embedding = json.dumps(query_embedding.tolist())
@@ -138,7 +174,9 @@ class AWSProvider(AIProvider):
                 merchant,
                 expense_amount,
                 expense_date,
-                embedding <=> :search_embedding as similarity_score
+                embedding <=> :search_embedding as similarity_score,
+                shopping_type,
+                payment_method
             FROM expenses
             ORDER BY embedding <=> :search_embedding
             LIMIT :limit
@@ -160,7 +198,9 @@ class AWSProvider(AIProvider):
                     merchant,
                     expense_amount,
                     expense_date,
-                    embedding <=> :search_embedding as similarity_score
+                    embedding <=> :search_embedding as similarity_score,
+                    shopping_type,
+                    payment_method
                 FROM expenses
                 WHERE user_id = :user_id
                 ORDER BY embedding <=> :search_embedding
@@ -174,6 +214,8 @@ class AWSProvider(AIProvider):
                 result = conn.execute(text(sql), params)
                 rows = result.fetchall()
             
+            print(f"4. Database returned {len(rows)} results")
+            
             # Convert to SearchResult objects
             results = []
             for row in rows:
@@ -185,8 +227,30 @@ class AWSProvider(AIProvider):
                     amount=float(row[4]),
                     date=str(row[5]),
                     similarity_score=float(row[6]),
-                    metadata={}
+                    metadata={
+                        'shopping_type': row[7] or 'Unknown',
+                        'payment_method': row[8] or 'Unknown'
+                    }
                 ))
+            
+            # Cache the results for future use
+            if self.cache_manager and results:
+                # Store as dict format for cache compatibility
+                cache_results = []
+                for r in results:
+                    cache_results.append({
+                        'expense_id': r.expense_id,
+                        'user_id': r.user_id,
+                        'description': r.description,
+                        'merchant': r.merchant,
+                        'expense_amount': r.amount,
+                        'expense_date': r.date,
+                        'similarity_score': r.similarity_score,
+                        'shopping_type': r.metadata.get('shopping_type') if r.metadata else 'Unknown',
+                        'payment_method': r.metadata.get('payment_method') if r.metadata else 'Unknown'
+                    })
+                self.cache_manager.cache_vector_search_results(query_embedding, cache_results)
+                print(f"5. ✅ Cached {len(cache_results)} results in vector_search_cache")
             
             return results
             
@@ -328,17 +392,19 @@ class AWSProvider(AIProvider):
                         description = result.description
                         merchant = result.merchant
                         amount = result.amount
+                        date = result.date if hasattr(result, 'date') else 'Unknown'
                         shopping_type = result.metadata.get('shopping_type', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
                         payment_method = result.metadata.get('payment_method', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
                     else:
                         description = result.get('description', '')
                         merchant = result.get('merchant', 'Unknown')
                         amount = result.get('expense_amount', 0)
+                        date = result.get('expense_date', 'Unknown')
                         shopping_type = result.get('shopping_type', 'Unknown')
                         payment_method = result.get('payment_method', 'Unknown')
                     
                     context_parts.append(
-                        f"• **{shopping_type}** at {merchant}: ${amount} ({payment_method}) - {description}"
+                        f"• **{shopping_type}** at {merchant}: ${amount} on {date} ({payment_method}) - {description}"
                     )
                 
                 search_results_text = "\n".join(context_parts)

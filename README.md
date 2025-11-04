@@ -109,37 +109,315 @@ pip install -e .
 banko-ai run
 ```
 
-### Configuration
+## 📋 Environment Variables Reference
 
-Set up your environment variables:
+Quick reference for all configurable environment variables:
+
+### Core Configuration (Required)
+
+| Variable       | Description                   | Default | Example                                       |
+|----------------|-------------------------------|---------|-----------------------------------------------|
+| `DATABASE_URL` | CockroachDB connection string | None    | `cockroachdb://root@localhost:26257/banko_ai` |
+| `AI_SERVICE`   | AI provider to use            | None    | `watsonx`, `openai`, `aws`, `gemini`          |
+
+### AI Provider Configuration
+
+#### IBM Watsonx
+| Variable             | Description               | Default               |
+|----------------------|---------------------------|-----------------------|
+| `WATSONX_API_KEY`    | IBM Cloud API key         | None                  |
+| `WATSONX_PROJECT_ID` | Watsonx project ID        | None                  |
+| `WATSONX_MODEL_ID`   | Model to use              | `openai/gpt-oss-120b` |
+| `WATSONX_API_URL`    | API endpoint URL          | US South region       |
+| `WATSONX_TOKEN_URL`  | IAM token endpoint        | IBM Cloud IAM         |
+| `WATSONX_TIMEOUT`    | Request timeout (seconds) | `30`                  |
+
+#### OpenAI
+| Variable         | Description    | Default       |
+|------------------|----------------|---------------|
+| `OPENAI_API_KEY` | OpenAI API key | None          |
+| `OPENAI_MODEL`   | Model to use   | `gpt-4o-mini` |
+
+#### AWS Bedrock
+| Variable                | Description    | Default             |
+|-------------------------|----------------|---------------------|
+| `AWS_ACCESS_KEY_ID`     | AWS access key | None                |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key | None                |
+| `AWS_REGION`            | AWS region     | `us-east-1`         |
+| `AWS_MODEL_ID`          | Model to use   | `claude-3-5-sonnet` |
+
+#### Google Gemini
+| Variable                         | Description               | Default                |
+|----------------------------------|---------------------------|------------------------|
+| `GOOGLE_APPLICATION_CREDENTIALS` | Service account JSON path | None                   |
+| `GOOGLE_PROJECT_ID`              | Google Cloud project ID   | None                   |
+| `GOOGLE_MODEL`                   | Model to use              | `gemini-2.0-flash-001` |
+| `GOOGLE_LOCATION`                | Region                    | `us-central1`          |
+| `GOOGLE_API_KEY`                 | API key (fallback)        | None                   |
+
+### Response Caching Configuration
+
+| Variable                     | Description                                | Default | Range/Options        |
+|------------------------------|--------------------------------------------|---------|----------------------|
+| `CACHE_SIMILARITY_THRESHOLD` | Query similarity threshold for cache match | `0.75`  | `0.0-1.0`            |
+| `CACHE_TTL_HOURS`            | Cache time-to-live                         | `24`    | Any positive integer |
+| `CACHE_STRICT_MODE`          | Require exact expense data match           | `true`  | `true`, `false`      |
+
+**Caching Presets:**
+- **Demo**: `THRESHOLD=0.75 STRICT_MODE=false` (80-90% hit rate)
+- **Balanced**: `THRESHOLD=0.75 STRICT_MODE=true` (60-70% hit rate) ✅ Recommended
+- **Conservative**: `THRESHOLD=0.85 STRICT_MODE=true` (50-60% hit rate)
+
+### Database Connection Pool
+
+| Variable             | Description                           | Default |
+|----------------------|---------------------------------------|---------|
+| `DB_POOL_SIZE`       | Base connection pool size             | `100`   |
+| `DB_MAX_OVERFLOW`    | Max overflow connections              | `100`   |
+| `DB_POOL_TIMEOUT`    | Connection timeout (seconds)          | `30`    |
+| `DB_POOL_RECYCLE`    | Recycle connections after (seconds)   | `3600`  |
+| `DB_POOL_PRE_PING`   | Test connections before use           | `true`  |
+| `DB_CONNECT_TIMEOUT` | Database connection timeout (seconds) | `10`    |
+
+### Additional Configuration
+
+| Variable          | Description                | Default            |
+|-------------------|----------------------------|--------------------|
+| `EMBEDDING_MODEL` | Sentence transformer model | `all-MiniLM-L6-v2` |
+| `FLASK_ENV`       | Flask environment          | `development`      |
+| `SECRET_KEY`      | Flask secret key           | Random UUID        |
+
+### Quick Start Scripts
 
 ```bash
-# Required: Database connection
+# Demo mode (aggressive caching, high hit rate)
+./start_demo_mode.sh
+
+# Production mode (balanced, data accuracy)
+./start_production_mode.sh
+```
+
+---
+
+### Configuration
+
+#### Required Environment Variables
+
+```bash
+# Database Connection (Required)
 export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
 
-# Required: AI Service (choose one)
-export AI_SERVICE="watsonx"  # or "openai", "aws", "gemini"
+# AI Service Selection (Required - choose one)
+export AI_SERVICE="watsonx"  # Options: watsonx, openai, aws, gemini
+```
 
-# AI Provider Configuration (choose based on AI_SERVICE)
-# For IBM Watsonx:
+#### AI Provider Configuration (choose based on AI_SERVICE)
+
+**IBM Watsonx:**
+```bash
 export WATSONX_API_KEY="your_api_key_here"
 export WATSONX_PROJECT_ID="your_project_id_here"
-export WATSONX_MODEL="meta-llama/llama-2-70b-chat"
+export WATSONX_MODEL_ID="meta-llama/llama-2-70b-chat"  # Default: openai/gpt-oss-120b
 
-# For OpenAI:
+# Optional - Advanced Configuration
+export WATSONX_API_URL="https://us-south.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29"  # Change region if needed
+export WATSONX_TOKEN_URL="https://iam.cloud.ibm.com/identity/token"
+export WATSONX_TIMEOUT="30"  # Request timeout in seconds (default: 30)
+```
+
+**OpenAI:**
+```bash
 export OPENAI_API_KEY="your_api_key_here"
-export OPENAI_MODEL="gpt-4o-mini"  # Options: gpt-4o-mini (default), gpt-4o, gpt-4-turbo, gpt-3.5-turbo
+export OPENAI_MODEL="gpt-4o-mini"  # Default: gpt-4o-mini
+# Options: gpt-4o-mini, gpt-4o, gpt-4-turbo, gpt-4, gpt-3.5-turbo
+```
 
-# For AWS Bedrock:
+**AWS Bedrock:**
+```bash
 export AWS_ACCESS_KEY_ID="your_access_key"
 export AWS_SECRET_ACCESS_KEY="your_secret_key"
-export AWS_REGION="us-east-1"
-export AWS_MODEL="us.anthropic.claude-3-5-sonnet-20241022-v2:0"  # Claude 3.5 Sonnet (default)
-
-# For Google Gemini:
-export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
-export GOOGLE_MODEL="gemini-1.5-pro"
+export AWS_REGION="us-east-1"  # Default: us-east-1
+export AWS_MODEL_ID="us.anthropic.claude-3-5-sonnet-20241022-v2:0"  # Default: Claude 3.5 Sonnet
+# Options: claude-3-5-sonnet, claude-3-5-haiku, claude-3-opus, claude-3-sonnet
 ```
+
+**Google Gemini:**
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
+export GOOGLE_PROJECT_ID="your-google-cloud-project-id"
+export GOOGLE_MODEL="gemini-1.5-pro"  # Default: gemini-2.0-flash-001
+export GOOGLE_LOCATION="us-central1"  # Default: us-central1
+# Options: gemini-1.5-pro, gemini-1.5-flash, gemini-1.0-pro, gemini-2.0-flash-001
+
+# Alternative: Generative AI API (if Vertex AI unavailable)
+export GOOGLE_API_KEY="your-gemini-api-key"
+```
+
+#### Optional - Global Configuration
+
+```bash
+# Embedding Model (applies to all AI providers)
+export EMBEDDING_MODEL="all-MiniLM-L6-v2"  # Default: all-MiniLM-L6-v2
+# Options: all-MiniLM-L6-v2, all-mpnet-base-v2, sentence-transformers models
+
+# Flask Configuration
+export FLASK_ENV="development"  # Options: development, production
+export SECRET_KEY="your-random-secret-key"  # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+#### Response Caching Configuration
+
+**Intelligent caching reduces token usage and improves response times.** Configure based on your accuracy vs. efficiency tradeoff:
+
+```bash
+# Cache Similarity Threshold (how similar queries need to be for cache match)
+export CACHE_SIMILARITY_THRESHOLD="0.75"  # Default: 0.75 (Range: 0.0-1.0)
+
+# Cache TTL (how long to keep cached responses)
+export CACHE_TTL_HOURS="24"  # Default: 24 hours
+
+# Cache Strict Mode (require exact expense data match)
+export CACHE_STRICT_MODE="true"  # Default: true
+```
+
+**Caching Strategy:**
+- **High confidence (≥0.90)**: Exact semantic match - always use cache
+- **Medium confidence (0.70-0.89)**: Similar match - use cache if data matches (strict mode)
+- **Low confidence (<0.70)**: Different query - generate fresh response
+
+**Recommended Settings by Use Case:**
+
+```bash
+# Financial advisory (high accuracy required)
+export CACHE_SIMILARITY_THRESHOLD="0.85"
+export CACHE_STRICT_MODE="true"
+
+# Customer support chatbot (balanced)
+export CACHE_SIMILARITY_THRESHOLD="0.75"  # ← Recommended for most cases
+export CACHE_STRICT_MODE="true"
+
+# Demo/testing (aggressive caching)
+export CACHE_SIMILARITY_THRESHOLD="0.70"
+export CACHE_STRICT_MODE="false"  # Matches on similarity alone
+
+# High-traffic production (optimize for speed)
+export CACHE_SIMILARITY_THRESHOLD="0.80"
+export CACHE_STRICT_MODE="true"
+export CACHE_TTL_HOURS="48"  # Cache longer
+```
+
+**Example Scenarios:**
+
+| Threshold | Query 1           | Query 2                      | Similarity | Cache Hit?              |
+|-----------|-------------------|------------------------------|------------|-------------------------|
+| 0.75      | "coffee"          | "what did i spend on coffee" | 0.69       | ❌ No (below threshold)  |
+| 0.75      | "coffee expenses" | "my coffee spending"         | 0.88       | ✅ Yes (above threshold) |
+| 0.85      | "coffee expenses" | "my coffee spending"         | 0.88       | ✅ Yes (above threshold) |
+| 0.90      | "coffee expenses" | "my coffee spending"         | 0.88       | ❌ No (below threshold)  |
+
+**Tips:**
+- Lower threshold = more cache hits but less accurate
+- Higher threshold = fewer cache hits but more accurate
+- Strict mode ensures data consistency at cost of cache efficiency
+- Monitor cache hit rate in logs to tune threshold
+
+#### Database Connection Pool Configuration
+
+**Important:** Configure pool size based on your workload. CockroachDB can handle many concurrent connections efficiently.
+
+```bash
+# Connection Pool Settings (all optional with sensible defaults)
+export DB_POOL_SIZE="100"          # Base pool size (default: 100)
+export DB_MAX_OVERFLOW="100"       # Max overflow connections (default: 100)
+export DB_POOL_TIMEOUT="30"        # Timeout waiting for connection in seconds (default: 30)
+export DB_POOL_RECYCLE="3600"      # Recycle connections after N seconds (default: 3600 = 1 hour)
+export DB_POOL_PRE_PING="true"     # Test connections before use (default: true)
+export DB_CONNECT_TIMEOUT="10"     # Database connection timeout in seconds (default: 10)
+```
+
+**Pool Size Recommendations:**
+- **Low traffic** (< 10 QPS): 10-50 connections
+- **Medium traffic** (10-100 QPS): 100-500 connections  
+- **High traffic** (100+ QPS): 500-1000+ connections
+- **Rule of thumb**: Each connection handles ~50-100 requests/second
+- **Your case** (14 QPS): 100+ connections recommended (default is good)
+- **For 1000+ connections**: Increase pool size and overflow accordingly
+
+**CockroachDB Best Practices:**
+- Use `pool_pre_ping=true` to detect stale connections (especially with HAProxy)
+- Set `pool_recycle` to 1 hour (3600s) to handle long-running connections
+- Monitor pool usage: `engine.pool.checkedout()` and `engine.pool.overflow()`
+- Increase pool size if you see timeout errors waiting for connections
+- CockroachDB handles 1000+ connections per node efficiently
+
+**Example Configurations:**
+
+For high throughput (1000 connections total):
+```bash
+export DB_POOL_SIZE="500"
+export DB_MAX_OVERFLOW="500"
+```
+
+For development (minimal connections):
+```bash
+export DB_POOL_SIZE="10"
+export DB_MAX_OVERFLOW="10"
+```
+
+#### Regional Configuration Examples
+
+**Watsonx - EU Region:**
+```bash
+export WATSONX_API_URL="https://eu-de.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29"
+```
+
+**Watsonx - Tokyo Region:**
+```bash
+export WATSONX_API_URL="https://jp-tok.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29"
+```
+
+**AWS - Europe:**
+```bash
+export AWS_REGION="eu-west-1"
+```
+
+**Google - Europe:**
+```bash
+export GOOGLE_LOCATION="europe-west1"
+```
+
+#### Multi-Region CockroachDB with Load Balancer
+
+**Standard Production Pattern:** In multi-region deployments, use a load balancer (HAProxy, AWS NLB, etc.) in front of CockroachDB nodes. The application connects to the load balancer, which handles:
+- Health checking of backend database nodes
+- Automatic routing to healthy nodes/regions
+- Connection distribution and failover
+
+```bash
+# Development (local single node)
+export DATABASE_URL="cockroachdb://root@localhost:26257/banko_ai?sslmode=disable"
+
+# Production with load balancer (standard pattern)
+export DATABASE_URL="cockroachdb://root@haproxy-lb:26257/banko_ai?sslmode=verify-full"
+# or
+export DATABASE_URL="cockroachdb://root@lb.example.com:26257/banko_ai?sslmode=verify-full"
+```
+
+**How Failover Works with Load Balancer:**
+1. Application connects to load balancer (single endpoint)
+2. Load balancer routes connections to healthy database nodes across regions
+3. When a region fails, load balancer detects unhealthy nodes via health checks
+4. Load balancer automatically routes to healthy regions
+5. Application gets `StatementCompletionUnknown` during failover (transaction state is ambiguous)
+6. Application retry logic (up to 10 retries) handles the ambiguous state
+7. Retry succeeds via load balancer routing to healthy region
+
+**Why This Pattern:**
+- ✅ Single connection endpoint (simplified application config)
+- ✅ Load balancer handles health checking and routing
+- ✅ Application doesn't need to know about individual nodes
+- ✅ Application retry logic handles transient failures during failover
+- ✅ Standard production pattern for multi-region databases
 
 ### Running the Application
 
@@ -253,7 +531,6 @@ curl -X POST http://localhost:5000/api/rag \
 - **expenses**: Main expense table with vector embeddings
 - **query_cache**: Cached search results
 - **embedding_cache**: Cached embeddings
-- **insights_cache**: Cached AI insights
 - **vector_search_cache**: Cached vector search results
 - **cache_stats**: Cache performance statistics
 

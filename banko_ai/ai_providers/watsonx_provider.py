@@ -26,7 +26,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.exc import OperationalError, DBAPIError
 import psycopg2
 from ..ai_providers.base import AIProvider, RAGResponse, SearchResult, AIConnectionError
-from ..utils.db_retry import db_retry, TRANSIENT_ERRORS
+from ..utils.db_retry import db_retry, create_resilient_engine, TRANSIENT_ERRORS
 
 
 class WatsonxProvider(AIProvider):
@@ -44,7 +44,18 @@ class WatsonxProvider(AIProvider):
         self.api_key = config.get('api_key') or os.getenv('WATSONX_API_KEY')
         self.project_id = config.get('project_id') or os.getenv('WATSONX_PROJECT_ID')
         self.current_model = config.get('model', config.get('model_id')) or os.getenv('WATSONX_MODEL_ID', 'openai/gpt-oss-120b')
-        self.api_url = "https://us-south.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29"
+        
+        # API configuration with environment variable support
+        self.api_url = config.get('api_url') or os.getenv(
+            'WATSONX_API_URL', 
+            'https://us-south.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29'
+        )
+        self.token_url = config.get('token_url') or os.getenv(
+            'WATSONX_TOKEN_URL',
+            'https://iam.cloud.ibm.com/identity/token'
+        )
+        self.timeout = int(config.get('timeout', os.getenv('WATSONX_TIMEOUT', '30')))
+        self.embedding_model_name = config.get('embedding_model') or os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
         
         # Make API key and project ID optional for demo purposes
         if not self.api_key:
@@ -65,7 +76,7 @@ class WatsonxProvider(AIProvider):
         """Generate embedding vector for the given text."""
         try:
             from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer('all-MiniLM-L6-v2')
+            model = SentenceTransformer(self.embedding_model_name)
             embedding = model.encode([text])[0]
             return embedding.tolist()
         except Exception as e:
@@ -80,29 +91,69 @@ class WatsonxProvider(AIProvider):
         limit: int = 10,
         threshold: float = 0.7
     ) -> List[SearchResult]:
-        """Search for expenses using vector similarity - matches original implementation."""
+        """Search for expenses using vector similarity with caching."""
         try:
+            print(f"\n🔍 WATSONX VECTOR SEARCH (with caching):")
+            print(f"1. Query: '{query}' | Limit: {limit}")
+            
             # Use the same simple search logic as the original watsonx.py
             from sentence_transformers import SentenceTransformer
-            from sqlalchemy import create_engine, text
+            from sqlalchemy import text
             import json
+            import numpy as np
             
-            # Database connection (matching original)
-            DB_URI = "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
-            engine = create_engine(DB_URI)
+            # Database connection with proper pooling
+            DB_URI = os.getenv("DATABASE_URL", "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
+            db_url = DB_URI.replace("cockroachdb://", "postgresql://")
+            engine = create_resilient_engine(db_url)
             
-            # Generate embedding (matching original)
-            model = SentenceTransformer('all-MiniLM-L6-v2')
-            raw_embedding = model.encode(query)
+            # Generate embedding with cache support
+            if self.cache_manager:
+                raw_embedding = self.cache_manager._get_embedding_with_cache(query)
+                print(f"2. Embedding generated (with cache support)")
+                
+                # Check vector_search_cache for cached results
+                cached_results = self.cache_manager.get_cached_vector_search(raw_embedding, limit)
+                if cached_results:
+                    print(f"3. ✅ Vector search cache HIT! Found {len(cached_results)} cached results")
+                    # Convert cached dict results to SearchResult objects
+                    results_list = []
+                    for result in cached_results[:limit]:
+                        results_list.append(SearchResult(
+                            expense_id=result.get('expense_id', ''),
+                            user_id=result.get('user_id', ''),
+                            description=result.get('description', ''),
+                            merchant=result.get('merchant', ''),
+                            amount=result.get('expense_amount', 0),
+                            date=result.get('expense_date', ''),
+                            similarity_score=result.get('similarity_score', 0),
+                            metadata={
+                                'shopping_type': result.get('shopping_type', 'Unknown'),
+                                'payment_method': result.get('payment_method', 'Unknown'),
+                                'recurring': result.get('recurring', False),
+                                'tags': result.get('tags', [])
+                            }
+                        ))
+                    return results_list
+                print(f"3. ❌ Vector search cache MISS, querying database")
+            else:
+                model = SentenceTransformer(self.embedding_model_name)
+                raw_embedding = model.encode(query)
+                print(f"2. Embedding generated (no cache available)")
+            
             search_embedding = json.dumps(raw_embedding.flatten().tolist())
             
-            # Use exact same query as original
+            # Use complete query with all fields
             search_query = text("""
                 SELECT 
+                    expense_id,
+                    user_id,
                     description,
                     merchant,
                     shopping_type,
                     expense_amount,
+                    expense_date,
+                    payment_method,
                     embedding <=> :search_embedding as similarity_score
                 FROM expenses
                 ORDER BY embedding <=> :search_embedding
@@ -113,25 +164,52 @@ class WatsonxProvider(AIProvider):
                 results = conn.execute(search_query, 
                                      {'search_embedding': search_embedding, 'limit': limit})
                 search_results = [dict(row._mapping) for row in results]
+                print(f"4. Database returned {len(search_results)} results")
                 
                 # Convert to SearchResult objects
                 results_list = []
                 for result in search_results:
                     results_list.append(SearchResult(
-                        expense_id="",  # Original doesn't have expense_id
-                        user_id="",     # Original doesn't have user_id
+                        expense_id=result.get('expense_id', ''),
+                        user_id=result.get('user_id', ''),
                         description=result['description'],
                         merchant=result['merchant'],
                         amount=result['expense_amount'],
-                        date="",        # Original doesn't have date
+                        date=result.get('expense_date', ''),
                         similarity_score=result['similarity_score'],
                         metadata={
-                            'shopping_type': result['shopping_type'],
-                            'payment_method': 'Unknown',  # Original doesn't have this
+                            'shopping_type': result.get('shopping_type', 'Unknown'),
+                            'payment_method': result.get('payment_method', 'Unknown'),
                             'recurring': False,
                             'tags': []
                         }
                     ))
+                
+                # Cache the results for future use
+                if self.cache_manager and search_results:
+                    # Store as dict format for cache compatibility
+                    cache_results = []
+                    for result in search_results:
+                        # Convert date to string if it's a date object
+                        expense_date = result.get('expense_date', '')
+                        if hasattr(expense_date, 'isoformat'):
+                            expense_date = expense_date.isoformat()
+                        
+                        cache_results.append({
+                            'expense_id': result.get('expense_id', ''),
+                            'user_id': result.get('user_id', ''),
+                            'description': result['description'],
+                            'merchant': result['merchant'],
+                            'expense_amount': result['expense_amount'],
+                            'expense_date': str(expense_date) if expense_date else '',
+                            'similarity_score': result['similarity_score'],
+                            'shopping_type': result.get('shopping_type', 'Unknown'),
+                            'payment_method': result.get('payment_method', 'Unknown'),
+                            'recurring': False,
+                            'tags': []
+                        })
+                    self.cache_manager.cache_vector_search_results(raw_embedding, cache_results)
+                    print(f"5. ✅ Cached {len(cache_results)} results in vector_search_cache")
                 
                 return results_list
                 
@@ -178,7 +256,6 @@ class WatsonxProvider(AIProvider):
     
     def _get_access_token(self):
         """Get IBM Cloud access token from API key (copied from original)."""
-        token_url = "https://iam.cloud.ibm.com/identity/token"
         headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json"
@@ -189,7 +266,7 @@ class WatsonxProvider(AIProvider):
         }
         
         try:
-            response = requests.post(token_url, headers=headers, data=data, timeout=30)
+            response = requests.post(self.token_url, headers=headers, data=data, timeout=self.timeout)
             if response.status_code != 200:
                 raise Exception(f"Failed to get access token (status {response.status_code}): {response.text}")
             token_data = response.json()
@@ -225,7 +302,7 @@ class WatsonxProvider(AIProvider):
                 self.api_url,
                 headers=headers,
                 json=body,
-                timeout=30
+                timeout=self.timeout
             )
             if response.status_code != 200:
                 raise Exception(f"Watsonx API error (status {response.status_code}): {response.text}")
@@ -334,7 +411,7 @@ class WatsonxProvider(AIProvider):
             search_results_text = ""
             if search_results:
                 search_results_text = "\n".join(
-                    f"• **{result['shopping_type']}** at {result['merchant']}: ${result['expense_amount']} - {result['description']}"
+                    f"• **{result.get('shopping_type', 'Unknown')}** at {result['merchant']}: ${result['expense_amount']} on {result.get('expense_date', 'Unknown')} ({result.get('payment_method', 'Unknown')}) - {result['description']}"
                     for result in search_results
                 )
                 
@@ -661,7 +738,7 @@ I couldn't find any relevant expense records for your query. Please try:
                     table_text = ""
                     if context:
                         table_text = "\n".join([
-                            f"• **{result.metadata.get('shopping_type', 'Unknown')}** at {result.merchant}: ${result.amount} ({result.metadata.get('payment_method', 'Unknown')}) - {result.description}"
+                            f"• **{result.metadata.get('shopping_type', 'Unknown')}** at {result.merchant}: ${result.amount} on {result.date} ({result.metadata.get('payment_method', 'Unknown')}) - {result.description}"
                             for result in context
                         ])
                     

@@ -60,18 +60,46 @@ def safe_json_dumps(obj, **kwargs):
 class BankoCacheManager:
     """
     Intelligent caching system for Banko AI to optimize token usage.
+    
+    Caching Strategy:
+    - High confidence (≥0.90): Exact semantic match - always use cache
+    - Medium confidence (0.70-0.89): Similar match - use cache if data matches
+    - Low confidence (<0.70): Different query - generate fresh response
+    
+    Environment Variables:
+    - CACHE_SIMILARITY_THRESHOLD: Similarity threshold (default: 0.75)
+    - CACHE_TTL_HOURS: Cache time-to-live in hours (default: 24)
+    - CACHE_STRICT_MODE: Require exact data match (default: true)
     """
     
-    def __init__(self, similarity_threshold=0.85, cache_ttl_hours=24):
+    def __init__(self, similarity_threshold=None, cache_ttl_hours=None, strict_mode=None):
         """
         Initialize the cache manager.
         
         Args:
-            similarity_threshold: Minimum similarity score to consider queries equivalent
-            cache_ttl_hours: Time-to-live for cached responses in hours
+            similarity_threshold: Minimum similarity score (default: from env or 0.75)
+            cache_ttl_hours: Time-to-live for cached responses (default: from env or 24)
+            strict_mode: Require exact expense data match (default: from env or True)
         """
-        self.similarity_threshold = similarity_threshold
-        self.cache_ttl_hours = cache_ttl_hours
+        # Load from environment variables with fallbacks
+        self.similarity_threshold = (
+            similarity_threshold if similarity_threshold is not None 
+            else float(os.getenv('CACHE_SIMILARITY_THRESHOLD', '0.75'))
+        )
+        self.cache_ttl_hours = (
+            cache_ttl_hours if cache_ttl_hours is not None
+            else int(os.getenv('CACHE_TTL_HOURS', '24'))
+        )
+        self.strict_mode = (
+            strict_mode if strict_mode is not None
+            else os.getenv('CACHE_STRICT_MODE', 'true').lower() == 'true'
+        )
+        
+        print(f"📦 Cache Manager initialized:")
+        print(f"   - Similarity threshold: {self.similarity_threshold}")
+        print(f"   - TTL: {self.cache_ttl_hours} hours")
+        print(f"   - Strict mode: {self.strict_mode}")
+        
         self.model = None  # Lazy load the model
         self._ensure_cache_tables()
     
@@ -79,7 +107,9 @@ class BankoCacheManager:
         """Lazy load the SentenceTransformer model."""
         if self.model is None:
             try:
-                self.model = SentenceTransformer('all-MiniLM-L6-v2')
+                # Use configurable embedding model from environment or default
+                embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+                self.model = SentenceTransformer(embedding_model_name)
             except Exception as e:
                 print(f"Warning: Could not load SentenceTransformer model: {e}")
                 print("Cache functionality will be limited.")
@@ -105,7 +135,9 @@ class BankoCacheManager:
                 hit_count INTEGER DEFAULT 0,
                 last_accessed TIMESTAMP DEFAULT now(),
                 INDEX idx_query_hash (query_hash),
-                INDEX idx_expires_at (expires_at)
+                INDEX idx_expires_at (expires_at),
+                INDEX idx_ai_service (ai_service),
+                INDEX idx_expense_hash (expense_data_hash)
             );
             
             -- Embedding cache to avoid regenerating embeddings
@@ -121,6 +153,9 @@ class BankoCacheManager:
             );
             
             -- Financial insights cache for expense data combinations
+            -- DISABLED: This table was never used (no code calls get_cached_insights/cache_insights)
+            -- Kept as comment for reference - can be removed after verification
+            /*
             CREATE TABLE IF NOT EXISTS insights_cache (
                 insight_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 expense_data_hash STRING UNIQUE NOT NULL,
@@ -133,6 +168,7 @@ class BankoCacheManager:
                 expires_at TIMESTAMP,
                 INDEX idx_expense_hash (expense_data_hash)
             );
+            */
             
             -- Vector search results cache
             CREATE TABLE IF NOT EXISTS vector_search_cache (
@@ -170,6 +206,55 @@ class BankoCacheManager:
     def _generate_hash(self, content: str) -> str:
         """Generate a consistent hash for content."""
         return hashlib.md5(content.encode('utf-8')).hexdigest()
+    
+    def _normalize_expense_data_for_cache(self, expense_data: List[Dict]) -> str:
+        """
+        Normalize expense data for consistent cache key generation.
+        
+        Removes fields that vary but don't affect cache validity:
+        - similarity_score: Varies with floating-point precision
+        - Random ordering: Sorts by stable key
+        
+        This ensures the same expense data always produces the same hash,
+        regardless of whether it came from a fresh DB query or cache.
+        
+        Args:
+            expense_data: List of expense dictionaries
+            
+        Returns:
+            JSON string of normalized expense data
+        """
+        normalized = []
+        for expense in expense_data:
+            # Convert date to string if it's a date object
+            expense_date = expense.get('expense_date', '')
+            if hasattr(expense_date, 'isoformat'):
+                expense_date = expense_date.isoformat()
+            elif expense_date:
+                expense_date = str(expense_date)
+            
+            # Only include stable fields that define the expense
+            normalized_expense = {
+                'expense_id': expense.get('expense_id', ''),
+                'user_id': expense.get('user_id', ''),
+                'merchant': expense.get('merchant', ''),
+                'expense_amount': round(float(expense.get('expense_amount', 0)), 2),  # Round to 2 decimals
+                'description': expense.get('description', ''),
+                'expense_date': expense_date,
+                'shopping_type': expense.get('shopping_type', ''),
+                # Explicitly exclude: similarity_score (varies with precision)
+            }
+            normalized.append(normalized_expense)
+        
+        # Sort by expense_id for consistent ordering
+        # If expense_id is empty, fall back to merchant + amount
+        normalized.sort(key=lambda x: (
+            x.get('expense_id') or '',
+            x.get('merchant') or '',
+            x.get('expense_amount') or 0
+        ))
+        
+        return safe_json_dumps(normalized, sort_keys=True)
     
     @db_retry(max_attempts=3, initial_delay=0.5)
     def _get_embedding_with_cache(self, input_text: str) -> np.ndarray:
@@ -240,33 +325,114 @@ class BankoCacheManager:
             Cached response text if found, None otherwise
         """
         query_embedding = self._get_embedding_with_cache(query)
-        expense_hash = self._generate_hash(safe_json_dumps(expense_data, sort_keys=True))
+        # Use normalized expense data for consistent hashing
+        expense_hash = self._generate_hash(self._normalize_expense_data_for_cache(expense_data))
+        
+        # Debug: Print what we're searching for
+        print(f"   🔎 Searching query_cache:")
+        print(f"      - ai_service: '{ai_service}'")
+        print(f"      - expense_hash: {expense_hash}")
+        print(f"      - query: '{query[:60]}...'")
+        print(f"      - similarity_threshold: {self.similarity_threshold}")
+        
+        # First, check if ANY entries exist for this service
+        count_query = text("""
+            SELECT COUNT(*) as total,
+                   SUM(CASE WHEN expense_data_hash = :expense_hash THEN 1 ELSE 0 END) as hash_match,
+                   SUM(CASE WHEN expires_at > now() THEN 1 ELSE 0 END) as not_expired
+            FROM query_cache 
+            WHERE ai_service = :ai_service
+        """)
         
         # Find similar cached queries
-        similarity_query = text("""
-            SELECT cache_id, query_text, response_text, response_tokens, prompt_tokens,
-                   query_embedding <-> :query_embedding as similarity_score,
-                   hit_count, expires_at
-            FROM query_cache 
-            WHERE ai_service = :ai_service 
-              AND (expense_data_hash = :expense_hash OR expense_data_hash IS NULL)
-              AND expires_at > now()
-            ORDER BY query_embedding <-> :query_embedding
-            LIMIT 5
-        """)
+        # In strict mode: require exact expense_hash match
+        # In lenient mode: check similarity first, then validate data overlap
+        if self.strict_mode:
+            similarity_query = text("""
+                SELECT cache_id, query_text, response_text, response_tokens, prompt_tokens,
+                       query_embedding <-> :query_embedding as similarity_distance,
+                       hit_count, expires_at,
+                       expense_data_hash,
+                       expires_at > now() as not_expired,
+                       now() as current_time
+                FROM query_cache 
+                WHERE ai_service = :ai_service 
+                  AND expense_data_hash = :expense_hash
+                  AND expires_at > now()
+                  AND query_embedding IS NOT NULL
+                ORDER BY query_embedding <-> :query_embedding
+                LIMIT 5
+            """)
+        else:
+            # Lenient mode: match on similarity alone (ignore expense_hash)
+            similarity_query = text("""
+                SELECT cache_id, query_text, response_text, response_tokens, prompt_tokens,
+                       query_embedding <-> :query_embedding as similarity_distance,
+                       hit_count, expires_at,
+                       expense_data_hash,
+                       expires_at > now() as not_expired,
+                       now() as current_time
+                FROM query_cache 
+                WHERE ai_service = :ai_service 
+                  AND expires_at > now()
+                  AND query_embedding IS NOT NULL
+                ORDER BY query_embedding <-> :query_embedding
+                LIMIT 5
+            """)
         
         try:
             with engine.connect() as conn:
+                # First check counts for debugging
+                count_result = conn.execute(count_query, {
+                    'ai_service': ai_service,
+                    'expense_hash': expense_hash
+                })
+                count_row = count_result.fetchone()
+                print(f"      - Total entries for '{ai_service}': {count_row.total}")
+                print(f"      - Entries with matching hash: {count_row.hash_match}")
+                print(f"      - Non-expired entries: {count_row.not_expired}")
+                
                 result = conn.execute(similarity_query, {
                     'query_embedding': json.dumps(query_embedding.tolist()),
                     'ai_service': ai_service,
                     'expense_hash': expense_hash
                 })
                 
-                for row in result:
-                    similarity_score = 1 - row.similarity_score  # Convert distance to similarity
+                rows = list(result)
+                if rows:
+                    print(f"   🔍 Found {len(rows)} candidate cache entries after filtering")
+                    for i, row in enumerate(rows, 1):
+                        similarity_distance = row.similarity_distance
+                        similarity_score = 1 - similarity_distance if similarity_distance <= 1 else 0
+                        print(f"      {i}. Query: '{row.query_text[:40]}...'")
+                        print(f"         - Expense hash: {row.expense_data_hash[:20]}...")
+                        print(f"         - Not expired: {row.not_expired}")
+                        print(f"         - Similarity distance: {similarity_distance:.6f}")
+                        print(f"         - Similarity score: {similarity_score:.6f} (threshold: {self.similarity_threshold})")
+                        print(f"         - Current time: {row.current_time}")
+                        print(f"         - Expires at: {row.expires_at}")
+                else:
+                    print(f"   🔍 No cache entries match all criteria (service={ai_service}, hash match, not expired, has embedding)")
+                
+                for row in rows:
+                    similarity_distance = row.similarity_distance
+                    # Convert distance to similarity score (0-1 range, higher is better)
+                    # For cosine distance: similarity = 1 - distance
+                    similarity_score = 1 - similarity_distance if similarity_distance <= 1 else 0
+                    
+                    # Determine confidence level
+                    if similarity_score >= 0.90:
+                        confidence = "HIGH"
+                    elif similarity_score >= 0.70:
+                        confidence = "MEDIUM"
+                    else:
+                        confidence = "LOW"
                     
                     if similarity_score >= self.similarity_threshold:
+                        # In lenient mode with medium confidence, warn about potential mismatch
+                        if not self.strict_mode and confidence == "MEDIUM" and row.expense_data_hash != expense_hash:
+                            print(f"   ⚠️  MEDIUM confidence match with different data (similarity: {similarity_score:.3f})")
+                            print(f"      Consider enabling strict mode for higher accuracy")
                         # Cache hit! Update statistics
                         update_query = text("""
                             UPDATE query_cache 
@@ -283,9 +449,10 @@ class BankoCacheManager:
                             'similarity_score': similarity_score
                         })
                         
-                        print(f"🎯 Cache HIT! Similarity: {similarity_score:.3f} | Tokens saved: {tokens_saved}")
+                        print(f"🎯 Cache HIT! Confidence: {confidence} | Similarity: {similarity_score:.3f} | Tokens saved: {tokens_saved}")
                         print(f"   Original: '{row.query_text[:50]}...'")
                         print(f"   Current:  '{query[:50]}...'")
+                        print(f"   Mode: {'STRICT (exact data match)' if self.strict_mode else 'LENIENT (similarity only)'}")
                         
                         return row.response_text
                 
@@ -310,7 +477,8 @@ class BankoCacheManager:
         """
         query_hash = self._generate_hash(query)
         query_embedding = self._get_embedding_with_cache(query)
-        expense_hash = self._generate_hash(safe_json_dumps(expense_data, sort_keys=True))
+        # Use normalized expense data for consistent hashing
+        expense_hash = self._generate_hash(self._normalize_expense_data_for_cache(expense_data))
         expires_at = datetime.utcnow() + timedelta(hours=self.cache_ttl_hours)
         
         try:
@@ -329,12 +497,14 @@ class BankoCacheManager:
                         response_text = EXCLUDED.response_text,
                         response_tokens = EXCLUDED.response_tokens,
                         prompt_tokens = EXCLUDED.prompt_tokens,
+                        expense_data_hash = EXCLUDED.expense_data_hash,
+                        query_embedding = EXCLUDED.query_embedding,
                         expires_at = EXCLUDED.expires_at,
                         hit_count = 0,
                         last_accessed = now()
                 """)
                 
-                conn.execute(insert_query, {
+                result = conn.execute(insert_query, {
                     'query_hash': query_hash,
                     'query_text': query,
                     'query_embedding': json.dumps(query_embedding.tolist()),
@@ -346,6 +516,34 @@ class BankoCacheManager:
                     'expires_at': expires_at
                 })
                 conn.commit()
+                print(f"   💾 Stored in query_cache:")
+                print(f"      - query: '{query[:60]}...'")
+                print(f"      - ai_service: '{ai_service}'")
+                print(f"      - expense_hash: {expense_hash}")
+                print(f"      - expires_at: {expires_at}")
+                print(f"      - embedding dimensions: {len(query_embedding)}")
+                
+                # Verify the entry was actually stored with correct hash
+                verify_query = text("""
+                    SELECT cache_id, expense_data_hash, expires_at > now() as not_expired
+                    FROM query_cache
+                    WHERE query_hash = :query_hash AND ai_service = :ai_service
+                """)
+                verify_result = conn.execute(verify_query, {
+                    'query_hash': query_hash,
+                    'ai_service': ai_service
+                })
+                verify_row = verify_result.fetchone()
+                if verify_row:
+                    hash_matches = verify_row.expense_data_hash == expense_hash
+                    hash_status = "✅" if hash_matches else "❌"
+                    print(f"      ✅ Verified: Entry stored (cache_id: {str(verify_row.cache_id)[:8]}..., not_expired: {verify_row.not_expired})")
+                    print(f"      {hash_status} Expense hash match: {hash_matches}")
+                    if not hash_matches:
+                        print(f"         Expected: {expense_hash}")
+                        print(f"         Got:      {verify_row.expense_data_hash}")
+                else:
+                    print(f"      ⚠️  Warning: Could not verify entry was stored")
                 
                 self._log_cache_stat('query', 'write', details={
                     'query_length': len(query),
@@ -437,7 +635,9 @@ class BankoCacheManager:
         except Exception as e:
             print(f"⚠️ Error caching vector search: {e}")
     
-    def get_cached_insights(self, expense_data: List[Dict]) -> Optional[Dict]:
+    # DISABLED: Method never called by any AI provider - dead code
+    # Keeping as comment temporarily for verification, will remove after testing
+    def _get_cached_insights_DISABLED(self, expense_data: List[Dict]) -> Optional[Dict]:
         """
         Get cached financial insights for a set of expense data.
         
@@ -478,7 +678,9 @@ class BankoCacheManager:
         self._log_cache_stat('insights', 'miss')
         return None
     
-    def cache_insights(self, expense_data: List[Dict], insights: Dict):
+    # DISABLED: Method never called by any AI provider - dead code
+    # Keeping as comment temporarily for verification, will remove after testing
+    def _cache_insights_DISABLED(self, expense_data: List[Dict], insights: Dict):
         """
         Cache financial insights for expense data.
         
@@ -604,7 +806,7 @@ class BankoCacheManager:
         """Remove expired cache entries."""
         cleanup_queries = [
             "DELETE FROM query_cache WHERE expires_at < now()",
-            "DELETE FROM insights_cache WHERE expires_at < now()",
+            # "DELETE FROM insights_cache WHERE expires_at < now()",  # DISABLED: Table not created
             "DELETE FROM vector_search_cache WHERE expires_at < now()"
         ]
         

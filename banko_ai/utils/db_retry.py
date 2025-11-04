@@ -34,7 +34,14 @@ TRANSIENT_ERROR_MESSAGES = (
     "restart transaction",
     "TransactionRetryError",
     "SerializationFailure",
+    "StatementCompletionUnknown",  # Multi-region: result is ambiguous
+    "result is ambiguous",  # Multi-region failover scenario
+    "failed to connect",  # Node/region unavailable
+    "no such host",  # DNS lookup failure during region failover
+    "initial connection heartbeat failed",  # Region heartbeat failure
+    "sending to all replicas failed",  # All replicas in region unavailable
     "40001",  # PostgreSQL/CockroachDB serialization failure code
+    "40003",  # Statement completion unknown code
 )
 
 
@@ -156,36 +163,58 @@ def create_resilient_engine(database_url: str, **kwargs):
     """
     Create a SQLAlchemy engine with resilience settings for CockroachDB/HAProxy.
     
-    Configures connection pooling and health checks to handle transient failures:
-    - pool_pre_ping: Test connections before use
-    - pool_recycle: Recycle connections periodically
-    - pool_size: Larger pool for better availability
-    - max_overflow: Allow temporary connections during spikes
+    Configures connection pooling and health checks to handle transient failures.
+    All settings can be configured via environment variables or kwargs.
+    
+    Environment Variables (with defaults):
+    - DB_POOL_SIZE: Connection pool size (default: 100)
+    - DB_MAX_OVERFLOW: Max overflow connections (default: 100) 
+    - DB_POOL_TIMEOUT: Pool checkout timeout in seconds (default: 30)
+    - DB_POOL_RECYCLE: Recycle connections after N seconds (default: 3600)
+    - DB_POOL_PRE_PING: Test connections before use (default: true)
+    - DB_CONNECT_TIMEOUT: Database connection timeout (default: 10)
+    
+    CockroachDB Recommendations:
+    - Set pool size based on your workload (100-1000 for high throughput)
+    - Use pool_pre_ping to detect stale connections
+    - Set pool_recycle to handle long-running connections (3600s = 1 hour)
+    - For 14 QPS+, pool_size of 100+ recommended
+    - Each connection can handle ~50-100 requests/sec
     
     Args:
         database_url: Database connection URL
-        **kwargs: Additional engine parameters
+        **kwargs: Additional engine parameters (override env vars)
         
     Returns:
         Configured SQLAlchemy engine
     """
     from sqlalchemy import create_engine
+    import os
     
-    # Default resilience settings
+    # Get pool configuration from environment variables with sensible defaults
+    # CockroachDB docs recommend larger pools for production workloads
+    pool_size = int(os.getenv("DB_POOL_SIZE", "100"))  # Increased from 10
+    max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "100"))  # Increased from 20
+    pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))
+    pool_recycle = int(os.getenv("DB_POOL_RECYCLE", "3600"))  # 1 hour (increased from 5 min)
+    pool_pre_ping = os.getenv("DB_POOL_PRE_PING", "true").lower() == "true"
+    connect_timeout = int(os.getenv("DB_CONNECT_TIMEOUT", "10"))
+    
+    # Default resilience settings based on CockroachDB best practices
     default_config = {
-        "pool_pre_ping": True,  # Test connection before using
-        "pool_recycle": 300,     # Recycle connections every 5 minutes
-        "pool_size": 10,         # Maintain 10 connections
-        "max_overflow": 20,      # Allow 20 additional connections during spikes
-        "pool_timeout": 30,      # Wait up to 30s for a connection
-        "echo_pool": False,      # Disable pool debug logging
+        "pool_pre_ping": pool_pre_ping,  # Test connection before using
+        "pool_recycle": pool_recycle,     # Recycle connections to avoid stale connections
+        "pool_size": pool_size,           # Base connection pool size
+        "max_overflow": max_overflow,     # Additional connections during spikes
+        "pool_timeout": pool_timeout,     # Wait time for available connection
+        "echo_pool": False,               # Disable pool debug logging
         "connect_args": {
-            "connect_timeout": 10,  # Connection timeout
+            "connect_timeout": connect_timeout,  # Connection timeout
             "options": "-c default_transaction_isolation=serializable"
         }
     }
     
-    # Merge with user-provided config
+    # Merge with user-provided config (kwargs take precedence)
     config = {**default_config, **kwargs}
     
     # Merge connect_args separately to avoid overwriting

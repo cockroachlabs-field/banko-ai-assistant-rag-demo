@@ -32,3 +32,16 @@ config.py
 .DS_Store
 Thumbs.db
 
+# Local documentation files (for reference only, not for repo)
+CACHE_CONFIGURATION_GUIDE.md
+STARTUP_MODES.md
+ENV_VARS_CHECKLIST.md
+DOCUMENTATION_SUMMARY.md
+CONNECTION_POOLING_FIX.md
+HARDCODED_VALUES_FIX.md
+MULTI_REGION_SUPPORT.md
+
+# Local test/utility scripts (for development only)
+test_*.py
+cache_statistics.sql
+

@@ -6,6 +6,7 @@ This module provides database schema creation and management functionality.
 
 import os
 from typing import Optional
+from .db_retry import create_resilient_engine
 
 
 class DatabaseManager:
@@ -20,7 +21,6 @@ class DatabaseManager:
     def engine(self):
         """Get SQLAlchemy engine (lazy import)."""
         if self._engine is None:
-            from sqlalchemy import create_engine
             from sqlalchemy.dialects.postgresql.base import PGDialect
             
             # Monkey patch version parsing to handle CockroachDB
@@ -37,13 +37,12 @@ class DatabaseManager:
             # Convert cockroachdb:// to postgresql:// for SQLAlchemy compatibility
             database_url = self.database_url.replace("cockroachdb://", "postgresql://")
             
-            self._engine = create_engine(
+            # Use resilient engine with proper connection pooling
+            self._engine = create_resilient_engine(
                 database_url,
                 connect_args={
                     "options": "-c default_transaction_isolation=serializable"
-                },
-                pool_pre_ping=True,
-                pool_recycle=300
+                }
             )
         return self._engine
     

@@ -6,7 +6,7 @@ This module creates and configures the Flask application with all routes and fun
 
 import os
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 # Apply CockroachDB version parsing workaround before any database imports
 from sqlalchemy.dialects.postgresql.base import PGDialect
@@ -25,6 +25,7 @@ from ..ai_providers.factory import AIProviderFactory
 from ..vector_search.search import VectorSearchEngine
 from ..vector_search.generator import EnhancedExpenseGenerator
 from ..utils.cache_manager import BankoCacheManager
+from ..utils.db_retry import create_resilient_engine
 from .auth import UserManager
 
 
@@ -97,7 +98,10 @@ def check_database_connection(database_url: str):
         tuple: (success: bool, message: str, table_exists: bool, record_count: int)
     """
     try:
-        engine = create_engine(database_url)
+        # Convert cockroachdb:// to postgresql:// for SQLAlchemy compatibility
+        db_url = database_url.replace("cockroachdb://", "postgresql://")
+        # Use resilient engine with connection pooling
+        engine = create_resilient_engine(db_url)
         
         with engine.connect() as conn:
             # Test basic connection
@@ -498,8 +502,9 @@ def create_app() -> Flask:
     def api_health():
         """Health check endpoint."""
         try:
-            # Check database connection
-            engine = create_engine(config.database_url)
+            # Check database connection with proper pooling
+            db_url = config.database_url.replace("cockroachdb://", "postgresql://")
+            engine = create_resilient_engine(db_url)
             with engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             

@@ -42,7 +42,10 @@ class EnhancedExpenseGenerator:
         """Get embedding model (lazy import)."""
         if self._embedding_model is None:
             from sentence_transformers import SentenceTransformer
-            self._embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            import os
+            # Use configurable embedding model from environment or default
+            embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+            self._embedding_model = SentenceTransformer(embedding_model_name)
         return self._embedding_model
     
     @property
@@ -291,11 +294,11 @@ class EnhancedExpenseGenerator:
         }
     
     def save_expenses_to_database(self, expenses: List[Dict[str, Any]]) -> int:
-        """Save expenses to the database with retry logic for CockroachDB."""
+        """Save expenses to the database with retry logic for CockroachDB and multi-region failover."""
         import pandas as pd
         import time
         import random
-        from sqlalchemy.exc import OperationalError
+        from sqlalchemy.exc import OperationalError, DBAPIError
         from ..utils.db_retry import is_transient_error
         
         # Prepare data for insertion
@@ -325,8 +328,8 @@ class EnhancedExpenseGenerator:
         for i in range(0, len(data_to_insert), batch_size):
             batch = data_to_insert[i:i + batch_size]
             
-            # Retry logic for CockroachDB transaction conflicts
-            max_retries = 5
+            # Retry logic for CockroachDB transaction conflicts and multi-region failover
+            max_retries = 10  # Increased for multi-region scenarios
             retry_count = 0
             
             while retry_count < max_retries:
@@ -343,8 +346,8 @@ class EnhancedExpenseGenerator:
                     print(f"✅ Batch {batch_num}/{total_batches}: {len(batch)} records inserted (Total: {total_inserted})")
                     break  # Success, exit retry loop
                         
-                except OperationalError as e:
-                    # Check if it's a transient error (connection issues, serialization conflicts, etc.)
+                except (OperationalError, DBAPIError) as e:
+                    # Check if it's a transient error (connection issues, serialization conflicts, region failures)
                     if is_transient_error(e):
                         retry_count += 1
                         if retry_count < max_retries:
@@ -352,9 +355,18 @@ class EnhancedExpenseGenerator:
                             base_delay = 0.1 * (2 ** retry_count)
                             jitter = random.uniform(0, 0.1)
                             delay = base_delay + jitter
-                            error_type = "Connection" if "connection" in str(e).lower() else "Transaction"
+                            
+                            # Determine error type for better user feedback
+                            error_str = str(e).lower()
+                            if "connection" in error_str or "failed to connect" in error_str:
+                                error_type = "Connection/Region"
+                            elif "ambiguous" in error_str or "statementcompletionunknown" in error_str:
+                                error_type = "Multi-region failover"
+                            else:
+                                error_type = "Transaction"
+                            
                             print(f"⚠️  {error_type} error detected, retrying in {delay:.2f}s (attempt {retry_count}/{max_retries})")
-                            print(f"   Error: {str(e)[:100]}...")
+                            print(f"   Error: {str(e)[:150]}...")
                             time.sleep(delay)
                             continue
                         else:
@@ -377,10 +389,10 @@ class EnhancedExpenseGenerator:
         import time
         import random
         from sqlalchemy import text
-        from sqlalchemy.exc import OperationalError
+        from sqlalchemy.exc import OperationalError, DBAPIError
         from ..utils.db_retry import is_transient_error
         
-        max_retries = 5
+        max_retries = 10  # Increased for multi-region scenarios
         retry_count = 0
         
         while retry_count < max_retries:
@@ -390,8 +402,8 @@ class EnhancedExpenseGenerator:
                     # Transaction is automatically committed when exiting the context
                     return True
                     
-            except OperationalError as e:
-                # Check if it's a transient error (connection issues, serialization conflicts, etc.)
+            except (OperationalError, DBAPIError) as e:
+                # Check if it's a transient error (connection issues, serialization conflicts, region failures)
                 if is_transient_error(e):
                     retry_count += 1
                     if retry_count < max_retries:
@@ -400,6 +412,7 @@ class EnhancedExpenseGenerator:
                         jitter = random.uniform(0, 0.1)
                         delay = base_delay + jitter
                         print(f"⚠️  Transient error while clearing, retrying in {delay:.2f}s (attempt {retry_count}/{max_retries})")
+                        print(f"   Error: {str(e)[:150]}...")
                         time.sleep(delay)
                         continue
                     else:

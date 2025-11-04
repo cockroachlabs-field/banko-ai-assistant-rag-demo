@@ -532,6 +532,12 @@ marked.setOptions({
             sanitize: false
         });
 
+        // Global configuration from backend
+        window.bankoConfig = {
+            aiProvider: '{{ ai_provider.name if ai_provider else "AI Provider" }}',
+            aiService: '{{ ai_provider.current_service if ai_provider else "Unknown" }}'
+        };
+
 
 
 
@@ -1358,7 +1364,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         setTimeout(() => {
             const responseStatus = selectedScenario.response === 'hit' ? '✅ CACHE HIT' : '❌ CACHE MISS';
             const responseType = selectedScenario.response === 'hit' ? 'success' : 'warning';
-            const aiProvider = 'IBM Watsonx' || 'AI Provider';
+            const aiProvider = window.bankoConfig?.aiProvider || 'AI Provider';
                     window.dbManager.addOperation('🤖 AI Processing', `${responseStatus} - ${selectedScenario.response === 'hit' ? 'Using cached response' : `Generating new response with ${aiProvider}`}`, responseType);
         }, 2000);
         
