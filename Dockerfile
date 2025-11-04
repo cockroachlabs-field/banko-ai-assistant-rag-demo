@@ -47,7 +47,14 @@ WORKDIR /app
 # Copy installed packages from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
-COPY --from=builder /root/.cache/torch /home/bankoai/.cache/torch
+
+# Copy cache directories if they exist (sentence transformers models)
+RUN mkdir -p /home/bankoai/.cache/torch /home/bankoai/.cache/huggingface
+COPY --from=builder /root/.cache /tmp/build-cache/ 2>/dev/null || true
+RUN if [ -d /tmp/build-cache ]; then \
+        cp -r /tmp/build-cache/* /home/bankoai/.cache/ 2>/dev/null || true; \
+        rm -rf /tmp/build-cache; \
+    fi
 
 # Copy application code
 COPY --chown=bankoai:bankoai . .
