@@ -1,0 +1,72 @@
+# Multi-stage build for Banko AI Assistant
+# Optimized for both amd64 and arm64 architectures
+
+# Stage 1: Base image with system dependencies
+FROM python:3.12-slim AS base
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Stage 2: Build stage - install dependencies
+FROM base AS builder
+
+WORKDIR /build
+
+# Copy only dependency files first for better caching
+COPY pyproject.toml ./
+
+# Install build dependencies and the package
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install build && \
+    pip install -e .
+
+# Pre-download sentence transformer models to avoid runtime downloads
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+# Stage 3: Runtime stage - minimal production image
+FROM base AS runtime
+
+# Create non-root user for security
+RUN useradd -m -u 1000 bankoai && \
+    mkdir -p /app && \
+    chown -R bankoai:bankoai /app
+
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /root/.cache/torch /home/bankoai/.cache/torch
+
+# Copy application code
+COPY --chown=bankoai:bankoai . .
+
+# Install the package in the runtime stage
+RUN pip install --no-deps -e .
+
+# Fix permissions for cache directories
+RUN chown -R bankoai:bankoai /home/bankoai/.cache
+
+# Switch to non-root user
+USER bankoai
+
+# Expose the application port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5000/api/health || exit 1
+
+# Default command - can be overridden
+CMD ["banko-ai", "run"]
