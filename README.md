@@ -2,6 +2,8 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/banko-ai-assistant)](https://pypi.org/project/banko-ai-assistant/)
 [![License](https://img.shields.io/pypi/l/banko-ai-assistant)](https://pypi.org/project/banko-ai-assistant/)
 [![Downloads](https://img.shields.io/pypi/dm/banko-ai-assistant)](https://pypi.org/project/banko-ai-assistant/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/virag/banko-ai-assistant)](https://hub.docker.com/r/virag/banko-ai-assistant)
+[![Docker Image Size](https://img.shields.io/docker/image-size/virag/banko-ai-assistant/latest)](https://hub.docker.com/r/virag/banko-ai-assistant)
 
 # 🤖 Banko AI Assistant - RAG Demo
 
@@ -25,9 +27,23 @@ A modern AI-powered expense analysis application with Retrieval-Augmented Genera
 
 ## 🚀 Quick Start
 
+### Installation Options
+
+**🐳 Docker** (Recommended - No Python/pip required!)
+```bash
+# See DOCKER.md for complete Docker instructions
+docker-compose up -d
+```
+
+**📦 PyPI** (Python package)
+```bash
+pip install banko-ai-assistant
+banko-ai run
+```
+
 ### Prerequisites
 
-- **Python 3.8+**
+- **Python 3.8+** (if not using Docker)
 - **CockroachDB v25.2.4+** (recommended: [v25.3.3](https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-3))
 - **Vector Index Feature Enabled** (required for vector search)
 - **AI Provider API Key** (OpenAI, AWS, IBM Watsonx, or Google Gemini)
@@ -72,7 +88,19 @@ A modern AI-powered expense analysis application with Retrieval-Augmented Genera
 
 ### Installation
 
-#### Option 1: PyPI Installation (Recommended)
+#### Option 1: Docker (Recommended - No Python Required!) 🐳
+
+See **[DOCKER.md](DOCKER.md)** for complete Docker installation and deployment guide.
+
+```bash
+# Quick start with docker-compose
+docker-compose up -d
+
+# Or pull and run from Docker Hub
+docker pull virag/banko-ai-assistant:latest
+```
+
+#### Option 2: PyPI Installation
 ```bash
 # Install from PyPI
 pip install banko-ai-assistant
@@ -87,7 +115,7 @@ export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disabl
 banko-ai run
 ```
 
-#### Option 2: Development Installation
+#### Option 3: Development Installation
 ```bash
 # Clone the repository
 git clone https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo
@@ -100,7 +128,7 @@ pip install -e .
 banko-ai run
 ```
 
-#### Option 3: Direct Dependencies
+#### Option 4: Direct Dependencies
 ```bash
 # Install dependencies from pyproject.toml
 pip install -e .
@@ -108,6 +136,12 @@ pip install -e .
 # Run the application
 banko-ai run
 ```
+
+---
+
+**📚 For complete Docker instructions, see [DOCKER.md](DOCKER.md)**
+
+---
 
 ## 📋 Environment Variables Reference
 
