@@ -62,6 +62,10 @@ COPY --from=builder /root/.cache /home/bankoai/.cache
 # Copy application code
 COPY --chown=bankoai:bankoai . .
 
+# Copy entrypoint script
+COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Install the package in the runtime stage
 RUN pip install --no-deps -e .
 
@@ -77,6 +81,9 @@ EXPOSE 5000
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5000/api/health || exit 1
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Default command - can be overridden
 CMD ["banko-ai", "run"]

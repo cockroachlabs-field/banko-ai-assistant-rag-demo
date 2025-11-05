@@ -65,6 +65,8 @@ cockroach-data/
 Dockerfile
 .dockerignore
 docker-compose*.yml
+# Keep docker-entrypoint.sh - it's needed in the image
+!docker-entrypoint.sh
 
 # Scripts not needed in container
 scripts/watch-queries.sh

@@ -21,6 +21,20 @@ services:
     networks:
       - banko-network
 
+  # CockroachDB initialization - enable vector index feature
+  cockroach-init:
+    image: cockroachdb/cockroach:v25.3.3
+    container_name: banko-cockroach-init
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+    command: >
+      sql --insecure --host=cockroachdb:26257
+      --execute="SET CLUSTER SETTING feature.vector_index.enabled = true;"
+    networks:
+      - banko-network
+    restart: "no"
+
   # Banko AI Assistant application
   banko-ai:
     build:
@@ -30,6 +44,11 @@ services:
     container_name: banko-ai-assistant
     ports:
       - "5000:5000"
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+      cockroach-init:
+        condition: service_completed_successfully
     environment:
       # Database configuration
       - DATABASE_URL=cockroachdb://root@cockroachdb:26257/defaultdb?sslmode=disable
@@ -79,9 +98,6 @@ services:
       
       # Embedding model
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
-    depends_on:
-      cockroachdb:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
