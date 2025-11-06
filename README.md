@@ -90,7 +90,7 @@ banko-ai run
 
 #### Option 1: Docker (Recommended - No Python Required!) 🐳
 
-See **[DOCKER.md](DOCKER.md)** for complete Docker installation and deployment guide.
+See **[DOCKER.md](https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/blob/main/docs/DOCKER.md)** for complete Docker installation and deployment guide.
 
 ```bash
 # Quick start with docker-compose
@@ -139,7 +139,7 @@ banko-ai run
 
 ---
 
-**📚 For complete Docker instructions, see [DOCKER.md](DOCKER.md)**
+**📚 For complete Docker instructions, see [DOCKER.md](https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/blob/main/docs/DOCKER.md)**
 
 ---
 
@@ -635,7 +635,7 @@ Switch between AI providers and models dynamically:
 
 ```
 banko_ai/
-├── ai_providers/          # AI provider implementations
+├── ai_providers/         # AI provider implementations
 ├── config/               # Configuration management
 ├── static/               # Web assets and images
 ├── templates/            # HTML templates
@@ -696,7 +696,7 @@ cockroach sql --url="cockroachdb://root@localhost:26257/defaultdb?sslmode=disabl
 - Ensure the selected model is available
 
 **No Search Results**
-- Ensure sample data is loaded: `banko-ai generate-data --count 1000`
+- Ensure sample data is loaded: `banko-ai generate-data --count 10000`
 - Check vector indexes are created
 - Verify search query format
 
