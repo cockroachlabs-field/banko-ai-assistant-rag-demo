@@ -44,7 +44,7 @@ banko-ai run
 ### Prerequisites
 
 - **Python 3.8+** (if not using Docker)
-- **CockroachDB v25.2.4+** (recommended: [v25.3.3](https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-3))
+- **CockroachDB v25.2.4+** (recommended: [v25.4.0](https://www.cockroachlabs.com/docs/releases/v25.4#v25-4-0))
 - **Vector Index Feature Enabled** (required for vector search)
 - **AI Provider API Key** (OpenAI, AWS, IBM Watsonx, or Google Gemini)
 
@@ -52,8 +52,8 @@ banko-ai run
 
 1. **Download and Install CockroachDB**:
    ```bash
-   # Download CockroachDB v25.3.3 (recommended)
-   # Visit: https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-3
+   # Download CockroachDB v25.4.0 (recommended)
+   # Visit: https://www.cockroachlabs.com/docs/releases/v25.4#v25-4-0
    
    # Or install via package manager
    brew install cockroachdb/tap/cockroach  # macOS
@@ -660,8 +660,8 @@ banko_ai/
 # Check CockroachDB version (must be v25.2.4+)
 cockroach version
 
-# If version is too old, download v25.3.3:
-# https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-3
+# If version is too old, download v25.4.0:
+# https://www.cockroachlabs.com/docs/releases/v25.4#v25-4-0
 ```
 
 **Vector Index Feature Not Enabled**

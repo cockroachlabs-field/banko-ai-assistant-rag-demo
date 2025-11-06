@@ -94,11 +94,11 @@ print(response.json())
 
 ## Environment Variables
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `AI_SERVICE` | AI provider to use (`watsonx` or `bedrock`) | `watsonx` | No |
-| `DATABASE_URL` | CockroachDB connection string | `cockroachdb://root@localhost:26257/defaultdb?sslmode=disable` | No |
-| `FLASK_ENV` | Flask environment | `production` | No |
+| Variable       | Description                                 | Default                                                        | Required |
+|----------------|---------------------------------------------|----------------------------------------------------------------|----------|
+| `AI_SERVICE`   | AI provider to use (`watsonx` or `bedrock`) | `watsonx`                                                      | No       |
+| `DATABASE_URL` | CockroachDB connection string               | `cockroachdb://root@localhost:26257/defaultdb?sslmode=disable` | No       |
+| `FLASK_ENV`    | Flask environment                           | `production`                                                   | No       |
 
 ## Error Responses
 

@@ -342,6 +342,11 @@
                         <i class="fas fa-robot"></i>
                         <span>Banko Assistant</span>
                     </a>
+                    <a href="/agents" class="sidebar-item {{ 'active' if current_page == 'agents' else '' }}" target="_blank">
+                        <i class="fas fa-network-wired"></i>
+                        <span>Agent Dashboard</span>
+                        <i class="fas fa-external-link-alt text-xs ml-2 opacity-60"></i>
+                    </a>
                     <a href="/benefits" class="sidebar-item {{ 'active' if current_page == 'benefits' else '' }}">
                         <i class="fas fa-star"></i>
                         <span>Benefits</span>
@@ -492,6 +497,20 @@
                                 
                                 <!-- Inline Controls -->
                                 <div class="input-controls">
+                                    <!-- Receipt Upload Button -->
+                                    <button type="button" 
+                                            id="upload-receipt-btn"
+                                            class="btn-icon" 
+                                            title="Upload Receipt"
+                                            onclick="document.getElementById('receipt-file-input').click()">
+                                        <i class="fas fa-receipt"></i>
+                                    </button>
+                                    <input type="file" 
+                                           id="receipt-file-input" 
+                                           accept="image/*,application/pdf" 
+                                           style="display: none;"
+                                           onchange="handleReceiptUpload(event)">
+                                    
                                     <div id="audio-controls" class="audio-controls">
                                         <button type="button" id="voice-btn" class="control-btn" title="Voice Input">
                     <i class="fas fa-microphone" id="mic-icon"></i>
@@ -1297,6 +1316,54 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                 console.log('Chat keyboard shortcuts initialized');
             }
             
+            addMessage(text, role = 'assistant') {
+                // Add message directly to chat without page reload
+                const chatContainer = document.getElementById('chat-container');
+                if (!chatContainer) return;
+                
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message-container message-enter';
+                
+                if (role === 'assistant') {
+                    // Parse markdown
+                    const htmlContent = marked.parse(text);
+                    const cleanHtml = DOMPurify.sanitize(htmlContent);
+                    
+                    messageDiv.innerHTML = `
+                        <div class="flex items-start space-x-4">
+                            <div class="w-10 h-10 rounded-full bg-cockroach-primary flex items-center justify-center flex-shrink-0 shadow-md">
+                                <i class="fas fa-robot text-white"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="message-bubble assistant-message">
+                                    <div class="message-content markdown-content">
+                                        ${cleanHtml}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    messageDiv.innerHTML = `
+                        <div class="flex items-start space-x-4 justify-end">
+                            <div class="flex-1">
+                                <div class="message-bubble user-message ml-auto">
+                                    <div class="message-content">
+                                        ${text}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-cockroach-secondary to-cockroach-accent flex items-center justify-center flex-shrink-0 shadow-md">
+                                <i class="fas fa-user text-white"></i>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                chatContainer.appendChild(messageDiv);
+                this.autoScroll();
+            }
+            
             showLoadingAnimation() {
                 const loadingMessage = document.getElementById('loading-message');
                 console.log('=== LOADING ANIMATION DEBUG ===');
@@ -1408,6 +1475,87 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             }
         }
 
+        // Receipt Upload Handler
+        async function handleReceiptUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            console.log('Receipt file selected:', file.name);
+            
+            // Show loading message
+            const chatManager = window.chatManager;
+            if (chatManager) {
+                chatManager.showLoadingAnimation();
+            }
+            
+            // Create FormData
+            const formData = new FormData();
+            formData.append('receipt', file);
+            
+            try {
+                // Upload to backend
+                const response = await fetch('/api/upload-receipt', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                // Hide loading
+                if (chatManager) {
+                    chatManager.hideLoadingAnimation();
+                }
+                
+                if (result.success) {
+                    // Show success message directly in chat
+                    const successMessage = `📄 **Receipt Processed Successfully!**\n\n` +
+                        `• **Merchant:** ${result.merchant || 'Unknown'}\n` +
+                        `• **Amount:** $${result.amount || '0.00'}\n` +
+                        `• **Category:** ${result.category || 'Unknown'}\n` +
+                        `• **Fraud Check:** ${result.fraud_status || '✅ No issues detected'}\n` +
+                        `• **Budget Impact:** ${result.budget_impact || '✅ Within budget'}\n\n` +
+                        `✨ Agents have analyzed this expense and updated your records.\n\n` +
+                        `[View detailed agent activity on dashboard →](/agents)`;
+                    
+                    // Add to chat as assistant message (no page reload!)
+                    if (chatManager) {
+                        chatManager.addMessage(successMessage, 'assistant');
+                    }
+                    
+                    // Reset file input
+                    event.target.value = '';
+                } else {
+                    // Show error in chat
+                    const errorMessage = `❌ **Receipt Processing Failed**\n\n${result.error || 'Unknown error occurred'}\n\nPlease try uploading the receipt again.`;
+                    if (chatManager) {
+                        chatManager.addMessage(errorMessage, 'assistant');
+                    } else {
+                        alert(`Receipt processing failed: ${result.error || 'Unknown error'}`);
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Receipt upload error:', error);
+                if (chatManager) {
+                    chatManager.hideLoadingAnimation();
+                }
+                
+                // Show error in chat
+                const errorMessage = `❌ **Upload Failed**\n\nCouldn't upload receipt. Please check your connection and try again.`;
+                if (chatManager) {
+                    chatManager.addMessage(errorMessage, 'assistant');
+                } else {
+                    alert('Failed to upload receipt. Please try again.');
+                }
+                
+                // Reset file input
+                event.target.value = '';
+            }
+            
+            // Reset file input
+            event.target.value = '';
+        }
+        
         // Initialize everything when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
             console.log('Initializing Banko AI Assistant...');

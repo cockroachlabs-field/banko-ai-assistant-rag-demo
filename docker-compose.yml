@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # CockroachDB database
   cockroachdb:
-    image: cockroachdb/cockroach:v25.3.3
+    image: cockroachdb/cockroach:v25.4.0
     container_name: banko-cockroachdb
     hostname: cockroachdb
     ports:
@@ -23,7 +23,7 @@ services:
 
   # CockroachDB initialization - enable vector index feature
   cockroach-init:
-    image: cockroachdb/cockroach:v25.3.3
+    image: cockroachdb/cockroach:v25.4.0
     container_name: banko-cockroach-init
     depends_on:
       cockroachdb:

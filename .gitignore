@@ -1,47 +1,69 @@
-# Python cache files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Build artifacts
-dist/
-build/
-*.egg-info/
-MANIFEST.in
-
-# Virtual environments
-.venv/
-venv/
-ENV/
+*.so
+.Python
 env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Project specific folders
-old_files/
-scratchcode/
-
-# Configuration and sensitive files
-config.py
-*.env
-.env
-
-# IDE specific files
+# IDE
 .vscode/
 .idea/
-
-# OS specific files
+*.swp
+*.swo
+*~
 .DS_Store
+
+# Environment
+.env
+.env.local
+config.py
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
+
+# OS
 Thumbs.db
 
-# Local documentation files (for reference only, not for repo)
-CACHE_CONFIGURATION_GUIDE.md
-STARTUP_MODES.md
-ENV_VARS_CHECKLIST.md
-DOCUMENTATION_SUMMARY.md
-CONNECTION_POOLING_FIX.md
-HARDCODED_VALUES_FIX.md
-MULTI_REGION_SUPPORT.md
+# Documentation (keep locally, not in git except API.md and DOCKER.md)
+docs/*
+!docs/API.md
+!docs/DOCKER.md
 
-# Local test/utility scripts (for development only)
-test_*.py
-cache_statistics.sql
-
+# Repository structure (local reference only)
+REPOSITORY_STRUCTURE.md

@@ -6,6 +6,7 @@ This module creates and configures the Flask application with all routes and fun
 
 import os
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask_socketio import SocketIO
 from sqlalchemy import text
 
 # Apply CockroachDB version parsing workaround before any database imports
@@ -221,6 +222,8 @@ def create_app() -> Flask:
     expense_generator = EnhancedExpenseGenerator(config.database_url)
     
     # Initialize AI provider
+    print(f"🔧 Initializing AI Provider: {config.ai_service}")
+    print(f"   Environment AI_SERVICE: {os.getenv('AI_SERVICE', 'NOT SET')}")
     try:
         ai_config = config.get_ai_config()
         ai_provider = AIProviderFactory.create_provider(
@@ -228,6 +231,7 @@ def create_app() -> Flask:
             ai_config[config.ai_service],
             cache_manager
         )
+        print(f"✅ AI Provider initialized: {ai_provider.get_provider_name() if ai_provider else 'None'}")
     except Exception as e:
         print(f"Warning: Could not initialize AI provider: {e}")
         ai_provider = None
@@ -502,6 +506,10 @@ def create_app() -> Flask:
     def api_health():
         """Health check endpoint."""
         try:
+            # Debug logging
+            provider_name = ai_provider.get_provider_name() if ai_provider else 'None'
+            print(f"🔍 /api/health called - config.ai_service: {config.ai_service}, provider: {provider_name}")
+            
             # Check database connection with proper pooling
             db_url = config.database_url.replace("cockroachdb://", "postgresql://")
             engine = create_resilient_engine(db_url)
@@ -532,6 +540,361 @@ def create_app() -> Flask:
                 'error': str(e)
             }), 500
 
+    @app.route('/api/upload-receipt', methods=['POST'])
+    def upload_receipt():
+        """Handle receipt upload and process with Agent system"""
+        import uuid
+        import tempfile
+        from pathlib import Path
+        
+        try:
+            # Check if file was uploaded
+            if 'receipt' not in request.files:
+                return jsonify({
+                    'success': False,
+                    'error': 'No receipt file provided'
+                }), 400
+            
+            file = request.files['receipt']
+            
+            if file.filename == '':
+                return jsonify({
+                    'success': False,
+                    'error': 'No file selected'
+                }), 400
+            
+            # Save file temporarily
+            file_ext = Path(file.filename).suffix
+            temp_path = f"/tmp/receipt_{uuid.uuid4()}{file_ext}"
+            file.save(temp_path)
+            
+            print(f"📄 Receipt uploaded: {file.filename} → {temp_path}")
+            
+            # Initialize Receipt Agent
+            try:
+                from banko_ai.agents.receipt_agent import ReceiptAgent
+                from langchain_openai import ChatOpenAI
+                from sentence_transformers import SentenceTransformer
+                import os
+                
+                llm = ChatOpenAI(
+                    model='gpt-4o-mini',
+                    api_key=os.getenv('OPENAI_API_KEY'),
+                    temperature=0.7
+                )
+                embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                
+                receipt_agent = ReceiptAgent(
+                    region='us-east-1',
+                    llm=llm,
+                    database_url=config.database_url,
+                    embedding_model=embedding_model
+                )
+                
+                print(f"🤖 Receipt Agent created: {receipt_agent.agent_id[:8]}...")
+                
+                # Process document
+                result = receipt_agent.process_document(
+                    file_path=temp_path,
+                    user_id=session.get('user_id', 'demo_user'),
+                    document_type='receipt'
+                )
+                
+                print(f"✅ Processing result: {result.get('success', False)}")
+                
+                # Check if processing actually succeeded
+                if not result.get('success', False):
+                    # Processing failed - return error with details
+                    errors = result.get('errors', ['Unknown processing error'])
+                    print(f"❌ Receipt processing failed: {errors}")
+                    return jsonify({
+                        'success': False,
+                        'error': f"Receipt processing failed: {', '.join(errors)}",
+                        'details': result
+                    }), 500
+                
+                # Extract data for response (Receipt Agent returns 'extracted_fields')
+                extracted = result.get('extracted_fields', {})
+                
+                print(f"📊 Extracted fields: {extracted}")
+                
+                # Emit real-time update: Receipt Agent completed
+                try:
+                    socketio.emit('agent_activity', {
+                        'agent_type': 'receipt',
+                        'region': 'us-east-1',
+                        'status': 'processing',
+                        'message': f"Processing receipt from {extracted.get('merchant', 'Unknown')}",
+                        'timestamp': datetime.now().isoformat()
+                    })
+                except:
+                    pass
+                
+                # Step 1: Add expense to expenses table
+                expense_id = None
+                try:
+                    from datetime import datetime
+                    from sqlalchemy import text
+                    import uuid
+                    
+                    db_url = config.database_url.replace("cockroachdb://", "postgresql://")
+                    engine = create_resilient_engine(db_url)
+                    
+                    expense_id = str(uuid.uuid4())
+                    
+                    # Get or create proper UUID for user
+                    session_user_id = session.get('user_id', 'demo_user')
+                    if isinstance(session_user_id, str) and not session_user_id.count('-') == 4:
+                        # Not a UUID, create a deterministic one for demo_user
+                        import hashlib
+                        user_uuid = uuid.UUID(hashlib.md5(session_user_id.encode()).hexdigest())
+                        user_id = str(user_uuid)
+                    else:
+                        user_id = session_user_id
+                    
+                    # Handle None values from extraction
+                    amount = extracted.get('amount')
+                    if amount is None or amount == 'None':
+                        amount = 0.0
+                    else:
+                        amount = float(amount)
+                    
+                    # Generate embedding for expense
+                    expense_text = f"{extracted.get('merchant', '')} {extracted.get('category', '')} {amount}"
+                    from sentence_transformers import SentenceTransformer
+                    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                    embedding = embedding_model.encode(expense_text).tolist()
+                    
+                    # Get merchant and category for tags and description
+                    merchant = extracted.get('merchant', 'Unknown')
+                    category = extracted.get('category', 'general')
+                    items = extracted.get('items', [])
+                    
+                    # Generate tags from merchant and category
+                    tags = []
+                    if merchant and merchant != 'Unknown':
+                        # Add first word of merchant name (lowercase)
+                        tags.append(merchant.lower().split()[0])
+                    if category and category != 'general':
+                        tags.append(category.lower())
+                    
+                    # Format better description
+                    if items and len(items) > 0:
+                        item_list = ', '.join(items)
+                        description = f"Spent ${amount:.2f} at {merchant} for {item_list}."
+                    else:
+                        description = f"Spent ${amount:.2f} on {category} at {merchant}."
+                    
+                    with engine.connect() as conn:
+                        # Format embedding as array literal for CockroachDB
+                        embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
+                        
+                        # Format tags array for CockroachDB
+                        tags_str = '{' + ','.join(f'"{tag}"' for tag in tags) + '}' if tags else None
+                        
+                        conn.execute(text("""
+                            INSERT INTO expenses (
+                                expense_id, user_id, expense_amount, shopping_type,
+                                merchant, expense_date, description, payment_method,
+                                tags, embedding, created_at
+                            ) VALUES (
+                                :expense_id, :user_id, :amount, :category,
+                                :merchant, :date, :description, :payment_method,
+                                :tags, CAST(:embedding AS VECTOR(384)), NOW()
+                            )
+                        """), {
+                            'expense_id': expense_id,
+                            'user_id': user_id,
+                            'amount': amount,
+                            'category': category,
+                            'merchant': merchant,
+                            'date': extracted.get('date', datetime.now().strftime('%Y-%m-%d')),
+                            'description': description,
+                            'payment_method': extracted.get('payment_method', 'unknown') if extracted.get('payment_method') else 'unknown',
+                            'tags': tags_str,
+                            'embedding': embedding_str
+                        })
+                        conn.commit()
+                    
+                    print(f"💰 Expense added to expenses table: {expense_id}")
+                    print(f"   📝 Description: {description}")
+                    print(f"   🏷️  Tags: {tags}")
+                    
+                    # Emit update: Expense added
+                    try:
+                        socketio.emit('agent_activity', {
+                            'agent_type': 'receipt',
+                            'region': 'us-east-1',
+                            'status': 'completed',
+                            'message': f"Added expense: {extracted.get('merchant', 'Unknown')} - ${amount}",
+                            'timestamp': datetime.now().isoformat()
+                        })
+                    except:
+                        pass
+                    
+                except Exception as e:
+                    print(f"⚠️  Failed to add expense to table: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
+                # Step 2: Trigger Fraud Agent
+                fraud_result = "✅ No issues detected"
+                try:
+                    from banko_ai.agents.fraud_agent import FraudAgent
+                    from langchain_openai import ChatOpenAI
+                    
+                    fraud_llm = ChatOpenAI(
+                        model='gpt-4o-mini',
+                        api_key=os.getenv('OPENAI_API_KEY'),
+                        temperature=0.7
+                    )
+                    
+                    fraud_agent = FraudAgent(
+                        region='us-west-2',
+                        llm=fraud_llm,
+                        database_url=config.database_url,
+                        embedding_model=embedding_model,
+                        fraud_threshold=0.7
+                    )
+                    
+                    print(f"🕵️  Running fraud check...")
+                    
+                    # Emit update: Fraud Agent started
+                    try:
+                        socketio.emit('agent_activity', {
+                            'agent_type': 'fraud',
+                            'region': 'us-west-2',
+                            'status': 'processing',
+                            'message': 'Scanning for suspicious patterns...',
+                            'timestamp': datetime.now().isoformat()
+                        })
+                    except:
+                        pass
+                    
+                    fraud_check = fraud_agent.scan_recent_expenses(
+                        hours=24,
+                        limit=10
+                    )
+                    
+                    if fraud_check.get('fraudulent_count', 0) > 0:
+                        fraud_result = f"⚠️  {fraud_check['fraudulent_count']} suspicious transactions"
+                    else:
+                        fraud_result = "✅ No issues detected"
+                    
+                    print(f"   {fraud_result}")
+                    
+                    # Emit update: Fraud Agent completed
+                    try:
+                        socketio.emit('agent_activity', {
+                            'agent_type': 'fraud',
+                            'region': 'us-west-2',
+                            'status': 'completed',
+                            'message': fraud_result,
+                            'timestamp': datetime.now().isoformat()
+                        })
+                    except:
+                        pass
+                    
+                except Exception as e:
+                    print(f"⚠️  Fraud check failed: {e}")
+                    fraud_result = "⚠️  Check failed"
+                
+                # Step 3: Trigger Budget Agent
+                budget_result = "Budget updated"
+                try:
+                    from banko_ai.agents.budget_agent import BudgetAgent
+                    
+                    budget_llm = ChatOpenAI(
+                        model='gpt-4o-mini',
+                        api_key=os.getenv('OPENAI_API_KEY'),
+                        temperature=0.7
+                    )
+                    
+                    budget_agent = BudgetAgent(
+                        region='us-central-1',
+                        llm=budget_llm,
+                        database_url=config.database_url,
+                        alert_threshold=0.8
+                    )
+                    
+                    print(f"📊 Running budget check...")
+                    
+                    # Emit update: Budget Agent started
+                    try:
+                        socketio.emit('agent_activity', {
+                            'agent_type': 'budget',
+                            'region': 'us-central-1',
+                            'status': 'processing',
+                            'message': 'Analyzing budget impact...',
+                            'timestamp': datetime.now().isoformat()
+                        })
+                    except:
+                        pass
+                    
+                    budget_check = budget_agent.check_budget_status(
+                        user_id=user_id,
+                        monthly_budget=3000.0  # Default budget
+                    )
+                    
+                    status = budget_check.get('status', 'unknown')
+                    if status == 'over_budget':
+                        budget_result = "⚠️  Over budget!"
+                    elif status == 'on_pace_to_exceed':
+                        budget_result = "⚠️  On pace to exceed"
+                    else:
+                        budget_result = "✅ Within budget"
+                    
+                    print(f"   {budget_result}")
+                    
+                    # Emit update: Budget Agent completed
+                    try:
+                        socketio.emit('agent_activity', {
+                            'agent_type': 'budget',
+                            'region': 'us-central-1',
+                            'status': 'completed',
+                            'message': budget_result,
+                            'timestamp': datetime.now().isoformat()
+                        })
+                    except:
+                        pass
+                    
+                except Exception as e:
+                    print(f"⚠️  Budget check failed: {e}")
+                    budget_result = "⚠️  Check failed"
+                
+                return jsonify({
+                    'success': True,
+                    'merchant': extracted.get('merchant', 'Unknown'),
+                    'amount': str(extracted.get('amount', '0.00')),
+                    'category': extracted.get('category', 'Unknown'),
+                    'date': extracted.get('date', 'Unknown'),
+                    'items': extracted.get('items', []),
+                    'expense_id': expense_id,
+                    'fraud_status': fraud_result,
+                    'budget_impact': budget_result,
+                    'document_id': result.get('document_id'),
+                    'message': 'Receipt processed by Receipt, Fraud, and Budget agents'
+                })
+                
+            except Exception as agent_error:
+                print(f"⚠️  Agent processing error: {agent_error}")
+                import traceback
+                traceback.print_exc()
+                
+                # Return error (not fake success)
+                return jsonify({
+                    'success': False,
+                    'error': f'Agent processing failed: {str(agent_error)}',
+                    'message': 'Receipt uploaded but processing failed. Check server logs.'
+                }), 500
+        
+        except Exception as e:
+            print(f"❌ Receipt upload error: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+    
     @app.route('/banko', methods=['GET', 'POST'])
     def chat():
         """Main chat interface - using original simple logic."""
@@ -855,5 +1218,15 @@ def create_app() -> Flask:
     @app.errorhandler(500)
     def internal_error(error):
         return jsonify({'error': 'Internal server error'}), 500
+    
+    # Register agent dashboard blueprint
+    from .agent_dashboard import agent_dashboard
+    app.register_blueprint(agent_dashboard)
+    
+    # Initialize SocketIO for real-time updates
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+    
+    # Store socketio instance for access by agents
+    app.socketio = socketio
     
     return app
