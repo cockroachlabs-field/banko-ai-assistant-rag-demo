@@ -29,6 +29,7 @@ class Config:
     openai_model: str = "gpt-4o-mini"  # gpt-4o-mini (default), gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
+    aws_profile: Optional[str] = None
     aws_region: str = "us-east-1"
     aws_model: str = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"  # Claude models
     watsonx_api_key: Optional[str] = None
@@ -107,6 +108,7 @@ class Config:
             openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+            aws_profile=os.getenv("AWS_PROFILE"),
             aws_region=os.getenv("AWS_REGION", "us-east-1"),
             aws_model=os.getenv("AWS_MODEL", "us.anthropic.claude-3-5-sonnet-20241022-v2:0"),
             watsonx_api_key=watsonx_api_key,
@@ -147,6 +149,7 @@ class Config:
             "aws": {
                 "access_key_id": self.aws_access_key_id,
                 "secret_access_key": self.aws_secret_access_key,
+                "profile_name": self.aws_profile,
                 "region": self.aws_region,
                 "model": self.aws_model,
             },
@@ -206,8 +209,12 @@ class Config:
         if self.ai_service == "openai" and not self.openai_api_key:
             # For demo purposes, make OpenAI API key optional
             print("Warning: OPENAI_API_KEY not provided. AI features will be limited.")
-        elif self.ai_service == "aws" and (not self.aws_access_key_id or not self.aws_secret_access_key):
-            raise ValueError("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required for AWS service")
+        elif self.ai_service == "aws":
+            # Allow either credentials OR profile for AWS
+            has_credentials = self.aws_access_key_id and self.aws_secret_access_key
+            has_profile = self.aws_profile
+            if not has_credentials and not has_profile:
+                raise ValueError("AWS requires either (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY) or AWS_PROFILE")
         elif self.ai_service == "watsonx" and not self.watsonx_api_key:
             # For demo purposes, make Watsonx API key optional
             print("Warning: WATSONX_API_KEY not provided. AI features will be limited.")

@@ -26,34 +26,51 @@ class AWSProvider(AIProvider):
         self.access_key_id = config.get("access_key_id") or os.getenv("AWS_ACCESS_KEY_ID")
         self.secret_access_key = config.get("secret_access_key") or os.getenv("AWS_SECRET_ACCESS_KEY")
         self.region = config.get("region") or os.getenv("AWS_REGION", "us-east-1")
+        self.profile_name = config.get("profile_name") or os.getenv("AWS_PROFILE")
         self.model_id = config.get("model") or os.getenv("AWS_MODEL_ID", "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
         
         self.bedrock_client = None
         self.embedding_model = None
         self.db_engine = None
         self.cache_manager = cache_manager
+        self.session = None
         
         # Make credentials optional for demo mode
-        if not self.access_key_id:
-            print("⚠️ AWS_ACCESS_KEY_ID not found - running in demo mode")
-        if not self.secret_access_key:
-            print("⚠️ AWS_SECRET_ACCESS_KEY not found - running in demo mode")
+        if not self.access_key_id and not self.profile_name:
+            print("⚠️ AWS_ACCESS_KEY_ID or AWS_PROFILE not found - running in demo mode")
+        if not self.secret_access_key and not self.profile_name:
+            print("⚠️ AWS_SECRET_ACCESS_KEY or AWS_PROFILE not found - running in demo mode")
         
         super().__init__(config)
     
     def _validate_config(self) -> None:
         """Validate AWS configuration."""
         try:
-            # Let boto3 automatically discover credentials
-            self.bedrock_client = boto3.client(
-                'bedrock-runtime',
-                region_name=self.region
-            )
+            # Create a boto3 session with profile if specified, otherwise use default credentials
+            if self.profile_name:
+                print(f"🔐 Using AWS profile: {self.profile_name}")
+                self.session = boto3.Session(
+                    profile_name=self.profile_name,
+                    region_name=self.region
+                )
+            elif self.access_key_id and self.secret_access_key:
+                print(f"🔐 Using AWS credentials from environment/config")
+                self.session = boto3.Session(
+                    aws_access_key_id=self.access_key_id,
+                    aws_secret_access_key=self.secret_access_key,
+                    region_name=self.region
+                )
+            else:
+                print(f"🔐 Using default AWS credential chain")
+                self.session = boto3.Session(region_name=self.region)
+            
+            # Create Bedrock client from session
+            self.bedrock_client = self.session.client('bedrock-runtime')
             print(f"✅ AWS Bedrock client created (region: {self.region}, model: {self.model_id})")
             
             # Verify credentials by getting caller identity
             print("🔍 Verifying AWS credentials...")
-            sts = boto3.client('sts', region_name=self.region)
+            sts = self.session.client('sts')
             identity = sts.get_caller_identity()
             print(f"✅ AWS Identity verified: {identity['Arn']}")
             print(f"   Account: {identity['Account']}")
@@ -68,13 +85,19 @@ class AWSProvider(AIProvider):
                 print("\n❌ Your AWS credentials have EXPIRED")
                 print("\n💡 To fix:")
                 print("   1. Get fresh credentials from AWS Console")
-                print("   2. Or run: aws sso login (if using SSO)")
+                print("   2. Or run: aws sso login --profile CRLRevenue-337380398238")
             elif 'NoCredentials' in error_msg or 'Unable to locate credentials' in error_msg:
                 print("\n❌ No AWS credentials found")
-                print("   Set credentials via:")
+                print("\n💡 Set credentials via:")
+                print("   - export AWS_PROFILE=CRLRevenue-337380398238")
                 print("   - export AWS_ACCESS_KEY_ID=...")
                 print("   - export AWS_SECRET_ACCESS_KEY=...")
                 print("   - Or configure ~/.aws/credentials")
+            elif 'InvalidClientTokenId' in error_msg:
+                print("\n❌ Invalid AWS credentials")
+                print("\n💡 If using SSO, try:")
+                print("   - export AWS_PROFILE=CRLRevenue-337380398238")
+                print("   - Then restart the application")
             
             self.bedrock_client = None
             print()
