@@ -455,7 +455,16 @@ class GeminiProvider(AIProvider):
                         description = result.get('description', '')
                         merchant = result.get('merchant', 'Unknown')
                         amount = result.get('expense_amount', 0)
-                        date = result.get('expense_date', 'Unknown')
+                        
+                        # Format date properly
+                        date_value = result.get('expense_date')
+                        if date_value and hasattr(date_value, 'isoformat'):
+                            date = date_value.isoformat()
+                        elif date_value and str(date_value) != 'None':
+                            date = str(date_value)
+                        else:
+                            date = 'Unknown'
+                        
                         shopping_type = result.get('shopping_type', 'Unknown')
                         payment_method = result.get('payment_method', 'Unknown')
 
