@@ -97,7 +97,7 @@ def create_document_tools(database_url: str, embedding_model) -> List[Tool]:
         if not OCR_AVAILABLE:
             return json.dumps({
                 'success': False,
-                'error': 'PDF processing libraries not installed'
+                'error': 'PDF processing libraries not installed. Install: pip install pytesseract pdf2image Pillow PyPDF2 && sudo apt-get install poppler-utils'
             })
         
         try:
@@ -135,9 +135,18 @@ def create_document_tools(database_url: str, embedding_model) -> List[Tool]:
             }, indent=2)
         
         except Exception as e:
+            error_msg = str(e)
+            # Add helpful hint for poppler errors
+            if 'poppler' in error_msg.lower() or 'unable to get page count' in error_msg.lower():
+                error_msg = f"Text extraction failed: {error_msg}\n\n" \
+                           f"💡 Solution: Install poppler-utils system package:\n" \
+                           f"   Ubuntu/Debian: sudo apt-get install -y poppler-utils\n" \
+                           f"   macOS: brew install poppler\n" \
+                           f"   Or run: curl -fsSL https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/scripts/setup_system_deps.sh | bash"
+            
             return json.dumps({
                 'success': False,
-                'error': str(e)
+                'error': error_msg
             })
     
     def parse_receipt_fields(text: str, llm: Any) -> str:
