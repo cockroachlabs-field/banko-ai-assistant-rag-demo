@@ -241,6 +241,52 @@ Provide 2-3 specific, actionable recommendations. Be concise and practical."""
                 confidence=0.95 if result['alert'] else 0.85
             )
             
+            # Store in agent memory
+            memory_content = f"Budget check for {user_id}: ${current_spend:.2f}/${monthly_budget:.2f} ({percent_of_budget:.1f}%). Status: {result['status']}. {insights[:200]}"
+            self.store_memory(
+                user_id=user_id,
+                memory_type='decision',
+                content=memory_content,
+                metadata={
+                    'budget': monthly_budget,
+                    'current_spend': current_spend,
+                    'status': result['status'],
+                    'alert_level': result['alert_level']
+                }
+            )
+            
+            # If approaching limit, check if we need to create tasks for other agents
+            if result['alert'] and result['alert_level'] in ['warning', 'critical']:
+                # Get fraud agent ID to create escalation task
+                from sqlalchemy import create_engine, text
+                from sqlalchemy.pool import NullPool
+                
+                engine = create_engine(self.database_url, poolclass=NullPool)
+                with engine.connect() as conn:
+                    fraud_result = conn.execute(text("""
+                        SELECT agent_id FROM agent_state 
+                        WHERE agent_type = 'fraud' AND region = 'us-west-2'
+                        ORDER BY last_heartbeat DESC LIMIT 1
+                    """))
+                    fraud_row = fraud_result.fetchone()
+                    
+                    if fraud_row:
+                        # Create task for fraud agent to review high spenders
+                        task_id = self.create_task(
+                            target_agent_id=str(fraud_row[0]),
+                            task_type='analyze',
+                            payload={
+                                'user_id': user_id,
+                                'reason': 'high_spending',
+                                'current_spend': current_spend,
+                                'budget': monthly_budget
+                            },
+                            priority=8 if result['alert_level'] == 'critical' else 5
+                        )
+                        result['task_created'] = task_id
+                
+                engine.dispose()
+            
         except Exception as e:
             result['error'] = str(e)
         

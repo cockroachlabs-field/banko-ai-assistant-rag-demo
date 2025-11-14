@@ -241,6 +241,21 @@ Provide a concise explanation of why this is or isn't fraud. Be specific about t
                 confidence=result['confidence']
             )
             
+            # Store in agent memory for future reference
+            if expense.get('user_id'):
+                memory_content = f"Fraud analysis for {expense['merchant']} ${expense['amount']}: {result['recommendation']} (confidence: {result['confidence']:.2%}). {reasoning[:200]}"
+                self.store_memory(
+                    user_id=expense['user_id'],
+                    memory_type='decision',
+                    content=memory_content,
+                    metadata={
+                        'expense_id': expense_id,
+                        'fraud_detected': result['fraud_detected'],
+                        'confidence': result['confidence'],
+                        'signals': result['signals']
+                    }
+                )
+            
         except Exception as e:
             result['error'] = str(e)
         

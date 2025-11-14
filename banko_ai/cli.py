@@ -147,6 +147,88 @@ def clear_data():
 
 
 @cli.command()
+@click.option('--agents', is_flag=True, help='Clear agent tables (agent_state, agent_decisions, agent_memory, agent_tasks)')
+@click.option('--cache', is_flag=True, help='Clear cache tables (vector_search_cache, query_cache)')
+@click.option('--all', 'clear_all', is_flag=True, help='Clear both agents and cache')
+@click.confirmation_option(prompt='Are you sure you want to clear this data?')
+def clear_agents(agents, cache, clear_all):
+    """Clear agent state and cache to start fresh.
+    
+    This is useful when:
+    - Testing new agent features
+    - Demoing to different audiences
+    - Resetting agent learning
+    
+    Examples:
+      banko-ai clear-agents --agents        # Clear only agent tables
+      banko-ai clear-agents --cache         # Clear only cache
+      banko-ai clear-agents --all           # Clear everything
+    """
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.pool import NullPool
+    
+    config = get_config()
+    engine = create_engine(config.database_url, poolclass=NullPool)
+    
+    tables_cleared = []
+    
+    try:
+        with engine.connect() as conn:
+            # Clear agent tables
+            if agents or clear_all:
+                click.echo("🗑️  Clearing agent tables...")
+                
+                # Clear in order to avoid foreign key constraints
+                agent_tables = [
+                    'agent_tasks',
+                    'agent_memory', 
+                    'agent_decisions',
+                    'agent_state'
+                ]
+                
+                for table in agent_tables:
+                    try:
+                        result = conn.execute(text(f"DELETE FROM {table}"))
+                        rows_deleted = result.rowcount
+                        conn.commit()
+                        tables_cleared.append(f"{table} ({rows_deleted} rows)")
+                        click.echo(f"  ✅ Cleared {table}: {rows_deleted} rows")
+                    except Exception as e:
+                        click.echo(f"  ⚠️  Could not clear {table}: {e}")
+            
+            # Clear cache tables
+            if cache or clear_all:
+                click.echo("🗑️  Clearing cache tables...")
+                
+                cache_tables = [
+                    'vector_search_cache',
+                    'query_cache'
+                ]
+                
+                for table in cache_tables:
+                    try:
+                        result = conn.execute(text(f"DELETE FROM {table}"))
+                        rows_deleted = result.rowcount
+                        conn.commit()
+                        tables_cleared.append(f"{table} ({rows_deleted} rows)")
+                        click.echo(f"  ✅ Cleared {table}: {rows_deleted} rows")
+                    except Exception as e:
+                        click.echo(f"  ⚠️  Could not clear {table}: {e}")
+        
+        engine.dispose()
+        
+        if tables_cleared:
+            click.echo(f"\n✅ Successfully cleared: {', '.join(tables_cleared)}")
+            click.echo("\n💡 Tip: Agent tables will be repopulated when you upload a new receipt")
+        else:
+            click.echo("\n⚠️  No tables were cleared. Use --agents, --cache, or --all")
+            
+    except Exception as e:
+        click.echo(f"\n❌ Error clearing data: {e}")
+        engine.dispose()
+
+
+@cli.command()
 def status():
     """Show application status."""
     config = get_config()

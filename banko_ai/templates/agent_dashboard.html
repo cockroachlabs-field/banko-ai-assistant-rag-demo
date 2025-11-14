@@ -389,14 +389,14 @@
             });
         });
 
-        // Initial load
+        // Initial load - load agents and recent activity (last 10 minutes)
         loadAgents();
-        loadActivity();
+        loadActivity(); // Load recent activity from last 10 minutes
         
         // Auto-refresh every 5 seconds
         setInterval(() => {
             loadAgents();
-            loadActivity();
+            loadActivity(); // Refresh recent activity
         }, 5000);
         
         // Listen for real-time agent activity updates

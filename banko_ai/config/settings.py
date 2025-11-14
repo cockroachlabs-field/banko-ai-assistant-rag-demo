@@ -58,6 +58,9 @@ class Config:
     default_record_count: int = 10000
     default_user_count: int = 100
     
+    # Agent Configuration
+    monthly_budget_default: float = 10000.0  # Default monthly budget for budget agent
+    
     @classmethod
     def from_env(cls) -> "Config":
         """Create configuration from environment variables."""
@@ -136,6 +139,9 @@ class Config:
             # Data Generation
             default_record_count=int(os.getenv("DEFAULT_RECORD_COUNT", "10000")),
             default_user_count=int(os.getenv("DEFAULT_USER_COUNT", "100")),
+            
+            # Agent configuration
+            monthly_budget_default=float(os.getenv("MONTHLY_BUDGET_DEFAULT", "10000.0"))
         )
     
     def get_ai_config(self) -> Dict[str, Any]:

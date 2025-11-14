@@ -659,14 +659,23 @@ def create_app() -> Flask:
                     else:
                         amount = float(amount)
                     
+                    # Handle missing date - use today as default
+                    expense_date = extracted.get('date')
+                    if expense_date is None or expense_date == 'None' or expense_date == '':
+                        expense_date = datetime.now().strftime('%Y-%m-%d')
+                    
+                    # Handle missing merchant
+                    merchant = extracted.get('merchant', 'Unknown')
+                    if not merchant or merchant == 'None':
+                        merchant = 'Unknown'
+                    
                     # Generate embedding for expense
                     expense_text = f"{extracted.get('merchant', '')} {extracted.get('category', '')} {amount}"
                     from sentence_transformers import SentenceTransformer
                     embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
                     embedding = embedding_model.encode(expense_text).tolist()
                     
-                    # Get merchant and category for tags and description
-                    merchant = extracted.get('merchant', 'Unknown')
+                    # Get category and items for tags and description
                     category = extracted.get('category', 'general')
                     items = extracted.get('items', [])
                     
@@ -708,7 +717,7 @@ def create_app() -> Flask:
                             'amount': amount,
                             'category': category,
                             'merchant': merchant,
-                            'date': extracted.get('date', datetime.now().strftime('%Y-%m-%d')),
+                            'date': expense_date,
                             'description': description,
                             'payment_method': extracted.get('payment_method', 'unknown') if extracted.get('payment_method') else 'unknown',
                             'tags': tags_str,
@@ -831,9 +840,13 @@ def create_app() -> Flask:
                     except:
                         pass
                     
+                    # Get budget from config (can be set via MONTHLY_BUDGET_DEFAULT env var)
+                    from ..config.settings import get_config
+                    app_config = get_config()
+                    
                     budget_check = budget_agent.check_budget_status(
                         user_id=user_id,
-                        monthly_budget=3000.0  # Default budget
+                        monthly_budget=app_config.monthly_budget_default
                     )
                     
                     status = budget_check.get('status', 'unknown')

@@ -56,3 +56,11 @@ docs/DEMO_QUICK_START.md
 docs/REINVENT_COMPLETE_GUIDE.md
 docs/REINVENT_DEMO_SCRIPT.md
 docs/WOW_FACTOR_STATUS.md
+docs/TECH_STACK_AND_CODE_FLOW.md
+docs/FRAUD_DEMO_SCENARIO.md
+README.old.md
+
+# Only commit these MD files to repo:
+# - README.md
+# - docs/API.md  
+# - docs/DOCKER.md

@@ -14,4 +14,7 @@ DATABASE_URL = "your_cockroachdb_connection_string_here"
 # IBM Watsonx Configuration
 WATSONX_API_KEY = "your_watsonx_api_key_here"
 WATSONX_PROJECT_ID = "your_watsonx_project_id_here"
-WATSONX_MODEL_ID = "openai/gpt-oss-120b"  # or your preferred model 
+WATSONX_MODEL_ID = "openai/gpt-oss-120b"  # or your preferred model
+
+# Agent Configuration
+MONTHLY_BUDGET_DEFAULT = "10000.0"  # Default monthly budget for budget checks (in dollars)

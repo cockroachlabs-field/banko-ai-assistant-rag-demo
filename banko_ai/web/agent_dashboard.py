@@ -76,7 +76,7 @@ def get_all_agent_status():
 
 @agent_dashboard.route('/api/agents/activity')
 def get_recent_activity():
-    """Get recent agent decisions and activity"""
+    """Get recent agent decisions and activity (last 10 minutes only)"""
     from ..config.settings import get_config
     from sqlalchemy import create_engine
     from sqlalchemy.pool import NullPool
@@ -86,7 +86,7 @@ def get_recent_activity():
     
     try:
         with engine.connect() as conn:
-            # Get recent decisions
+            # Get recent decisions from last 10 minutes only
             result = conn.execute(text("""
                 SELECT 
                     d.decision_id,
@@ -99,8 +99,9 @@ def get_recent_activity():
                     d.reasoning
                 FROM agent_decisions d
                 JOIN agent_state a ON d.agent_id = a.agent_id
+                WHERE d.created_at > NOW() - INTERVAL '10 minutes'
                 ORDER BY d.created_at DESC
-                LIMIT 50
+                LIMIT 20
             """))
             
             activities = []
@@ -131,14 +132,102 @@ def get_recent_activity():
         }), 500
 
 
+@agent_dashboard.route('/api/agents/stats')
+def get_agent_stats():
+    """Get agent memory and task statistics"""
+    from ..config.settings import get_config
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import NullPool
+    
+    config = get_config()
+    engine = create_engine(config.database_url, poolclass=NullPool)
+    
+    try:
+        with engine.connect() as conn:
+            # Get memory counts per agent
+            memory_result = conn.execute(text("""
+                SELECT 
+                    a.agent_id,
+                    a.agent_type,
+                    a.region,
+                    COUNT(m.memory_id) as memory_count
+                FROM agent_state a
+                LEFT JOIN agent_memory m ON a.agent_id = m.agent_id
+                GROUP BY a.agent_id, a.agent_type, a.region
+            """))
+            
+            # Get task counts per agent
+            task_result = conn.execute(text("""
+                SELECT 
+                    a.agent_id,
+                    COUNT(CASE WHEN t.status = 'pending' THEN 1 END) as pending_tasks,
+                    COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
+                FROM agent_state a
+                LEFT JOIN agent_tasks t ON a.agent_id = t.target_agent_id
+                GROUP BY a.agent_id
+            """))
+            
+            memory_stats = {}
+            for row in memory_result.fetchall():
+                agent_id = str(row[0])
+                memory_stats[agent_id] = {
+                    'agent_type': row[1],
+                    'region': row[2],
+                    'memory_count': row[3] or 0
+                }
+            
+            task_stats = {}
+            for row in task_result.fetchall():
+                agent_id = str(row[0])
+                task_stats[agent_id] = {
+                    'pending_tasks': row[1] or 0,
+                    'completed_tasks': row[2] or 0
+                }
+            
+            # Combine stats
+            agent_stats = []
+            for agent_id, mem_data in memory_stats.items():
+                tasks = task_stats.get(agent_id, {'pending_tasks': 0, 'completed_tasks': 0})
+                agent_stats.append({
+                    'agent_id': agent_id,
+                    'agent_type': mem_data['agent_type'],
+                    'region': mem_data['region'],
+                    'memory_count': mem_data['memory_count'],
+                    'pending_tasks': tasks['pending_tasks'],
+                    'completed_tasks': tasks['completed_tasks']
+                })
+        
+        engine.dispose()
+        
+        # Overall stats
+        total_memory = sum(a['memory_count'] for a in agent_stats)
+        total_pending = sum(a['pending_tasks'] for a in agent_stats)
+        total_completed = sum(a['completed_tasks'] for a in agent_stats)
+        
+        return jsonify({
+            'success': True,
+            'agent_stats': agent_stats,
+            'totals': {
+                'memory_count': total_memory,
+                'pending_tasks': total_pending,
+                'completed_tasks': total_completed
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # WebSocket event handlers
 def emit_agent_status_update(agent_id, status, task=None):
     """Emit agent status update via WebSocket"""
     try:
-        from flask_socketio import SocketIO
-        socketio = SocketIO.instance()
-        if socketio:
-            socketio.emit('agent_status_update', {
+        from flask import current_app
+        if hasattr(current_app, 'socketio'):
+            current_app.socketio.emit('agent_status_update', {
                 'agent_id': str(agent_id),
                 'status': status,
                 'task': task,
@@ -151,11 +240,38 @@ def emit_agent_status_update(agent_id, status, task=None):
 def emit_agent_decision(agent_id, decision_type, confidence, reasoning):
     """Emit agent decision via WebSocket"""
     try:
-        from flask_socketio import SocketIO
-        socketio = SocketIO.instance()
-        if socketio:
-            socketio.emit('agent_decision', {
+        # Get agent info from database
+        from ..config.settings import get_config
+        from sqlalchemy import create_engine
+        from sqlalchemy.pool import NullPool
+        
+        config = get_config()
+        engine = create_engine(config.database_url, poolclass=NullPool)
+        
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT agent_type, region
+                FROM agent_state
+                WHERE agent_id = :agent_id
+            """), {'agent_id': agent_id})
+            row = result.fetchone()
+            
+            if row:
+                agent_type = row[0]
+                region = row[1]
+            else:
+                agent_type = 'unknown'
+                region = 'unknown'
+        
+        engine.dispose()
+        
+        # Emit via WebSocket
+        from flask import current_app
+        if hasattr(current_app, 'socketio'):
+            current_app.socketio.emit('agent_decision', {
                 'agent_id': str(agent_id),
+                'agent_type': agent_type,
+                'region': region,
                 'decision_type': decision_type,
                 'confidence': confidence,
                 'reasoning': reasoning[:200] if reasoning else None,
@@ -168,10 +284,9 @@ def emit_agent_decision(agent_id, decision_type, confidence, reasoning):
 def emit_workflow_update(workflow_id, step, status, result=None):
     """Emit workflow execution update via WebSocket"""
     try:
-        from flask_socketio import SocketIO
-        socketio = SocketIO.instance()
-        if socketio:
-            socketio.emit('workflow_update', {
+        from flask import current_app
+        if hasattr(current_app, 'socketio'):
+            current_app.socketio.emit('workflow_update', {
                 'workflow_id': workflow_id,
                 'step': step,
                 'status': status,

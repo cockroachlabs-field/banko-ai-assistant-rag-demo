@@ -262,6 +262,20 @@ Be concise but thorough in your responses."""
                     conn.commit()
             
             engine.dispose()
+            
+            # Emit WebSocket event for dashboard
+            try:
+                from ..web.agent_dashboard import emit_agent_decision
+                emit_agent_decision(
+                    agent_id=self.agent_id,
+                    decision_type=decision_type,
+                    confidence=confidence,
+                    reasoning=reasoning
+                )
+            except Exception as e:
+                # Don't fail if WebSocket not available
+                pass
+                
         except Exception as e:
             print(f"⚠️  Could not store decision: {e}")
         
@@ -335,6 +349,316 @@ Be concise but thorough in your responses."""
         except Exception as e:
             self.update_status("idle")
             raise RuntimeError(f"Tool execution failed: {str(e)}")
+    
+    def store_memory(
+        self,
+        user_id: str,
+        memory_type: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
+        """
+        Store a memory with vector embedding for semantic search.
+        
+        Args:
+            user_id: User ID this memory belongs to
+            memory_type: Type of memory ('conversation', 'decision', 'pattern', 'preference')
+            content: The memory content (will be embedded)
+            metadata: Additional metadata
+        
+        Returns:
+            memory_id if successful, None otherwise
+        """
+        if not self.database_url:
+            return None
+        
+        from sqlalchemy import create_engine
+        from sqlalchemy.pool import NullPool
+        
+        try:
+            # Generate embedding for the content
+            from sentence_transformers import SentenceTransformer
+            model = SentenceTransformer('all-MiniLM-L6-v2')
+            embedding = model.encode(content).tolist()
+            
+            engine = create_engine(
+                self.database_url,
+                poolclass=NullPool
+            )
+            
+            memory_id = str(uuid.uuid4())
+            
+            with engine.connect() as conn:
+                conn.execute(text("""
+                    INSERT INTO agent_memory
+                    (memory_id, agent_id, user_id, memory_type, content, embedding, metadata, created_at, accessed_at)
+                    VALUES (:memory_id, :agent_id, :user_id, :memory_type, :content, :embedding, :metadata, :created_at, :accessed_at)
+                """), {
+                    'memory_id': memory_id,
+                    'agent_id': self.agent_id,
+                    'user_id': user_id,
+                    'memory_type': memory_type,
+                    'content': content,
+                    'embedding': str(embedding),
+                    'metadata': json.dumps(metadata or {}),
+                    'created_at': datetime.utcnow(),
+                    'accessed_at': datetime.utcnow()
+                })
+                conn.commit()
+            
+            engine.dispose()
+            return memory_id
+        
+        except Exception as e:
+            print(f"⚠️  Could not store memory: {e}")
+            return None
+    
+    def retrieve_memory(
+        self,
+        user_id: str,
+        query: str,
+        memory_type: Optional[str] = None,
+        limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve memories using semantic search.
+        
+        Args:
+            user_id: User ID to search memories for
+            query: Search query (will be embedded)
+            memory_type: Filter by memory type (optional)
+            limit: Maximum number of results
+        
+        Returns:
+            List of memory objects with similarity scores
+        """
+        if not self.database_url:
+            return []
+        
+        from sqlalchemy import create_engine
+        from sqlalchemy.pool import NullPool
+        
+        try:
+            # Generate embedding for the query
+            from sentence_transformers import SentenceTransformer
+            model = SentenceTransformer('all-MiniLM-L6-v2')
+            query_embedding = model.encode(query).tolist()
+            
+            engine = create_engine(
+                self.database_url,
+                poolclass=NullPool
+            )
+            
+            with engine.connect() as conn:
+                # Build query with optional memory_type filter
+                sql = """
+                    SELECT 
+                        memory_id,
+                        memory_type,
+                        content,
+                        metadata,
+                        created_at,
+                        (embedding <-> :query_embedding::VECTOR) as distance
+                    FROM agent_memory
+                    WHERE user_id = :user_id
+                """
+                
+                params = {
+                    'user_id': user_id,
+                    'query_embedding': str(query_embedding)
+                }
+                
+                if memory_type:
+                    sql += " AND memory_type = :memory_type"
+                    params['memory_type'] = memory_type
+                
+                sql += " ORDER BY distance LIMIT :limit"
+                params['limit'] = limit
+                
+                result = conn.execute(text(sql), params)
+                
+                memories = []
+                for row in result.fetchall():
+                    memories.append({
+                        'memory_id': str(row[0]),
+                        'memory_type': row[1],
+                        'content': row[2],
+                        'metadata': json.loads(row[3]) if row[3] else {},
+                        'created_at': row[4].isoformat() if row[4] else None,
+                        'similarity': 1.0 - float(row[5])  # Convert distance to similarity
+                    })
+            
+            engine.dispose()
+            return memories
+        
+        except Exception as e:
+            print(f"⚠️  Could not retrieve memory: {e}")
+            return []
+    
+    def create_task(
+        self,
+        target_agent_id: str,
+        task_type: str,
+        payload: Dict[str, Any],
+        priority: int = 5
+    ) -> Optional[str]:
+        """
+        Create a task for another agent.
+        
+        Args:
+            target_agent_id: ID of the agent that should handle this task
+            task_type: Type of task ('analyze', 'process', 'report', 'escalate')
+            payload: Task data
+            priority: Priority (1-10, higher = more urgent)
+        
+        Returns:
+            task_id if successful, None otherwise
+        """
+        if not self.database_url:
+            return None
+        
+        from sqlalchemy import create_engine
+        from sqlalchemy.pool import NullPool
+        
+        try:
+            engine = create_engine(
+                self.database_url,
+                poolclass=NullPool
+            )
+            
+            task_id = str(uuid.uuid4())
+            
+            with engine.connect() as conn:
+                conn.execute(text("""
+                    INSERT INTO agent_tasks
+                    (task_id, source_agent_id, target_agent_id, task_type, priority, payload, status, region, created_at)
+                    VALUES (:task_id, :source_agent_id, :target_agent_id, :task_type, :priority, :payload, :status, :region, :created_at)
+                """), {
+                    'task_id': task_id,
+                    'source_agent_id': self.agent_id,
+                    'target_agent_id': target_agent_id,
+                    'task_type': task_type,
+                    'priority': priority,
+                    'payload': json.dumps(payload, default=json_serializer),
+                    'status': 'pending',
+                    'region': self.region,
+                    'created_at': datetime.utcnow()
+                })
+                conn.commit()
+            
+            engine.dispose()
+            return task_id
+        
+        except Exception as e:
+            print(f"⚠️  Could not create task: {e}")
+            return None
+    
+    def get_pending_tasks(self) -> List[Dict[str, Any]]:
+        """
+        Get all pending tasks assigned to this agent.
+        
+        Returns:
+            List of task objects
+        """
+        if not self.database_url:
+            return []
+        
+        from sqlalchemy import create_engine
+        from sqlalchemy.pool import NullPool
+        
+        try:
+            engine = create_engine(
+                self.database_url,
+                poolclass=NullPool
+            )
+            
+            with engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT 
+                        task_id,
+                        source_agent_id,
+                        task_type,
+                        priority,
+                        payload,
+                        created_at
+                    FROM agent_tasks
+                    WHERE target_agent_id = :agent_id
+                    AND status = 'pending'
+                    ORDER BY priority DESC, created_at ASC
+                """), {
+                    'agent_id': self.agent_id
+                })
+                
+                tasks = []
+                for row in result.fetchall():
+                    tasks.append({
+                        'task_id': str(row[0]),
+                        'source_agent_id': str(row[1]),
+                        'task_type': row[2],
+                        'priority': row[3],
+                        'payload': json.loads(row[4]) if row[4] else {},
+                        'created_at': row[5].isoformat() if row[5] else None
+                    })
+            
+            engine.dispose()
+            return tasks
+        
+        except Exception as e:
+            print(f"⚠️  Could not get pending tasks: {e}")
+            return []
+    
+    def update_task_status(
+        self,
+        task_id: str,
+        status: str,
+        result: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Update the status of a task.
+        
+        Args:
+            task_id: Task ID
+            status: New status ('processing', 'completed', 'failed')
+            result: Task result (optional)
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.database_url:
+            return False
+        
+        from sqlalchemy import create_engine
+        from sqlalchemy.pool import NullPool
+        
+        try:
+            engine = create_engine(
+                self.database_url,
+                poolclass=NullPool
+            )
+            
+            with engine.connect() as conn:
+                timestamp_field = 'started_at' if status == 'processing' else 'completed_at'
+                
+                conn.execute(text(f"""
+                    UPDATE agent_tasks
+                    SET status = :status,
+                        result = :result,
+                        {timestamp_field} = :timestamp
+                    WHERE task_id = :task_id
+                """), {
+                    'task_id': task_id,
+                    'status': status,
+                    'result': json.dumps(result, default=json_serializer) if result else None,
+                    'timestamp': datetime.utcnow()
+                })
+                conn.commit()
+            
+            engine.dispose()
+            return True
+        
+        except Exception as e:
+            print(f"⚠️  Could not update task status: {e}")
+            return False
     
     def get_info(self) -> Dict[str, Any]:
         """Get agent information"""
