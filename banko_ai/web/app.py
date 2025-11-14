@@ -669,8 +669,12 @@ def create_app() -> Flask:
                     if not merchant or merchant == 'None':
                         merchant = 'Unknown'
                     
-                    # Generate embedding for expense
-                    expense_text = f"{extracted.get('merchant', '')} {extracted.get('category', '')} {amount}"
+                    # Generate embedding for expense using natural language
+                    # This helps match conversational queries like "when did I go to X?"
+                    merchant = extracted.get('merchant', 'Unknown')
+                    category = extracted.get('category', 'general')
+                    expense_text = f"Spent ${amount} at {merchant} for {category} on {expense_date.strftime('%Y-%m-%d') if hasattr(expense_date, 'strftime') else expense_date}"
+                    
                     from sentence_transformers import SentenceTransformer
                     embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
                     embedding = embedding_model.encode(expense_text).tolist()
