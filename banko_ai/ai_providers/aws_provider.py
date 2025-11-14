@@ -248,7 +248,7 @@ class AWSProvider(AIProvider):
                     description=row[2] or "",
                     merchant=row[3] or "",
                     amount=float(row[4]),
-                    date=str(row[5]),
+                    date=row[5].isoformat() if row[5] and hasattr(row[5], 'isoformat') else (str(row[5]) if row[5] else 'Unknown'),
                     similarity_score=float(row[6]),
                     metadata={
                         'shopping_type': row[7] or 'Unknown',
@@ -415,7 +415,14 @@ class AWSProvider(AIProvider):
                         description = result.description
                         merchant = result.merchant
                         amount = result.amount
-                        date = result.date if hasattr(result, 'date') else 'Unknown'
+                        # Format date properly for SearchResult objects
+                        date_value = result.date if hasattr(result, 'date') else None
+                        if date_value and hasattr(date_value, 'isoformat'):
+                            date = date_value.isoformat()
+                        elif date_value and str(date_value) != 'None':
+                            date = str(date_value)
+                        else:
+                            date = 'Unknown'
                         shopping_type = result.metadata.get('shopping_type', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
                         payment_method = result.metadata.get('payment_method', 'Unknown') if hasattr(result, 'metadata') and result.metadata else 'Unknown'
                     else:

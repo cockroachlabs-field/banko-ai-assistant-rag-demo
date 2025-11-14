@@ -235,7 +235,7 @@ class GeminiProvider(AIProvider):
                     description=row[2] or "",
                     merchant=row[3] or "",
                     amount=float(row[4]),
-                    date=str(row[5]),
+                    date=row[5].isoformat() if row[5] and hasattr(row[5], 'isoformat') else (str(row[5]) if row[5] else 'Unknown'),
                     similarity_score=float(row[6]),
                     metadata={
                         'shopping_type': row[7] or 'Unknown',

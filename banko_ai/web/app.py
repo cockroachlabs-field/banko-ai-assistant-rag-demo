@@ -945,14 +945,18 @@ def create_app() -> Flask:
                     
                     # Convert SearchResult objects to dictionaries if needed
                     if search_results and hasattr(search_results[0], 'description'):
-                        # Convert SearchResult objects to dict format
+                        # Convert SearchResult objects to dict format - MUST include ALL fields!
                         search_results_dict = []
                         for result in search_results:
                             search_results_dict.append({
+                                'expense_id': result.expense_id,
+                                'user_id': result.user_id,
                                 'description': result.description,
                                 'merchant': result.merchant,
-                                'shopping_type': result.metadata.get('shopping_type', 'Unknown'),
                                 'expense_amount': result.amount,
+                                'expense_date': result.date,  # ← WAS MISSING!
+                                'shopping_type': result.metadata.get('shopping_type', 'Unknown'),
+                                'payment_method': result.metadata.get('payment_method', 'Unknown'),  # ← WAS MISSING!
                                 'similarity_score': result.similarity_score
                             })
                         search_results = search_results_dict

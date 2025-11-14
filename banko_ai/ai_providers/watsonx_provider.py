@@ -119,13 +119,22 @@ class WatsonxProvider(AIProvider):
                     # Convert cached dict results to SearchResult objects
                     results_list = []
                     for result in cached_results[:limit]:
+                        # Format date properly
+                        date_value = result.get('expense_date', '')
+                        if date_value and hasattr(date_value, 'isoformat'):
+                            date_str = date_value.isoformat()
+                        elif date_value:
+                            date_str = str(date_value)
+                        else:
+                            date_str = 'Unknown'
+                        
                         results_list.append(SearchResult(
                             expense_id=result.get('expense_id', ''),
                             user_id=result.get('user_id', ''),
                             description=result.get('description', ''),
                             merchant=result.get('merchant', ''),
                             amount=result.get('expense_amount', 0),
-                            date=result.get('expense_date', ''),
+                            date=date_str,
                             similarity_score=result.get('similarity_score', 0),
                             metadata={
                                 'shopping_type': result.get('shopping_type', 'Unknown'),
@@ -169,13 +178,22 @@ class WatsonxProvider(AIProvider):
                 # Convert to SearchResult objects
                 results_list = []
                 for result in search_results:
+                    # Format date properly
+                    date_value = result.get('expense_date', '')
+                    if date_value and hasattr(date_value, 'isoformat'):
+                        date_str = date_value.isoformat()
+                    elif date_value:
+                        date_str = str(date_value)
+                    else:
+                        date_str = 'Unknown'
+                    
                     results_list.append(SearchResult(
                         expense_id=result.get('expense_id', ''),
                         user_id=result.get('user_id', ''),
                         description=result['description'],
                         merchant=result['merchant'],
                         amount=result['expense_amount'],
-                        date=result.get('expense_date', ''),
+                        date=date_str,
                         similarity_score=result['similarity_score'],
                         metadata={
                             'shopping_type': result.get('shopping_type', 'Unknown'),

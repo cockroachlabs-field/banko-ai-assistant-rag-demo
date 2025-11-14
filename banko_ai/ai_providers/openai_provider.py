@@ -181,13 +181,22 @@ class OpenAIProvider(AIProvider):
             # Convert to SearchResult objects
             results = []
             for row in rows:
+                # Format date properly
+                date_value = row[5]
+                if date_value and hasattr(date_value, 'isoformat'):
+                    date_str = date_value.isoformat()
+                elif date_value:
+                    date_str = str(date_value)
+                else:
+                    date_str = 'Unknown'
+                
                 results.append(SearchResult(
                     expense_id=str(row[0]),
                     user_id=str(row[1]),
                     description=row[2] or "",
                     merchant=row[3] or "",
                     amount=float(row[4]),
-                    date=str(row[5]),
+                    date=date_str,
                     similarity_score=float(row[8]),
                     metadata={
                         'shopping_type': row[6] or 'Unknown',
@@ -197,7 +206,6 @@ class OpenAIProvider(AIProvider):
             
             # Cache the results for future use
             if self.cache_manager and results:
-                # Store as dict format for cache compatibility
                 cache_results = []
                 for r in results:
                     cache_results.append({
@@ -212,7 +220,6 @@ class OpenAIProvider(AIProvider):
                         'payment_method': r.metadata.get('payment_method') if r.metadata else 'Unknown'
                     })
                 self.cache_manager.cache_vector_search_results(query_embedding, cache_results)
-                print(f"5. ✅ Cached {len(cache_results)} results in vector_search_cache")
             
             return results
             
@@ -301,7 +308,7 @@ class OpenAIProvider(AIProvider):
                 for result in context:
                     # Handle both SearchResult objects and dictionaries
                     if hasattr(result, 'amount'):
-                        # It's a SearchResult object
+                        # It's a SearchResult object - date is already a formatted string
                         description = result.description
                         merchant = result.merchant
                         amount = result.amount
