@@ -53,7 +53,7 @@ def create_document_tools(database_url: str, embedding_model) -> List[Tool]:
         if not OCR_AVAILABLE:
             return json.dumps({
                 'success': False,
-                'error': 'OCR libraries not installed'
+                'error': 'OCR libraries not installed. Install: pip install pytesseract Pillow && sudo apt-get install tesseract-ocr'
             })
         
         try:
@@ -79,9 +79,18 @@ def create_document_tools(database_url: str, embedding_model) -> List[Tool]:
             }, indent=2)
         
         except Exception as e:
+            error_msg = str(e)
+            # Add helpful hint for tesseract errors
+            if 'tesseract' in error_msg.lower() or 'not installed' in error_msg.lower():
+                error_msg = f"OCR failed: {error_msg}\n\n" \
+                           f"💡 Solution: Install tesseract OCR:\n" \
+                           f"   Ubuntu/Debian: sudo apt-get install -y tesseract-ocr\n" \
+                           f"   macOS: brew install tesseract\n" \
+                           f"   Or run: curl -fsSL https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/scripts/setup_system_deps.sh | bash"
+            
             return json.dumps({
                 'success': False,
-                'error': str(e)
+                'error': error_msg
             })
     
     def extract_text_from_pdf(pdf_path: str) -> str:
