@@ -45,3 +45,6 @@ MULTI_REGION_SUPPORT.md
 test_*.py
 cache_statistics.sql
 
+
+# Agent-specific docker compose (keep local only)
+docker-compose.agents.yml
