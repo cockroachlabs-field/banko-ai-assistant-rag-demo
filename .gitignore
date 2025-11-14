@@ -48,3 +48,11 @@ cache_statistics.sql
 
 # Agent-specific docker compose (keep local only)
 docker-compose.agents.yml
+# Internal documentation - keep local only
+docs/AGENTIC_AI_PLAN.md
+docs/AGENTS_SUMMARY.md
+docs/DEMO_QUERIES.md
+docs/DEMO_QUICK_START.md
+docs/REINVENT_COMPLETE_GUIDE.md
+docs/REINVENT_DEMO_SCRIPT.md
+docs/WOW_FACTOR_STATUS.md
