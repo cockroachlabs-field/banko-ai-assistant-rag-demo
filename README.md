@@ -44,7 +44,7 @@ banko-ai run
 ### Prerequisites
 
 - **Python 3.8+** (if not using Docker)
-- **CockroachDB v25.2.4+** (recommended: [v25.4.0](https://www.cockroachlabs.com/docs/releases/v25.4#v25-4-0))
+- **CockroachDB v25.2.4+** (recommended: [v25.3.3](https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-3))
 - **Vector Index Feature Enabled** (required for vector search)
 - **AI Provider API Key** (OpenAI, AWS, IBM Watsonx, or Google Gemini)
 
@@ -52,8 +52,8 @@ banko-ai run
 
 1. **Download and Install CockroachDB**:
    ```bash
-   # Download CockroachDB v25.4.0 (recommended)
-   # Visit: https://www.cockroachlabs.com/docs/releases/v25.4#v25-4-0
+   # Download CockroachDB v25.3.3 (recommended)
+   # Visit: https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-3
    
    # Or install via package manager
    brew install cockroachdb/tap/cockroach  # macOS
@@ -90,7 +90,7 @@ banko-ai run
 
 #### Option 1: Docker (Recommended - No Python Required!) 🐳
 
-See **[DOCKER.md](https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/blob/main/docs/DOCKER.md)** for complete Docker installation and deployment guide.
+See **[DOCKER.md](DOCKER.md)** for complete Docker installation and deployment guide.
 
 ```bash
 # Quick start with docker-compose
@@ -139,7 +139,7 @@ banko-ai run
 
 ---
 
-**📚 For complete Docker instructions, see [DOCKER.md](https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/blob/main/docs/DOCKER.md)**
+**📚 For complete Docker instructions, see [DOCKER.md](DOCKER.md)**
 
 ---
 
@@ -635,7 +635,7 @@ Switch between AI providers and models dynamically:
 
 ```
 banko_ai/
-├── ai_providers/         # AI provider implementations
+├── ai_providers/          # AI provider implementations
 ├── config/               # Configuration management
 ├── static/               # Web assets and images
 ├── templates/            # HTML templates
@@ -660,8 +660,8 @@ banko_ai/
 # Check CockroachDB version (must be v25.2.4+)
 cockroach version
 
-# If version is too old, download v25.4.0:
-# https://www.cockroachlabs.com/docs/releases/v25.4#v25-4-0
+# If version is too old, download v25.3.3:
+# https://www.cockroachlabs.com/docs/releases/v25.3#v25-3-3
 ```
 
 **Vector Index Feature Not Enabled**
@@ -696,7 +696,7 @@ cockroach sql --url="cockroachdb://root@localhost:26257/defaultdb?sslmode=disabl
 - Ensure the selected model is available
 
 **No Search Results**
-- Ensure sample data is loaded: `banko-ai generate-data --count 10000`
+- Ensure sample data is loaded: `banko-ai generate-data --count 1000`
 - Check vector indexes are created
 - Verify search query format
 
