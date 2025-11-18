@@ -319,7 +319,8 @@ class EnhancedExpenseGenerator:
             })
         
         # Insert in smaller batches to reduce transaction conflicts
-        batch_size = 50  # Reduced from 100 to minimize conflicts
+        # Use environment variable or default to 50
+        batch_size = int(os.getenv('DATA_GEN_BATCH_SIZE', '50'))
         total_inserted = 0
         total_batches = (len(data_to_insert) + batch_size - 1) // batch_size
         

@@ -366,33 +366,7 @@ def create_app() -> Flask:
                 'error': str(e)
             }), 500
     
-    @app.route('/api/generate-data', methods=['POST'])
-    def api_generate_data():
-        """API endpoint for generating sample data."""
-        try:
-            data = request.get_json()
-            count = data.get('count', 1000)
-            user_id = user_manager.get_current_user()['id'] if user_manager.is_logged_in() else None
-            clear_existing = data.get('clear_existing', False)
-            
-            # Generate expenses
-            generated_count = expense_generator.generate_and_save(
-                count=count,
-                user_id=user_id,
-                clear_existing=clear_existing
-            )
-            
-            return jsonify({
-                'success': True,
-                'generated_count': generated_count,
-                'message': f'Generated {generated_count} expense records'
-            })
-            
-        except Exception as e:
-            return jsonify({
-                'success': False,
-                'error': str(e)
-            }), 500
+    # OLD ROUTE REMOVED - replaced by /api/generate-data with SocketIO support below
     
     @app.route('/api/user-summary')
     def api_user_summary():
@@ -1231,6 +1205,123 @@ def create_app() -> Flask:
         
         return results
     
+    # Initialize SocketIO for real-time updates (needed before data generator routes)
+    # Use threading mode for Flask dev server, eventlet mode for Gunicorn production
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+    app.socketio = socketio
+    
+    # Data Generator Routes
+    generation_state = {'running': False, 'should_stop': False}
+    
+    @app.route('/data-generator')
+    def data_generator_page():
+        """Render data generator page."""
+        return render_template('data_generator.html')
+    
+    @app.route('/api/generate-data', methods=['POST'])
+    def start_generation():
+        """Start data generation with real-time updates."""
+        if generation_state['running']:
+            return jsonify({'error': 'Generation already running'}), 400
+        
+        data = request.json
+        count = data.get('count', 1000)
+        clear_existing = data.get('clear_existing', False)
+        continuous = data.get('continuous', False)
+        
+        def generate_in_background():
+            # CRITICAL: Need Flask app context for SocketIO in background thread
+            # Use app.socketio to ensure we have the right instance
+            with app.app_context():
+                generation_state['running'] = True
+                generation_state['should_stop'] = False
+                generator = EnhancedExpenseGenerator(config.database_url)
+                sock = app.socketio  # Get socketio instance from app
+                
+                try:
+                    print("🚀 Starting generation...")
+                    sock.emit('generation_progress', {
+                        'current': 0, 
+                        'total': count, 
+                        'message': 'Starting generation...'
+                    })
+                    
+                    if clear_existing:
+                        print("🗑️  Clearing existing data...")
+                        sock.emit('generation_progress', {
+                            'current': 0, 
+                            'total': count, 
+                            'message': 'Clearing data...'
+                        })
+                        generator.clear_expenses()
+                    
+                    # Use same batch size as generator for consistency
+                    batch_size = int(os.getenv('DATA_GEN_BATCH_SIZE', '50'))
+                    import time
+                    
+                    # Main generation loop - supports continuous mode
+                    while not generation_state['should_stop']:
+                        total_generated = 0
+                        start_time = time.time()
+                        
+                        # Generate one batch of records
+                        while total_generated < count and not generation_state['should_stop']:
+                            batch = min(batch_size, count - total_generated)
+                            generated = generator.generate_and_save(count=batch, clear_existing=False)
+                            total_generated += generated
+                            
+                            elapsed = time.time() - start_time
+                            speed = total_generated / elapsed if elapsed > 0 else 0
+                            
+                            progress_data = {
+                                'current': total_generated,
+                                'total': count,
+                                'speed': round(speed, 1),
+                                'message': f'Generated {total_generated:,} / {count:,} ({speed:.0f} rec/sec)'
+                            }
+                            print(f"📊 Progress: {total_generated}/{count} ({speed:.0f} rec/sec)")
+                            sock.emit('generation_progress', progress_data)
+                        
+                        print(f"✅ Generation complete: {total_generated} records")
+                        sock.emit('generation_complete', {
+                            'total_generated': total_generated,
+                            'elapsed': round(time.time() - start_time, 1),
+                            'continuous': continuous
+                        })
+                        
+                        # If not continuous mode or stopped, exit
+                        if not continuous or generation_state['should_stop']:
+                            break
+                        
+                        # Brief pause before next cycle in continuous mode
+                        time.sleep(1)
+                        print("🔄 Continuous mode: Restarting generation...")
+                        sock.emit('generation_progress', {
+                            'current': 0,
+                            'total': count,
+                            'message': 'Continuous mode: Restarting...'
+                        })
+                except Exception as e:
+                    print(f"❌ Error during generation: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    sock.emit('generation_error', {'message': str(e)})
+                finally:
+                    generation_state['running'] = False
+        
+        import threading
+        thread = threading.Thread(target=generate_in_background)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({'status': 'started'})
+    
+    @app.route('/api/stop-generation', methods=['POST'])
+    def stop_generation():
+        """Stop data generation."""
+        generation_state['should_stop'] = True
+        return jsonify({'status': 'stopping'})
+    
     # Error handlers
     @app.errorhandler(404)
     def not_found(error):
@@ -1243,11 +1334,5 @@ def create_app() -> Flask:
     # Register agent dashboard blueprint
     from .agent_dashboard import agent_dashboard
     app.register_blueprint(agent_dashboard)
-    
-    # Initialize SocketIO for real-time updates
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
-    
-    # Store socketio instance for access by agents
-    app.socketio = socketio
     
     return app
