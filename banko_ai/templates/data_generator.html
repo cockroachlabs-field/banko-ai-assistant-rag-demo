@@ -261,7 +261,12 @@
         });
 
         function startGeneration() {
-            if (isGenerating) return;
+            console.log('▶️  Start button clicked, isGenerating:', isGenerating);
+            
+            if (isGenerating) {
+                console.log('⚠️  Already generating, ignoring');
+                return;
+            }
             
             // Get count from text input (allows values > 1M)
             const recordCount = parseInt(document.getElementById('record-count-input').value.replace(/,/g, ''));
@@ -273,6 +278,9 @@
             const clearData = document.getElementById('clear-data').checked;
             const continuousMode = document.getElementById('continuous-mode').checked;
             
+            console.log('🚀 Starting generation:', {recordCount, clearData, continuousMode});
+            
+            // Reset state for new generation
             isGenerating = true;
             startTime = Date.now();
             totalRecords = recordCount;
@@ -311,10 +319,19 @@
         }
 
         function resetStats() {
+            console.log('🔄 Resetting stats...');
+            
+            // Reset all state variables
             currentRecords = 0;
             totalRecords = 0;
             startTime = null;
+            isGenerating = false;
             
+            // Re-enable buttons
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('stop-btn').disabled = true;
+            
+            // Reset UI elements
             document.getElementById('progress-pct').textContent = '0%';
             document.getElementById('records-generated').textContent = '0';
             document.getElementById('speed').textContent = '0';
@@ -325,6 +342,8 @@
             document.getElementById('activity-log').innerHTML = '<p class="text-sm text-gray-500 italic">No activity yet. Start generation to see logs.</p>';
             
             updateStatus('Idle', 'text-gray-900', 'text-gray-400');
+            
+            console.log('✅ Reset complete');
         }
 
         function updateProgress(data) {
