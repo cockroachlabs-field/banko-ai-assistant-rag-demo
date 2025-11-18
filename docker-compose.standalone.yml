@@ -1,0 +1,76 @@
+version: '3.8'
+
+# Standalone Banko AI - No CockroachDB included
+# Use this when connecting to external database
+
+services:
+  banko-ai:
+    image: virag/banko-ai-assistant:latest
+    container_name: banko-ai-assistant
+    ports:
+      - "5000:5000"
+    environment:
+      # Database configuration - REQUIRED: Set your database URL
+      # Default connects to host machine's localhost (use host.docker.internal on Mac/Windows)
+      - DATABASE_URL=${DATABASE_URL:-cockroachdb://root@host.docker.internal:26257/defaultdb?sslmode=disable}
+      
+      # AI Service (change to your preferred provider: watsonx, openai, aws, gemini)
+      - AI_SERVICE=${AI_SERVICE:-openai}
+      
+      # IBM Watsonx configuration
+      - WATSONX_API_KEY=${WATSONX_API_KEY}
+      - WATSONX_PROJECT_ID=${WATSONX_PROJECT_ID}
+      - WATSONX_MODEL_ID=${WATSONX_MODEL_ID:-openai/gpt-oss-120b}
+      
+      # OpenAI configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      
+      # AWS Bedrock configuration
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_MODEL_ID=${AWS_MODEL_ID:-us.anthropic.claude-3-5-sonnet-20241022-v2:0}
+      
+      # Google Gemini configuration
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - GOOGLE_MODEL=${GOOGLE_MODEL:-gemini-2.0-flash-001}
+      - GOOGLE_LOCATION=${GOOGLE_LOCATION:-us-central1}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      
+      # Agent budget configuration
+      - MONTHLY_BUDGET_DEFAULT=${MONTHLY_BUDGET_DEFAULT:-10000}
+      
+      # Cache configuration (production defaults)
+      - CACHE_SIMILARITY_THRESHOLD=${CACHE_SIMILARITY_THRESHOLD:-0.75}
+      - CACHE_TTL_HOURS=${CACHE_TTL_HOURS:-24}
+      - CACHE_STRICT_MODE=${CACHE_STRICT_MODE:-true}
+      
+      # Database pool configuration
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-100}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-100}
+      - DB_POOL_TIMEOUT=${DB_POOL_TIMEOUT:-30}
+      - DB_POOL_RECYCLE=${DB_POOL_RECYCLE:-3600}
+      - DB_POOL_PRE_PING=${DB_POOL_PRE_PING:-true}
+      - DB_CONNECT_TIMEOUT=${DB_CONNECT_TIMEOUT:-10}
+      
+      # Flask configuration
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - SECRET_KEY=${SECRET_KEY:-changeme-generate-random-key}
+      - PORT=5000
+      
+      # Embedding model
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    # On Linux, use host network mode to access localhost
+    # network_mode: "host"  # Uncomment on Linux
+    # On Mac/Windows, use extra_hosts
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

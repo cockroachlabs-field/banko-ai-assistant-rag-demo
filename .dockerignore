@@ -1,19 +1,32 @@
-# Python
+# Python cache and build artifacts
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-*.egg-info/
-dist/
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
 *.egg
+MANIFEST
 
 # Virtual environments
 venv/
-env/
+.venv/
 ENV/
-.venv
+env/
+.env
 
 # IDE
 .vscode/
@@ -21,57 +34,50 @@ ENV/
 *.swp
 *.swo
 *~
+
+# OS
 .DS_Store
+Thumbs.db
 
 # Git
 .git/
 .gitignore
 .gitattributes
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.mypy_cache/
+# CI/CD
+.github/
 
-# Documentation (included in the image via specific COPY)
+# Documentation (keep only README)
+docs/
 *.md
 !README.md
-docs/
+!DOCKER.md
 
-# Environment files
-.env
-.env.*
+# Test files
+tests/
+test_*.py
+*_test.py
+pytest.ini
+.pytest_cache/
+
+# Local config
+config.py
 *.local
 
-# Logs
-*.log
-
-# Database files
+# Database
 *.db
 *.sqlite
 cockroach-data/
 
-# Cache files
-*.cache
-.cache/
-
-# CI/CD
-.github/
-.gitlab-ci.yml
-
 # Docker
-Dockerfile
 .dockerignore
 docker-compose*.yml
-# Keep docker-entrypoint.sh - it's needed in the image
-!docker-entrypoint.sh
+!docker-compose.yml
 
-# Scripts not needed in container
-scripts/watch-queries.sh
-start_demo_mode.sh
-start_production_mode.sh
+# Scripts
+scripts/
+old_files/
+scratchcode/
 
-# Test files
-test_*.py
+# Logs
+*.log
