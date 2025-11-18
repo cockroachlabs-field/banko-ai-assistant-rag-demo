@@ -96,11 +96,9 @@ echo -e "${YELLOW}→ Building Docker image for ${PLATFORMS}...${NC}"
 echo ""
 
 # Prepare build command
-BUILD_CMD="docker buildx build --platform ${PLATFORMS}"
-
 if [ "$PUSH" = true ]; then
-    echo -e "${GREEN}Building and pushing to Docker Hub...${NC}"
-    BUILD_CMD="${BUILD_CMD} --push"
+    echo -e "${GREEN}Building multi-arch and pushing to Docker Hub...${NC}"
+    BUILD_CMD="docker buildx build --platform ${PLATFORMS} --push"
     BUILD_CMD="${BUILD_CMD} -t ${DOCKER_REPO}:latest"
     BUILD_CMD="${BUILD_CMD} -t ${DOCKER_REPO}:${TIMESTAMP}"
     # If custom tag is provided and different from 'latest', add it
@@ -108,8 +106,9 @@ if [ "$PUSH" = true ]; then
         BUILD_CMD="${BUILD_CMD} -t ${DOCKER_REPO}:${TAG}"
     fi
 else
-    echo -e "${GREEN}Building locally (use --push to publish)...${NC}"
-    BUILD_CMD="${BUILD_CMD} --load"
+    echo -e "${GREEN}Building for local platform only (use --push for multi-arch)...${NC}"
+    echo -e "${YELLOW}Note: Local builds are single-platform. Use --push for multi-arch builds.${NC}"
+    BUILD_CMD="docker buildx build --load"
     BUILD_CMD="${BUILD_CMD} -t ${DOCKER_REPO}:${TAG}"
 fi
 
