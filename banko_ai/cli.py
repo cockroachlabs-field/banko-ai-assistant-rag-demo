@@ -373,7 +373,7 @@ This is a modern AI-powered expense analysis application with RAG capabilities.
 
 PREREQUISITES:
 --------------
-- CockroachDB v25.2.4+ (recommended: v25.4.0)
+- CockroachDB v25.2.4+ (recommended: v25.4.0 as Vector index is GA and enabled by default)
 - Vector index feature enabled: SET CLUSTER SETTING feature.vector_index.enabled = true;
 - Start single node: cockroach start-single-node --insecure --store=./cockroach-data --listen-addr=localhost:26257 --http-addr=localhost:8080 --background
 
