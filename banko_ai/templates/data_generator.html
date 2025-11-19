@@ -321,7 +321,16 @@
         function resetStats() {
             console.log('🔄 Resetting stats...');
             
-            // Reset all state variables
+            // First, tell backend to reset state
+            fetch('/api/reset-generation', { method: 'POST' })
+                .then(() => {
+                    console.log('✅ Backend state reset');
+                })
+                .catch(error => {
+                    console.error('Error resetting backend:', error);
+                });
+            
+            // Reset all frontend state variables
             currentRecords = 0;
             totalRecords = 0;
             startTime = null;
@@ -344,6 +353,7 @@
             updateStatus('Idle', 'text-gray-900', 'text-gray-400');
             
             console.log('✅ Reset complete');
+            addLog('🔄 Reset complete - ready for new generation', 'info');
         }
 
         function updateProgress(data) {

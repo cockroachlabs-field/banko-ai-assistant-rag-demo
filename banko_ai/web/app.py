@@ -1322,6 +1322,13 @@ def create_app() -> Flask:
         generation_state['should_stop'] = True
         return jsonify({'status': 'stopping'})
     
+    @app.route('/api/reset-generation', methods=['POST'])
+    def reset_generation():
+        """Reset generation state."""
+        generation_state['running'] = False
+        generation_state['should_stop'] = False
+        return jsonify({'status': 'reset'})
+    
     # Error handlers
     @app.errorhandler(404)
     def not_found(error):
