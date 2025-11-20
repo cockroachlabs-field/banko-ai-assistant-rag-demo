@@ -132,10 +132,8 @@ class AWSProvider(AIProvider):
         if self.db_engine is None:
             database_url = os.getenv("DATABASE_URL", "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
             try:
-                # Convert cockroachdb:// to postgresql:// for SQLAlchemy compatibility
-                db_url = database_url.replace("cockroachdb://", "postgresql://")
-                # Use resilient engine with connection pooling
-                self.db_engine = create_resilient_engine(db_url)
+                # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
+                self.db_engine = create_resilient_engine(database_url)
             except Exception as e:
                 raise AIConnectionError(f"Failed to connect to database: {str(e)}")
         return self.db_engine

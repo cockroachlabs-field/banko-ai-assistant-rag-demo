@@ -104,8 +104,8 @@ class WatsonxProvider(AIProvider):
             
             # Database connection with proper pooling
             DB_URI = os.getenv("DATABASE_URL", "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
-            db_url = DB_URI.replace("cockroachdb://", "postgresql://")
-            engine = create_resilient_engine(db_url)
+            # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
+            engine = create_resilient_engine(DB_URI)
             
             # Generate embedding with cache support
             if self.cache_manager:

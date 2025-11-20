@@ -28,21 +28,8 @@ from .db_retry import db_retry, create_resilient_engine
 # Database configuration
 DB_URI = os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
 
-# Apply CockroachDB version parsing workaround
-from sqlalchemy.dialects.postgresql.base import PGDialect
-original_get_server_version_info = PGDialect._get_server_version_info
-
-def patched_get_server_version_info(self, connection):
-    try:
-        return original_get_server_version_info(self, connection)
-    except Exception:
-        return (25, 3, 0)
-
-PGDialect._get_server_version_info = patched_get_server_version_info
-
-# Convert cockroachdb:// to postgresql:// for SQLAlchemy compatibility
-database_url = DB_URI.replace("cockroachdb://", "postgresql://")
-engine = create_resilient_engine(database_url)
+# Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
+engine = create_resilient_engine(DB_URI)
 
 class CustomJSONEncoder(json.JSONEncoder):
     """Custom JSON encoder to handle Decimal and UUID objects"""

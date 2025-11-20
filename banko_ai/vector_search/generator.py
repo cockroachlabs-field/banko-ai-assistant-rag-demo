@@ -33,8 +33,8 @@ class EnhancedExpenseGenerator:
     def engine(self):
         """Get SQLAlchemy engine with resilience settings (lazy import)."""
         if self._engine is None:
-            database_url = self.database_url.replace("cockroachdb://", "postgresql://")
-            self._engine = create_resilient_engine(database_url)
+            # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
+            self._engine = create_resilient_engine(self.database_url)
         return self._engine
     
     @property

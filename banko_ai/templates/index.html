@@ -1420,6 +1420,58 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         }
         
         setTimeout(() => {
+            if (selectedScenario.embedding === 'hit') {
+                window.dbManager.addOperation('💾 Cache', 'Embedding Cache: ✓ HIT', 'success');
+            } else {
+                window.dbManager.addOperation('💾 Cache', 'Embedding Cache: ✗ MISS', 'info');
+                window.dbManager.addOperation('🧮 Embedding', 'Generated 384-dim vector (23ms)', 'success');
+            }
+        }, 300);
+        
+        setTimeout(() => {
+            if (selectedScenario.vectorSearch === 'hit') {
+                window.dbManager.addOperation('💾 Cache', 'Vector Search Cache: ✓ HIT', 'success');
+            } else {
+                window.dbManager.addOperation('💾 Cache', 'Vector Search Cache: ✗ MISS', 'info');
+                window.dbManager.addOperation('🔍 Vector Search', 'Found 10 relevant expenses (45ms)', 'success');
+            }
+        }, 600);
+        
+        setTimeout(() => {
+            if (selectedScenario.response === 'hit') {
+                window.dbManager.addOperation('💾 Cache', 'Response Cache: ✓ HIT', 'success');
+                window.dbManager.addOperation('✅ Complete', 'Served from cache (0 tokens used)', 'success');
+            } else {
+                window.dbManager.addOperation('💾 Cache', 'Response Cache: ✗ MISS', 'info');
+                window.dbManager.addOperation('🤖 AI Call', 'OpenAI/gpt-4o-mini (1,234ms)', 'success');
+                window.dbManager.addOperation('✅ Complete', 'Response generated', 'success');
+            }
+        }, 900);
+            }
+            
+            simulateDatabaseOperations(message) {
+                window.dbManager.clearOperations();
+                window.dbManager.addOperation('📤 Query', `Processing: "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}"`, 'info');
+                
+        const cacheScenarios = [
+                    { embedding: 'miss', vectorSearch: 'miss', response: 'miss', probability: 0.4 },
+                    { embedding: 'hit', vectorSearch: 'miss', response: 'miss', probability: 0.3 },
+                    { embedding: 'hit', vectorSearch: 'hit', response: 'miss', probability: 0.2 },
+                    { embedding: 'hit', vectorSearch: 'hit', response: 'hit', probability: 0.1 }
+                ];
+                
+        const random = Math.random();
+        let cumulative = 0;
+        let selectedScenario = cacheScenarios[0];
+        for (const scenario of cacheScenarios) {
+            cumulative += scenario.probability;
+            if (random <= cumulative) {
+                selectedScenario = scenario;
+                break;
+            }
+        }
+        
+        setTimeout(() => {
             const embeddingStatus = selectedScenario.embedding === 'hit' ? '✅ CACHE HIT' : '❌ CACHE MISS';
             const embeddingType = selectedScenario.embedding === 'hit' ? 'success' : 'warning';
                     window.dbManager.addOperation('🔍 Embedding', `${embeddingStatus} - ${selectedScenario.embedding === 'hit' ? 'Using cached embedding' : 'Generating new embedding with SentenceTransformer'}`, embeddingType);

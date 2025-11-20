@@ -23,22 +23,9 @@ class VectorSearchEngine:
         self.database_url = database_url or os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
         self.cache_manager = cache_manager
         
-        # Apply version parsing workaround for CockroachDB
-        from sqlalchemy.dialects.postgresql.base import PGDialect
-        original_get_server_version_info = PGDialect._get_server_version_info
-        
-        def patched_get_server_version_info(self, connection):
-            try:
-                return original_get_server_version_info(self, connection)
-            except Exception:
-                return (25, 3, 0)
-        
-        PGDialect._get_server_version_info = patched_get_server_version_info
-        
-        # Convert cockroachdb:// to postgresql:// for SQLAlchemy compatibility
-        database_url = self.database_url.replace("cockroachdb://", "postgresql://")
+        # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
         self.engine = create_resilient_engine(
-            database_url,
+            self.database_url,
             pool_size=10,
             max_overflow=20
         )
@@ -109,14 +96,27 @@ class VectorSearchEngine:
         print(f"\n🔍 VECTOR SEARCH (with caching):")
         print(f"1. Query: '{query}' | Limit: {limit}")
         
+        tracker = get_current_tracker()
+        
         # Use cached embedding generation if available
         if self.cache_manager:
+            start_time = time.time()
             raw_embedding = self.cache_manager._get_embedding_with_cache(query)
+            embed_duration = (time.time() - start_time) * 1000
+            
+            # Track embedding (cache hit/miss is tracked in cache_manager)
+            if tracker:
+                tracker.add_embedding_generation(query, len(raw_embedding), embed_duration)
             
             # Check for cached vector search results
+            start_time = time.time()
             cached_results = self.cache_manager.get_cached_vector_search(raw_embedding, limit)
+            cache_duration = (time.time() - start_time) * 1000
+            
             if cached_results:
                 print(f"2. ✅ Vector search cache HIT! Found {len(cached_results)} cached results")
+                if tracker:
+                    tracker.add_cache_check('Vector Search', hit=True)
                 # Convert cached results to SearchResult objects
                 search_results = []
                 for result in cached_results[:limit]:
@@ -137,11 +137,17 @@ class VectorSearchEngine:
                     ))
                 return search_results
             print(f"2. ❌ Vector search cache MISS, querying database")
+            if tracker:
+                tracker.add_cache_check('Vector Search', hit=False)
         else:
             # Fallback to direct embedding generation
+            start_time = time.time()
             query_embedding = self.embedding_model.encode([query])[0]
+            embed_duration = (time.time() - start_time) * 1000
             raw_embedding = query_embedding
             print(f"2. Generated fresh embedding (no cache available)")
+            if tracker:
+                tracker.add_embedding_generation(query, len(raw_embedding), embed_duration)
         
         # Convert to PostgreSQL vector format (matching original implementation)
         import json
@@ -163,9 +169,11 @@ class VectorSearchEngine:
             params['user_id'] = user_id
 
         # Execute query
+        start_time = time.time()
         with self.engine.connect() as conn:
             result = conn.execute(text(sql), params)
             rows = result.fetchall()
+        query_duration = (time.time() - start_time) * 1000
         
         # Convert to SearchResult objects
         results = []
@@ -187,6 +195,8 @@ class VectorSearchEngine:
             ))
             
             print(f"3. Database query returned {len(results)} expense records")
+            if tracker:
+                tracker.add_vector_search(query, len(results), query_duration)
             
             # Cache the results for future use (convert back to dict format for caching)
             if self.cache_manager and results:

@@ -9,18 +9,6 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from flask_socketio import SocketIO
 from sqlalchemy import text
 
-# Apply CockroachDB version parsing workaround before any database imports
-from sqlalchemy.dialects.postgresql.base import PGDialect
-original_get_server_version_info = PGDialect._get_server_version_info
-
-def patched_get_server_version_info(self, connection):
-    try:
-        return original_get_server_version_info(self, connection)
-    except Exception:
-        return (25, 3, 0)
-
-PGDialect._get_server_version_info = patched_get_server_version_info
-
 from ..config.settings import get_config
 from ..ai_providers.factory import AIProviderFactory
 from ..vector_search.search import VectorSearchEngine
@@ -99,10 +87,8 @@ def check_database_connection(database_url: str):
         tuple: (success: bool, message: str, table_exists: bool, record_count: int)
     """
     try:
-        # Convert cockroachdb:// to postgresql:// for SQLAlchemy compatibility
-        db_url = database_url.replace("cockroachdb://", "postgresql://")
-        # Use resilient engine with connection pooling
-        engine = create_resilient_engine(db_url)
+        # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
+        engine = create_resilient_engine(database_url)
         
         with engine.connect() as conn:
             # Test basic connection
@@ -485,8 +471,8 @@ def create_app() -> Flask:
             print(f"🔍 /api/health called - config.ai_service: {config.ai_service}, provider: {provider_name}")
             
             # Check database connection with proper pooling
-            db_url = config.database_url.replace("cockroachdb://", "postgresql://")
-            engine = create_resilient_engine(db_url)
+            # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
+            engine = create_resilient_engine(config.database_url)
             with engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             
@@ -611,8 +597,8 @@ def create_app() -> Flask:
                     from sqlalchemy import text
                     import uuid
                     
-                    db_url = config.database_url.replace("cockroachdb://", "postgresql://")
-                    engine = create_resilient_engine(db_url)
+                    # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
+                    engine = create_resilient_engine(config.database_url)
                     
                     expense_id = str(uuid.uuid4())
                     

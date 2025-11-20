@@ -21,25 +21,9 @@ class DatabaseManager:
     def engine(self):
         """Get SQLAlchemy engine (lazy import)."""
         if self._engine is None:
-            from sqlalchemy.dialects.postgresql.base import PGDialect
-            
-            # Monkey patch version parsing to handle CockroachDB
-            original_get_server_version_info = PGDialect._get_server_version_info
-            
-            def patched_get_server_version_info(self, connection):
-                try:
-                    return original_get_server_version_info(self, connection)
-                except Exception:
-                    return (25, 3, 0)  # Return compatible version tuple
-            
-            PGDialect._get_server_version_info = patched_get_server_version_info
-            
-            # Convert cockroachdb:// to postgresql:// for SQLAlchemy compatibility
-            database_url = self.database_url.replace("cockroachdb://", "postgresql://")
-            
-            # Use resilient engine with proper connection pooling
+            # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
             self._engine = create_resilient_engine(
-                database_url,
+                self.database_url,
                 connect_args={
                     "options": "-c default_transaction_isolation=serializable"
                 }
