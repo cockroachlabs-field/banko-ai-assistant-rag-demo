@@ -40,7 +40,8 @@ class FraudAgent(BaseAgent):
         llm: Any,
         database_url: str,
         embedding_model: Any,
-        fraud_threshold: float = 0.75
+        fraud_threshold: float = 0.75,
+        duplicate_window_days: int = 60
     ):
         """
         Initialize Fraud Agent.
@@ -50,6 +51,7 @@ class FraudAgent(BaseAgent):
             llm: LangChain LLM instance
             database_url: CockroachDB connection string
             embedding_model: Sentence transformer model
+            duplicate_window_days: Days to look back for duplicates (60 for demo, 14 for production)
             fraud_threshold: Confidence threshold for escalation (0.0-1.0)
         """
         # Create tools
@@ -88,6 +90,7 @@ Be thorough but not overly cautious. False positives are costly."""
         
         self.embedding_model = embedding_model
         self.fraud_threshold = fraud_threshold
+        self.duplicate_window_days = duplicate_window_days
     
     def analyze_expense(self, expense_id: str) -> Dict[str, Any]:
         """
@@ -123,10 +126,13 @@ Be thorough but not overly cautious. False positives are costly."""
             user_id = expense['user_id']
             
             # Signal 1: Check for duplicates
+            # Note: Default 60-day window is for demo purposes with test data
+            # Production should use 7-14 days for true duplicate detection
+            # Configure via FRAUD_DUPLICATE_WINDOW_DAYS environment variable
             duplicate_result = self.execute_tool(
                 'find_duplicates',
                 user_id=user_id,
-                days=30
+                days=self.duplicate_window_days
             )
             duplicate_data = json.loads(duplicate_result)
             
@@ -140,6 +146,7 @@ Be thorough but not overly cautious. False positives are costly."""
                             'details': f"Duplicate transaction: {dup_group['count']} occurrences of ${dup_group['amount']} at {dup_group['merchant']}"
                         })
                         result['confidence'] += 0.4
+                        result['fraud_detected'] = True
                         break
             
             # Signal 2: Statistical anomaly detection

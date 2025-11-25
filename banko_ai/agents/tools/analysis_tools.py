@@ -260,6 +260,9 @@ def create_analysis_tools(database_url: str) -> List[Tool]:
             engine = create_engine(database_url, poolclass=NullPool)
             
             with engine.connect() as conn:
+                # Calculate cutoff date in Python (safer than SQL interval with parameter)
+                cutoff_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+                
                 result = conn.execute(text("""
                     WITH grouped AS (
                         SELECT 
@@ -271,14 +274,14 @@ def create_analysis_tools(database_url: str) -> List[Tool]:
                             ARRAY_AGG(description) as descriptions
                         FROM expenses
                         WHERE user_id = :user_id
-                        AND expense_date >= CURRENT_DATE - INTERVAL ':days days'
+                        AND expense_date >= :cutoff_date
                         GROUP BY merchant, expense_amount, DATE(expense_date)
                         HAVING COUNT(*) > 1
                     )
                     SELECT * FROM grouped
                     ORDER BY count DESC, expense_amount DESC
                     LIMIT 20
-                """), {'user_id': user_id, 'days': days})
+                """), {'user_id': user_id, 'cutoff_date': cutoff_date})
                 
                 duplicates = []
                 for row in result.fetchall():

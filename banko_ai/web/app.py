@@ -533,15 +533,42 @@ def create_app() -> Flask:
             # Initialize Receipt Agent
             try:
                 from banko_ai.agents.receipt_agent import ReceiptAgent
-                from langchain_openai import ChatOpenAI
                 from sentence_transformers import SentenceTransformer
                 import os
                 
-                llm = ChatOpenAI(
-                    model='gpt-4o-mini',
-                    api_key=os.getenv('OPENAI_API_KEY'),
-                    temperature=0.7
-                )
+                # Use configured AI provider instead of hardcoded OpenAI
+                if config.ai_service == 'openai':
+                    from langchain_openai import ChatOpenAI
+                    llm = ChatOpenAI(
+                        model=config.openai_model,
+                        api_key=os.getenv('OPENAI_API_KEY'),
+                        temperature=0.7
+                    )
+                elif config.ai_service == 'aws':
+                    from langchain_aws import ChatBedrock
+                    llm = ChatBedrock(
+                        model_id=config.aws_model,
+                        region_name=os.getenv('AWS_REGION', 'us-east-1'),
+                        model_kwargs={'temperature': 0.7}
+                    )
+                elif config.ai_service == 'watsonx':
+                    from langchain_ibm import WatsonxLLM
+                    llm = WatsonxLLM(
+                        model_id=config.watsonx_model,
+                        url=os.getenv('WATSONX_URL'),
+                        apikey=os.getenv('WATSONX_APIKEY'),
+                        project_id=os.getenv('WATSONX_PROJECT_ID'),
+                        params={'temperature': 0.7, 'max_new_tokens': 1000}
+                    )
+                elif config.ai_service == 'gemini':
+                    from langchain_google_genai import ChatGoogleGenerativeAI
+                    llm = ChatGoogleGenerativeAI(
+                        model=config.google_model,
+                        google_api_key=os.getenv('GOOGLE_API_KEY'),
+                        temperature=0.7
+                    )
+                else:
+                    raise ValueError(f"Unsupported AI service: {config.ai_service}")
                 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
                 
                 receipt_agent = ReceiptAgent(
@@ -714,20 +741,48 @@ def create_app() -> Flask:
                 fraud_result = "✅ No issues detected"
                 try:
                     from banko_ai.agents.fraud_agent import FraudAgent
-                    from langchain_openai import ChatOpenAI
                     
-                    fraud_llm = ChatOpenAI(
-                        model='gpt-4o-mini',
-                        api_key=os.getenv('OPENAI_API_KEY'),
-                        temperature=0.7
-                    )
+                    # Use configured AI provider instead of hardcoded OpenAI
+                    if config.ai_service == 'openai':
+                        from langchain_openai import ChatOpenAI
+                        fraud_llm = ChatOpenAI(
+                            model=config.openai_model,
+                            api_key=os.getenv('OPENAI_API_KEY'),
+                            temperature=0.7
+                        )
+                    elif config.ai_service == 'aws':
+                        from langchain_aws import ChatBedrock
+                        fraud_llm = ChatBedrock(
+                            model_id=config.aws_model,
+                            region_name=os.getenv('AWS_REGION', 'us-east-1'),
+                            model_kwargs={'temperature': 0.7}
+                        )
+                    elif config.ai_service == 'watsonx':
+                        from langchain_ibm import WatsonxLLM
+                        fraud_llm = WatsonxLLM(
+                            model_id=config.watsonx_model,
+                            url=os.getenv('WATSONX_URL'),
+                            apikey=os.getenv('WATSONX_APIKEY'),
+                            project_id=os.getenv('WATSONX_PROJECT_ID'),
+                            params={'temperature': 0.7, 'max_new_tokens': 1000}
+                        )
+                    elif config.ai_service == 'gemini':
+                        from langchain_google_genai import ChatGoogleGenerativeAI
+                        fraud_llm = ChatGoogleGenerativeAI(
+                            model=config.google_model,
+                            google_api_key=os.getenv('GOOGLE_API_KEY'),
+                            temperature=0.7
+                        )
+                    else:
+                        raise ValueError(f"Unsupported AI service: {config.ai_service}")
                     
                     fraud_agent = FraudAgent(
                         region='us-west-2',
                         llm=fraud_llm,
                         database_url=config.database_url,
                         embedding_model=embedding_model,
-                        fraud_threshold=0.7
+                        fraud_threshold=0.7,
+                        duplicate_window_days=config.fraud_duplicate_window_days
                     )
                     
                     print(f"🕵️  Running fraud check...")
@@ -744,13 +799,12 @@ def create_app() -> Flask:
                     except:
                         pass
                     
-                    fraud_check = fraud_agent.scan_recent_expenses(
-                        hours=24,
-                        limit=10
-                    )
+                    # Analyze the newly created expense for fraud
+                    fraud_check = fraud_agent.analyze_expense(expense_id)
                     
-                    if fraud_check.get('fraudulent_count', 0) > 0:
-                        fraud_result = f"⚠️  {fraud_check['fraudulent_count']} suspicious transactions"
+                    if fraud_check.get('fraud_detected', False):
+                        confidence = fraud_check.get('confidence', 0)
+                        fraud_result = f"⚠️  Suspicious transaction detected (confidence: {confidence:.0%})"
                     else:
                         fraud_result = "✅ No issues detected"
                     
@@ -777,11 +831,39 @@ def create_app() -> Flask:
                 try:
                     from banko_ai.agents.budget_agent import BudgetAgent
                     
-                    budget_llm = ChatOpenAI(
-                        model='gpt-4o-mini',
-                        api_key=os.getenv('OPENAI_API_KEY'),
-                        temperature=0.7
-                    )
+                    # Use configured AI provider instead of hardcoded OpenAI
+                    if config.ai_service == 'openai':
+                        from langchain_openai import ChatOpenAI
+                        budget_llm = ChatOpenAI(
+                            model=config.openai_model,
+                            api_key=os.getenv('OPENAI_API_KEY'),
+                            temperature=0.7
+                        )
+                    elif config.ai_service == 'aws':
+                        from langchain_aws import ChatBedrock
+                        budget_llm = ChatBedrock(
+                            model_id=config.aws_model,
+                            region_name=os.getenv('AWS_REGION', 'us-east-1'),
+                            model_kwargs={'temperature': 0.7}
+                        )
+                    elif config.ai_service == 'watsonx':
+                        from langchain_ibm import WatsonxLLM
+                        budget_llm = WatsonxLLM(
+                            model_id=config.watsonx_model,
+                            url=os.getenv('WATSONX_URL'),
+                            apikey=os.getenv('WATSONX_APIKEY'),
+                            project_id=os.getenv('WATSONX_PROJECT_ID'),
+                            params={'temperature': 0.7, 'max_new_tokens': 1000}
+                        )
+                    elif config.ai_service == 'gemini':
+                        from langchain_google_genai import ChatGoogleGenerativeAI
+                        budget_llm = ChatGoogleGenerativeAI(
+                            model=config.google_model,
+                            google_api_key=os.getenv('GOOGLE_API_KEY'),
+                            temperature=0.7
+                        )
+                    else:
+                        raise ValueError(f"Unsupported AI service: {config.ai_service}")
                     
                     budget_agent = BudgetAgent(
                         region='us-central-1',

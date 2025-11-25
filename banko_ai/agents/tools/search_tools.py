@@ -234,10 +234,10 @@ def create_search_tools(database_url: str, embedding_model) -> List[Tool]:
                     'expense_id': str(row[0]),
                     'user_id': str(row[1]),
                     'description': row[2],
-                    'amount': float(row[3]),
+                    'expense_amount': float(row[3]),
                     'merchant': row[4],
                     'category': row[5],
-                    'date': row[6].isoformat() if row[6] else None,
+                    'expense_date': row[6].isoformat() if row[6] else None,
                     'payment_method': row[7]
                 }
             

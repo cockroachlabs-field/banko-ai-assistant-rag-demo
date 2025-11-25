@@ -29,6 +29,9 @@ class Config:
     openai_model: str = "gpt-4o-mini"  # gpt-4o-mini (default), gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
+    
+    # Fraud Detection Configuration
+    fraud_duplicate_window_days: int = 60  # Days to look back for duplicates (60 for demo)
     aws_profile: Optional[str] = None
     aws_region: str = "us-east-1"
     aws_model: str = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"  # Claude models
@@ -118,6 +121,9 @@ class Config:
             watsonx_project_id=watsonx_project_id,
             watsonx_model=watsonx_model,
             google_project_id=os.getenv("GOOGLE_PROJECT_ID"),
+            
+            # Fraud Detection
+            fraud_duplicate_window_days=int(os.getenv("FRAUD_DUPLICATE_WINDOW_DAYS", "60")),
             google_location=os.getenv("GOOGLE_LOCATION", "us-central1"),
             google_model=os.getenv("GOOGLE_MODEL", "gemini-1.5-pro"),
             
