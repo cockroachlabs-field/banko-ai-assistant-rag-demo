@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS agent_memory (
 
 -- Vector index for semantic search
 CREATE INDEX IF NOT EXISTS idx_agent_memory_embedding 
-    ON agent_memory USING cspann (user_id, embedding vector_l2_ops);
+    ON agent_memory USING cspann (user_id, embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_agent_memory_agent 
     ON agent_memory (agent_id, memory_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_memory_user 
@@ -117,7 +117,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_user
 CREATE INDEX IF NOT EXISTS idx_conversations_session 
     ON conversations (session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_embedding 
-    ON conversations USING cspann (user_id, message_embedding vector_l2_ops);
+    ON conversations USING cspann (user_id, message_embedding vector_cosine_ops);
 
 -- Documents and receipts
 CREATE TABLE IF NOT EXISTS documents (
@@ -141,7 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_user
 CREATE INDEX IF NOT EXISTS idx_documents_status 
     ON documents (processing_status, created_at);
 CREATE INDEX IF NOT EXISTS idx_documents_embedding 
-    ON documents USING cspann (user_id, embedding vector_l2_ops);
+    ON documents USING cspann (user_id, embedding vector_cosine_ops);
 """
 
 

@@ -46,13 +46,15 @@ def create_search_tools(database_url: str, embedding_model) -> List[Tool]:
             # Generate embedding for query
             query_embedding = embedding_model.encode(query).tolist()
             
-            # Format embedding as array literal for CockroachDB
-            embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+            # Format embedding as JSON array for CockroachDB v25.4.0+
+            # No CAST needed with v25.4.0 GA
+            import json
+            embedding_json = json.dumps(query_embedding)
             
             engine = create_engine(database_url, poolclass=NullPool)
             
             with engine.connect() as conn:
-                # Build query
+                # Build query - v25.4.0 no longer requires CAST
                 sql = """
                     SELECT 
                         expense_id,
@@ -63,17 +65,18 @@ def create_search_tools(database_url: str, embedding_model) -> List[Tool]:
                         shopping_type,
                         expense_date,
                         payment_method,
-                        embedding <-> CAST(:embedding AS VECTOR(384)) as distance
+                        embedding <=> :embedding as distance
                     FROM expenses
                 """
                 
-                params = {'embedding': embedding_str, 'limit': limit}
+                params = {'embedding': embedding_json, 'limit': limit}
                 
                 if user_id:
                     sql += " WHERE user_id = :user_id"
                     params['user_id'] = user_id
                 
-                sql += " ORDER BY distance LIMIT :limit"
+                # Order by expression (not alias) for index usage
+                sql += " ORDER BY embedding <=> :embedding LIMIT :limit"
                 
                 result = conn.execute(text(sql), params)
                 rows = result.fetchall()

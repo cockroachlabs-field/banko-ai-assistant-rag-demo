@@ -458,7 +458,7 @@ Be concise but thorough in your responses."""
                         content,
                         metadata,
                         created_at,
-                        (embedding <-> :query_embedding::VECTOR) as distance
+                        (embedding <=> :query_embedding::VECTOR) as distance
                     FROM agent_memory
                     WHERE user_id = :user_id
                 """

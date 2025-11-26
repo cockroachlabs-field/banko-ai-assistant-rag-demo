@@ -337,7 +337,7 @@ class BankoCacheManager:
         if self.strict_mode:
             similarity_query = text("""
                 SELECT cache_id, query_text, response_text, response_tokens, prompt_tokens,
-                       query_embedding <-> :query_embedding as similarity_distance,
+                       query_embedding <=> :query_embedding as similarity_distance,
                        hit_count, expires_at,
                        expense_data_hash,
                        expires_at > now() as not_expired,
@@ -347,14 +347,14 @@ class BankoCacheManager:
                   AND expense_data_hash = :expense_hash
                   AND expires_at > now()
                   AND query_embedding IS NOT NULL
-                ORDER BY query_embedding <-> :query_embedding
+                ORDER BY query_embedding <=> :query_embedding
                 LIMIT 5
             """)
         else:
             # Lenient mode: match on similarity alone (ignore expense_hash)
             similarity_query = text("""
                 SELECT cache_id, query_text, response_text, response_tokens, prompt_tokens,
-                       query_embedding <-> :query_embedding as similarity_distance,
+                       query_embedding <=> :query_embedding as similarity_distance,
                        hit_count, expires_at,
                        expense_data_hash,
                        expires_at > now() as not_expired,
@@ -363,7 +363,7 @@ class BankoCacheManager:
                 WHERE ai_service = :ai_service 
                   AND expires_at > now()
                   AND query_embedding IS NOT NULL
-                ORDER BY query_embedding <-> :query_embedding
+                ORDER BY query_embedding <=> :query_embedding
                 LIMIT 5
             """)
         

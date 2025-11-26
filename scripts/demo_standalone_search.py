@@ -49,9 +49,9 @@ def search_expenses(query, limit=5):
             merchant,
             shopping_type,
             payment_method,
-            embedding <-> :search_embedding as similarity_score
+            embedding <=> :search_embedding as similarity_score
         FROM expenses
-        ORDER BY embedding <-> :search_embedding
+        ORDER BY embedding <=> :search_embedding
         LIMIT :limit
     """)
     

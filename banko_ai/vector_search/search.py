@@ -57,9 +57,9 @@ class VectorSearchEngine:
                 merchant,
                 shopping_type,
                 expense_amount,
-                embedding <-> :search_embedding as similarity_score
+                embedding <=> :search_embedding as similarity_score
             FROM expenses
-            ORDER BY embedding <-> :search_embedding
+            ORDER BY embedding <=> :search_embedding
             LIMIT :limit
         """)
         
@@ -232,14 +232,14 @@ class VectorSearchEngine:
             merchant,
             expense_amount,
             expense_date,
-            embedding <-> :search_embedding as similarity_score,
+            embedding <=> :search_embedding as similarity_score,
             shopping_type,
             payment_method,
             recurring,
             tags
         FROM expenses
         WHERE user_id = :user_id
-        ORDER BY embedding <-> :search_embedding
+        ORDER BY embedding <=> :search_embedding
         LIMIT :limit
         """
     
@@ -253,13 +253,13 @@ class VectorSearchEngine:
             merchant,
             expense_amount,
             expense_date,
-            embedding <-> :search_embedding as similarity_score,
+            embedding <=> :search_embedding as similarity_score,
             shopping_type,
             payment_method,
             recurring,
             tags
         FROM expenses
-        ORDER BY embedding <-> :search_embedding
+        ORDER BY embedding <=> :search_embedding
         LIMIT :limit
         """
     
@@ -455,7 +455,7 @@ class VectorSearchEngine:
                 merchant,
                 expense_amount,
                 expense_date,
-                1 - (embedding <-> %s) as similarity_score,
+                1 - (embedding <=> %s) as similarity_score,
                 shopping_type,
                 payment_method,
                 recurring,
