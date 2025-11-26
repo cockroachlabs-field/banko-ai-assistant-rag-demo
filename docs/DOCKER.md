@@ -6,12 +6,18 @@ Run Banko AI Assistant using Docker or Podman - no Python or pip installation re
 
 - **Docker** or **Podman** installed
 - **AI Provider API Key** (OpenAI, AWS Bedrock, IBM Watsonx, or Google Gemini)
+- **CockroachDB** (included in docker-compose, or use external database)
 
 ## 🚀 Quick Start
 
-### Option 1: Docker Compose (Recommended for Local Development)
+### Option 1: Docker Compose with Built-in Database (Easiest)
 
-This starts both CockroachDB and Banko AI in containers.
+This starts both CockroachDB and Banko AI in containers - perfect for testing and demos.
+
+**This will start:**
+- CockroachDB (database) on port 26257
+- CockroachDB Admin UI on port 8080
+- Banko AI web app on port 5000
 
 1. **Create environment file:**
 
@@ -19,16 +25,16 @@ This starts both CockroachDB and Banko AI in containers.
 # Copy the example and edit with your credentials
 cat > .env << 'EOF'
 # Choose your AI provider
-AI_SERVICE=watsonx
+AI_SERVICE=openai
 
-# IBM Watsonx credentials
-WATSONX_API_KEY=your_api_key_here
-WATSONX_PROJECT_ID=your_project_id_here
-WATSONX_MODEL_ID=meta-llama/llama-2-70b-chat
+# OpenAI credentials
+OPENAI_API_KEY=your_openai_key_here
+OPENAI_MODEL=gpt-4o-mini
 
-# OpenAI credentials (if using OpenAI)
-# OPENAI_API_KEY=your_openai_key
-# OPENAI_MODEL=gpt-4o-mini
+# IBM Watsonx credentials (if using Watsonx)
+# WATSONX_API_KEY=your_api_key_here
+# WATSONX_PROJECT_ID=your_project_id_here
+# WATSONX_MODEL_ID=openai/gpt-oss-120b
 
 # AWS Bedrock credentials (if using AWS)
 # AWS_ACCESS_KEY_ID=your_access_key
@@ -69,17 +75,30 @@ docker-compose down -v
    - Web Interface: http://localhost:5000
    - CockroachDB Admin UI: http://localhost:8080
 
-### Option 2: Using Pre-built Image from Docker Hub
+### Option 2: Standalone Mode (Use External CockroachDB)
 
-Perfect for production or when you want to use the latest published image.
+Use this when you already have a CockroachDB instance running (local or cloud).
 
-1. **Pull the image:**
+**Using docker-compose (recommended):**
+
+```bash
+# Use the standalone compose file
+docker-compose -f docker-compose.standalone.yml up -d
+
+# Set your database URL
+export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
+
+# Restart to apply
+docker-compose -f docker-compose.standalone.yml restart
+```
+
+**Or pull and run directly:**
 
 ```bash
 docker pull virag/banko-ai-assistant:latest
 ```
 
-2. **Run with external CockroachDB:**
+**Run with external CockroachDB:**
 
 ```bash
 # Start CockroachDB separately (if not already running)
@@ -92,35 +111,62 @@ docker run -d \
 # Wait for CockroachDB to be ready
 sleep 10
 
-# Enable vector index feature
-docker exec cockroachdb \
-  ./cockroach sql --insecure \
-  --execute="SET CLUSTER SETTING feature.vector_index.enabled = true;"
-
-# Run Banko AI
+# Run Banko AI (connected to external CockroachDB)
 docker run -d \
   --name banko-ai \
   -p 5000:5000 \
-  -e DATABASE_URL="cockroachdb://root@cockroachdb:26257/defaultdb?sslmode=disable" \
-  -e AI_SERVICE="watsonx" \
-  -e WATSONX_API_KEY="your_api_key" \
-  -e WATSONX_PROJECT_ID="your_project_id" \
-  --link cockroachdb \
+  -e DATABASE_URL="cockroachdb://root@host.docker.internal:26257/defaultdb?sslmode=disable" \
+  -e AI_SERVICE="openai" \
+  -e OPENAI_API_KEY="your_api_key" \
+  --add-host=host.docker.internal:host-gateway \
   virag/banko-ai-assistant:latest
 ```
 
-3. **Access the application:**
-   - http://localhost:5000
-
-### Option 3: Build and Run Locally
-
-Build your own image from source.
+**Connect to Cloud CockroachDB:**
 
 ```bash
-# Build the image
-docker build -t banko-ai-assistant:local .
+docker run -d \
+  --name banko-ai \
+  -p 5000:5000 \
+  -e DATABASE_URL="cockroachdb://user:password@your-cluster.cockroachlabs.cloud:26257/banko_ai?sslmode=verify-full" \
+  -e AI_SERVICE="openai" \
+  -e OPENAI_API_KEY="your_api_key" \
+  virag/banko-ai-assistant:latest
+```
 
-# Run with docker-compose (edit docker-compose.yml to use local image)
+**Access the application:** http://localhost:5000
+
+### Option 3: Build Multi-Architecture Image
+
+Build for both AMD64 and ARM64 (for production deployment).
+
+```bash
+# Setup buildx (one-time)
+docker buildx create --name multiarch --use
+docker buildx inspect --bootstrap
+
+# Build for multiple architectures
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t virag/banko-ai-assistant:latest \
+  --push \
+  .
+
+# Or build locally without pushing
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t banko-ai-assistant:local \
+  --load \
+  .
+```
+
+**Test locally before pushing:**
+
+```bash
+# Build for your architecture
+docker build -t banko-ai-assistant:test .
+
+# Test with docker-compose
 docker-compose up -d
 ```
 
