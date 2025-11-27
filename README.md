@@ -13,7 +13,7 @@ An AI-powered expense analysis application demonstrating Retrieval-Augmented Gen
 
 ## Architecture
 
-![Banko AI Architecture](banko_ai/static/banko-ai-architecture.png)
+![Banko AI Architecture](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/banko-ai-architecture.png)
 
 The application uses a five-layer architecture designed for scalability, flexibility, and intelligent data processing:
 
