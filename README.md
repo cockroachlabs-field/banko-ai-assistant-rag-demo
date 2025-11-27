@@ -114,7 +114,7 @@ banko-ai run
 
 ### Prerequisites
 
-- **Python 3.8+** (if not using Docker)
+- **Python 3.10+** (if not using Docker)
 - **CockroachDB v25.4.0+** (with vector index support)
 - **AI Provider API Key** (OpenAI, AWS, IBM Watsonx, or Google Gemini)
 
