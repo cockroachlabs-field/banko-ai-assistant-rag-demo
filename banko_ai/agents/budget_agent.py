@@ -10,8 +10,8 @@ This agent:
 """
 
 import json
-from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
+from typing import Any
 
 from langchain_core.tools import Tool
 
@@ -88,8 +88,8 @@ Be helpful and non-judgmental. Focus on solutions, not problems."""
         self,
         user_id: str,
         monthly_budget: float,
-        category: Optional[str] = None
-    ) -> Dict[str, Any]:
+        category: str | None = None
+    ) -> dict[str, Any]:
         """
         Check current budget status for a user.
         
@@ -103,7 +103,6 @@ Be helpful and non-judgmental. Focus on solutions, not problems."""
         """
         self.update_status("thinking", {"action": "check_budget", "user_id": user_id})
         
-        from datetime import datetime
         from sqlalchemy import create_engine, text
         from sqlalchemy.pool import NullPool
         
@@ -171,7 +170,7 @@ Be helpful and non-judgmental. Focus on solutions, not problems."""
                 result['alert_level'] = 'critical'
                 result['status'] = 'over_budget'
                 result['recommendation'].append(f"❌ OVER BUDGET: You've spent ${current_spend:.2f} of ${monthly_budget:.2f}")
-                result['recommendation'].append(f"Stop non-essential spending immediately")
+                result['recommendation'].append("Stop non-essential spending immediately")
             
             elif percent_of_budget >= (self.alert_threshold * 100):
                 result['alert'] = True
@@ -297,8 +296,8 @@ Provide 2-3 specific, actionable recommendations. Be concise and practical."""
     
     def monitor_users(
         self,
-        budget_configs: Dict[str, float]
-    ) -> Dict[str, Any]:
+        budget_configs: dict[str, float]
+    ) -> dict[str, Any]:
         """
         Monitor multiple users' budgets (autonomous worker mode).
         
@@ -345,7 +344,7 @@ Provide 2-3 specific, actionable recommendations. Be concise and practical."""
         self,
         user_id: str,
         days_ahead: int = 30
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Forecast future spending based on historical trends.
         
@@ -358,7 +357,7 @@ Provide 2-3 specific, actionable recommendations. Be concise and practical."""
         """
         self.update_status("thinking", {"action": "forecast", "user_id": user_id})
         
-        from datetime import datetime, timedelta
+        from datetime import timedelta
         
         result = {
             'user_id': user_id,

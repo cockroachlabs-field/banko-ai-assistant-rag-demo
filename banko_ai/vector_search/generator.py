@@ -6,19 +6,21 @@ for improved vector search accuracy.
 """
 
 import os
-import uuid
 import random
+import uuid
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import Any
 
-from .enrichment import DataEnricher
+from sqlalchemy import text
+
 from ..utils.db_retry import create_resilient_engine
+from .enrichment import DataEnricher
 
 
 class EnhancedExpenseGenerator:
     """Enhanced expense generator with data enrichment for better vector search."""
     
-    def __init__(self, database_url: Optional[str] = None):
+    def __init__(self, database_url: str | None = None):
         """Initialize the enhanced expense generator."""
         self.database_url = database_url or os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
         self._engine = None
@@ -41,8 +43,9 @@ class EnhancedExpenseGenerator:
     def embedding_model(self):
         """Get embedding model (lazy import)."""
         if self._embedding_model is None:
-            from sentence_transformers import SentenceTransformer
             import os
+
+            from sentence_transformers import SentenceTransformer
             # Use configurable embedding model from environment or default
             embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
             self._embedding_model = SentenceTransformer(embedding_model_name)
@@ -150,7 +153,7 @@ class EnhancedExpenseGenerator:
         ]
         self._user_ids = [str(uuid.uuid4()) for _ in range(100)]  # Generate 100 user IDs
     
-    def generate_expense(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+    def generate_expense(self, user_id: str | None = None) -> dict[str, Any]:
         """Generate a single enriched expense record that matches the original CSV format."""
         # Select category and get associated data
         category = random.choice(list(self.categories.keys()))
@@ -166,7 +169,7 @@ class EnhancedExpenseGenerator:
         item = random.choice(category_data["items"])
         
         # Generate basic description
-        basic_description = f"Bought {item.lower()}"
+        f"Bought {item.lower()}"
         
         # Generate date (last 90 days)
         days_ago = random.randint(0, 90)
@@ -201,7 +204,7 @@ class EnhancedExpenseGenerator:
             "searchable_text": searchable_text  # Store for debugging
         }
     
-    def generate_expenses(self, count: int, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def generate_expenses(self, count: int, user_id: str | None = None) -> list[dict[str, Any]]:
         """Generate multiple enriched expense records with batch embedding for performance."""
         import time
         print(f"🚀 Generating {count} expense records with batch embedding...")
@@ -250,7 +253,7 @@ class EnhancedExpenseGenerator:
         
         return expenses
     
-    def _generate_expense_without_embedding(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+    def _generate_expense_without_embedding(self, user_id: str | None = None) -> dict[str, Any]:
         """Generate a single expense record WITHOUT embedding (for batch processing)."""
         # Select category and get associated data
         category = random.choice(list(self.categories.keys()))
@@ -263,7 +266,7 @@ class EnhancedExpenseGenerator:
         amount = round(random.uniform(*category_data["amount_range"]), 2)
         
         # Select item from category items
-        item = random.choice(category_data["items"])
+        random.choice(category_data["items"])
         
         # Generate date (last 90 days)
         days_ago = random.randint(0, 90)
@@ -293,12 +296,14 @@ class EnhancedExpenseGenerator:
             "searchable_text": searchable_text
         }
     
-    def save_expenses_to_database(self, expenses: List[Dict[str, Any]]) -> int:
+    def save_expenses_to_database(self, expenses: list[dict[str, Any]]) -> int:
         """Save expenses to the database with retry logic for CockroachDB and multi-region failover."""
-        import pandas as pd
-        import time
         import random
-        from sqlalchemy.exc import OperationalError, DBAPIError
+        import time
+
+        import pandas as pd
+        from sqlalchemy.exc import DBAPIError, OperationalError
+
         from ..utils.db_retry import is_transient_error
         
         # Prepare data for insertion
@@ -387,10 +392,12 @@ class EnhancedExpenseGenerator:
     
     def clear_expenses(self) -> bool:
         """Clear all expenses from the database with retry logic."""
-        import time
         import random
+        import time
+
         from sqlalchemy import text
-        from sqlalchemy.exc import OperationalError, DBAPIError
+        from sqlalchemy.exc import DBAPIError, OperationalError
+
         from ..utils.db_retry import is_transient_error
         
         max_retries = 10  # Increased for multi-region scenarios
@@ -450,8 +457,9 @@ class EnhancedExpenseGenerator:
     
     def _ensure_tables_exist(self):
         """Ensure database tables exist with correct schema."""
-        from ..utils.database import DatabaseManager
         from sqlalchemy import text
+
+        from ..utils.database import DatabaseManager
         
         print("   Checking expenses table schema...")
         db_manager = DatabaseManager(self.database_url)
@@ -471,11 +479,11 @@ class EnhancedExpenseGenerator:
                     data_type = row[2] if row[2] else row[1]  # Use udt_name first
                     print(f"   ✓ embedding column type: {data_type}")
                     if 'vector' not in data_type.lower():
-                        print(f"\n❌ ERROR: expenses table has WRONG schema!")
+                        print("\n❌ ERROR: expenses table has WRONG schema!")
                         print(f"   embedding column is '{data_type}', should be 'VECTOR(384)'")
-                        print(f"   This will cause vector search to fail!")
-                        print(f"\n   To fix, run: DROP TABLE expenses CASCADE;")
-                        print(f"   Then re-run this command.\n")
+                        print("   This will cause vector search to fail!")
+                        print("\n   To fix, run: DROP TABLE expenses CASCADE;")
+                        print("   Then re-run this command.\n")
                         raise Exception(f"Invalid schema: embedding is {data_type}, not VECTOR(384)")
                 else:
                     print("   ⚠️  embedding column not found!")
@@ -493,7 +501,7 @@ class EnhancedExpenseGenerator:
     def generate_and_save(
         self, 
         count: int, 
-        user_id: Optional[str] = None, 
+        user_id: str | None = None, 
         clear_existing: bool = False
     ) -> int:
         """Generate and save expenses to the database."""

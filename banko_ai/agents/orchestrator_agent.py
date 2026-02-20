@@ -11,8 +11,8 @@ This agent:
 
 import json
 import uuid
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from typing import Any
 
 from langchain_core.tools import Tool
 
@@ -42,7 +42,7 @@ class OrchestratorAgent(BaseAgent):
         region: str,
         llm: Any,
         database_url: str,
-        available_agents: Optional[Dict[str, BaseAgent]] = None
+        available_agents: dict[str, BaseAgent] | None = None
     ):
         """
         Initialize Orchestrator Agent.
@@ -115,7 +115,7 @@ IMPORTANT: Only use methods that are explicitly listed above. Don't make up meth
         self.available_agents[agent_type] = agent
         print(f"   ✅ Registered {agent_type} agent with orchestrator")
     
-    def plan_workflow(self, user_request: str, context: Optional[Dict] = None) -> Dict[str, Any]:
+    def plan_workflow(self, user_request: str, context: dict | None = None) -> dict[str, Any]:
         """
         Plan a workflow to handle the user's request.
         
@@ -187,8 +187,8 @@ Example:
     def execute_workflow(
         self,
         user_request: str,
-        context: Optional[Dict] = None
-    ) -> Dict[str, Any]:
+        context: dict | None = None
+    ) -> dict[str, Any]:
         """
         Plan and execute a complete workflow.
         
@@ -304,9 +304,9 @@ Example:
         self,
         agent_type: str,
         action: str,
-        params: Dict[str, Any],
-        dependencies: Dict[int, Any]
-    ) -> Dict[str, Any]:
+        params: dict[str, Any],
+        dependencies: dict[int, Any]
+    ) -> dict[str, Any]:
         """
         Execute an action on a specific agent.
         
@@ -357,9 +357,9 @@ Example:
     def _synthesize_results(
         self,
         user_request: str,
-        step_results: Dict[int, Any],
-        context: Optional[Dict]
-    ) -> Dict[str, Any]:
+        step_results: dict[int, Any],
+        context: dict | None
+    ) -> dict[str, Any]:
         """
         Synthesize results from multiple steps into final response.
         
@@ -403,7 +403,7 @@ Be conversational and helpful."""
                 'error': str(e)
             }
     
-    def get_agent_status(self) -> Dict[str, Any]:
+    def get_agent_status(self) -> dict[str, Any]:
         """
         Get status of all registered agents.
         

@@ -18,21 +18,23 @@ Author: Banko AI Team
 Date: 2025
 """
 
-import os
-import requests
 import json
+import os
+from typing import Any
+
 import numpy as np
-from typing import List, Optional, Dict, Any
-from sqlalchemy.exc import OperationalError, DBAPIError
 import psycopg2
-from ..ai_providers.base import AIProvider, RAGResponse, SearchResult, AIConnectionError
-from ..utils.db_retry import db_retry, create_resilient_engine, TRANSIENT_ERRORS
+import requests
+from sqlalchemy.exc import DBAPIError, OperationalError
+
+from ..ai_providers.base import AIConnectionError, AIProvider, RAGResponse, SearchResult
+from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry
 
 
 class WatsonxProvider(AIProvider):
     """IBM Watsonx AI Provider implementation."""
     
-    def __init__(self, config: Dict[str, Any] = None, cache_manager=None):
+    def __init__(self, config: dict[str, Any] = None, cache_manager=None):
         """Initialize Watsonx provider with configuration."""
         if config is None:
             config = {}
@@ -72,7 +74,7 @@ class WatsonxProvider(AIProvider):
         """Get the default model for Watsonx."""
         return 'openai/gpt-oss-120b'
     
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> list[float]:
         """Generate embedding vector for the given text."""
         try:
             from sentence_transformers import SentenceTransformer
@@ -87,20 +89,21 @@ class WatsonxProvider(AIProvider):
     def search_expenses(
         self, 
         query: str, 
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         limit: int = 10,
         threshold: float = 0.7
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Search for expenses using vector similarity with caching."""
         try:
-            print(f"\n🔍 WATSONX VECTOR SEARCH (with caching):")
+            print("\n🔍 WATSONX VECTOR SEARCH (with caching):")
             print(f"1. Query: '{query}' | Limit: {limit}")
             
             # Use the same simple search logic as the original watsonx.py
+            import json
+
+            import numpy as np
             from sentence_transformers import SentenceTransformer
             from sqlalchemy import text
-            import json
-            import numpy as np
             
             # Database connection with proper pooling
             DB_URI = os.getenv("DATABASE_URL", "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
@@ -110,7 +113,7 @@ class WatsonxProvider(AIProvider):
             # Generate embedding with cache support
             if self.cache_manager:
                 raw_embedding = self.cache_manager._get_embedding_with_cache(query)
-                print(f"2. Embedding generated (with cache support)")
+                print("2. Embedding generated (with cache support)")
                 
                 # Check vector_search_cache for cached results
                 cached_results = self.cache_manager.get_cached_vector_search(raw_embedding, limit)
@@ -144,11 +147,11 @@ class WatsonxProvider(AIProvider):
                             }
                         ))
                     return results_list
-                print(f"3. ❌ Vector search cache MISS, querying database")
+                print("3. ❌ Vector search cache MISS, querying database")
             else:
                 model = SentenceTransformer(self.embedding_model_name)
                 raw_embedding = model.encode(query)
-                print(f"2. Embedding generated (no cache available)")
+                print("2. Embedding generated (no cache available)")
             
             search_embedding = json.dumps(raw_embedding.flatten().tolist())
             
@@ -238,7 +241,7 @@ class WatsonxProvider(AIProvider):
             print(f"Error in search_expenses: {e}")
             raise AIConnectionError(f"Search failed: {str(e)}")
     
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """Get list of available Watsonx models."""
         # Only include models that are actually supported by Watsonx API
         return [
@@ -268,7 +271,7 @@ class WatsonxProvider(AIProvider):
             # than making a full API call for status checks
             access_token = self._get_access_token()
             return access_token is not None
-        except Exception as e:
+        except Exception:
             # If token request fails, the connection is not available
             return False
     
@@ -335,7 +338,7 @@ class WatsonxProvider(AIProvider):
         except Exception as e:
             raise Exception(f"Watsonx API call failed: {str(e)}")
     
-    def _get_financial_insights(self, search_results: List[SearchResult]) -> dict:
+    def _get_financial_insights(self, search_results: list[SearchResult]) -> dict:
         """Generate comprehensive financial insights from expense data (copied from original)."""
         if not search_results:
             return {}
@@ -400,13 +403,13 @@ class WatsonxProvider(AIProvider):
         
         return "\n".join(recommendations) if recommendations else ""
     
-    def simple_rag_response(self, prompt: str, search_results: List[Dict[str, Any]]) -> str:
+    def simple_rag_response(self, prompt: str, search_results: list[dict[str, Any]]) -> str:
         """
         Simple RAG response that matches the original implementation exactly.
         Takes a prompt and list of dictionaries (like original search results).
         """
         try:
-            print(f"\n🤖 SIMPLE WATSONX RAG:")
+            print("\n🤖 SIMPLE WATSONX RAG:")
             print(f"1. Query: '{prompt[:60]}...'")
             
             # Check for cached response first
@@ -415,11 +418,11 @@ class WatsonxProvider(AIProvider):
                     prompt, search_results, "watsonx"
                 )
                 if cached_response:
-                    print(f"2. ✅ Response cache HIT! Returning cached response")
+                    print("2. ✅ Response cache HIT! Returning cached response")
                     return cached_response
-                print(f"2. ❌ Response cache MISS, generating fresh response")
+                print("2. ❌ Response cache MISS, generating fresh response")
             else:
-                print(f"2. No cache manager available, generating fresh response")
+                print("2. No cache manager available, generating fresh response")
             
             # Generate financial insights and categorization analysis (matching original)
             insights = self._get_financial_insights_from_dicts(search_results)
@@ -435,7 +438,7 @@ class WatsonxProvider(AIProvider):
                 
                 # Add financial summary (matching original)
                 if insights:
-                    search_results_text += f"\n\n**📊 Financial Summary:**\n"
+                    search_results_text += "\n\n**📊 Financial Summary:**\n"
                     search_results_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
                     search_results_text += f"• Number of Transactions: **{insights['num_transactions']}**\n"
                     search_results_text += f"• Average Transaction: **${insights['avg_transaction']:.2f}**\n"
@@ -466,9 +469,9 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
             ]
             
             # Call Watsonx API (matching original implementation)
-            print(f"3. 🔄 Calling Watsonx API...")
+            print("3. 🔄 Calling Watsonx API...")
             response = self._call_watsonx_api(messages)
-            print(f"4. ✅ Watsonx response generated successfully")
+            print("4. ✅ Watsonx response generated successfully")
             
             # Cache the response for future similar queries
             if self.cache_manager and response:
@@ -506,7 +509,7 @@ export AI_SERVICE=aws
             else:
                 return f"I apologize, but I'm experiencing technical difficulties with IBM Watsonx AI. Please try again later or consider switching to AWS Bedrock. (Error: {str(e)})"
     
-    def _get_financial_insights_from_dicts(self, search_results: List[Dict[str, Any]]) -> dict:
+    def _get_financial_insights_from_dicts(self, search_results: list[dict[str, Any]]) -> dict:
         """Generate financial insights from dictionary format (matching original)."""
         if not search_results:
             return {}
@@ -540,7 +543,7 @@ export AI_SERVICE=aws
     def rag_response(
         self,
         query: str,
-        context: List[SearchResult],
+        context: list[SearchResult],
         language: str = "en"
     ) -> str:
         """Generate a RAG response using Watsonx API (copied from original working implementation)."""
@@ -605,7 +608,7 @@ I couldn't find any relevant expense records for your query. Please try:
                         
                         # Add financial summary (copied from original)
                         if insights:
-                            search_results_text += f"\n\n**📊 Financial Summary:**\n"
+                            search_results_text += "\n\n**📊 Financial Summary:**\n"
                             search_results_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
                             search_results_text += f"• Number of Transactions: **{insights['num_transactions']}**\n"
                             search_results_text += f"• Average Transaction: **${insights['avg_transaction']:.2f}**\n"
@@ -670,13 +673,13 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
     def generate_rag_response(
         self,
         query: str,
-        context: List[SearchResult],
-        user_id: Optional[str] = None,
+        context: list[SearchResult],
+        user_id: str | None = None,
         language: str = "en"
     ) -> RAGResponse:
         """Generate a RAG response using Watsonx API (copied from original working implementation)."""
         try:
-            print(f"\n🤖 WATSONX RAG (with caching):")
+            print("\n🤖 WATSONX RAG (with caching):")
             print(f"1. Query: '{query[:60]}...'")
             
             # Check for cached response first
@@ -702,7 +705,7 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                     query, search_results_dict, "watsonx"
                 )
                 if cached_response:
-                    print(f"2. ✅ Response cache HIT! Returning cached response")
+                    print("2. ✅ Response cache HIT! Returning cached response")
                     return RAGResponse(
                         response=cached_response,
                         sources=context,
@@ -714,9 +717,9 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                             'cached': True
                         }
                     )
-                print(f"2. ❌ Response cache MISS, generating fresh response")
+                print("2. ❌ Response cache MISS, generating fresh response")
             else:
-                print(f"2. No cache manager available, generating fresh response")
+                print("2. No cache manager available, generating fresh response")
             
             # Initialize ai_response to avoid variable scope issues
             ai_response = ""
@@ -797,7 +800,7 @@ I couldn't find any relevant expense records for your query. Please try:
                         
                         # Add financial summary (copied from original)
                         if insights:
-                            search_results_text += f"\n\n**📊 Financial Summary:**\n"
+                            search_results_text += "\n\n**📊 Financial Summary:**\n"
                             search_results_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
                             search_results_text += f"• Number of Transactions: **{insights['num_transactions']}**\n"
                             search_results_text += f"• Average Transaction: **${insights['avg_transaction']:.2f}**\n"

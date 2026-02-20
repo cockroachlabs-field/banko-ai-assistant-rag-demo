@@ -5,6 +5,7 @@ This matches the original app.py behavior.
 
 if __name__ == '__main__':
     import os
+
     from .web.app import create_app
     
     print("🏦 === Banko AI Assistant Starting === 🏦")

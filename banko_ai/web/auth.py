@@ -5,7 +5,8 @@ This module provides simple user authentication for the Banko AI Assistant.
 """
 
 import uuid
-from typing import Optional, Dict, Any
+from typing import Any
+
 from flask import session
 
 
@@ -36,11 +37,11 @@ class UserManager:
         }
         return user_id
     
-    def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
+    def get_user(self, user_id: str) -> dict[str, Any] | None:
         """Get user by ID."""
         return self.users.get(user_id)
     
-    def get_current_user(self) -> Optional[Dict[str, Any]]:
+    def get_current_user(self) -> dict[str, Any] | None:
         """Get current user from session."""
         user_id = session.get('user_id')
         if user_id:

@@ -4,8 +4,10 @@ Command-line interface for Banko AI Assistant.
 This module provides CLI commands for running the application and managing data.
 """
 
-import click
 import os
+
+import click
+
 from .config.settings import get_config
 from .vector_search.generator import EnhancedExpenseGenerator
 from .web.app import create_app
@@ -61,7 +63,7 @@ def run(host, port, debug, generate_data, no_data, clear_data, background):
         else:
             click.echo(f"🔧 {ai_service} Available: False")
             click.echo(f"⚠️  {ai_service} running in demo mode")
-    except Exception as e:
+    except Exception:
         click.echo(f"🔧 {ai_service} Available: False")
         click.echo(f"⚠️  {ai_service} running in demo mode")
     
@@ -310,7 +312,7 @@ def start(host, port, generate_data, no_data, clear_data):
         else:
             click.echo(f"🔧 {ai_service} Available: False")
             click.echo(f"⚠️  {ai_service} running in demo mode")
-    except Exception as e:
+    except Exception:
         click.echo(f"🔧 {ai_service} Available: False")
         click.echo(f"⚠️  {ai_service} running in demo mode")
     

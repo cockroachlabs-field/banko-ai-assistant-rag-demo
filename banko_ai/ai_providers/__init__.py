@@ -1,11 +1,11 @@
 """AI provider implementations for Banko AI Assistant."""
 
-from .base import AIProvider, AIProviderError
-from .openai_provider import OpenAIProvider
 from .aws_provider import AWSProvider
-from .watsonx_provider import WatsonxProvider
-from .gemini_provider import GeminiProvider
+from .base import AIProvider, AIProviderError
 from .factory import AIProviderFactory
+from .gemini_provider import GeminiProvider
+from .openai_provider import OpenAIProvider
+from .watsonx_provider import WatsonxProvider
 
 __all__ = [
     "AIProvider",

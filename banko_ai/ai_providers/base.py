@@ -5,8 +5,8 @@ This module defines the abstract base class for AI providers and common error ha
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from typing import Any
 
 
 class AIProviderError(Exception):
@@ -39,21 +39,21 @@ class SearchResult:
     amount: float
     date: str
     similarity_score: float
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 @dataclass
 class RAGResponse:
     """Response from RAG (Retrieval-Augmented Generation) query."""
     response: str
-    sources: List[SearchResult]
-    metadata: Dict[str, Any]
+    sources: list[SearchResult]
+    metadata: dict[str, Any]
 
 
 class AIProvider(ABC):
     """Abstract base class for AI providers."""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initialize the AI provider with configuration."""
         self.config = config
         self.current_model = config.get("model", self.get_default_model())
@@ -68,10 +68,10 @@ class AIProvider(ABC):
     def search_expenses(
         self, 
         query: str, 
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         limit: int = 10,
         threshold: float = 0.7
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """
         Search for expenses using vector similarity.
         
@@ -90,8 +90,8 @@ class AIProvider(ABC):
     def generate_rag_response(
         self, 
         query: str, 
-        context: List[SearchResult],
-        user_id: Optional[str] = None,
+        context: list[SearchResult],
+        user_id: str | None = None,
         language: str = "en"
     ) -> RAGResponse:
         """
@@ -109,7 +109,7 @@ class AIProvider(ABC):
         pass
     
     @abstractmethod
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> list[float]:
         """
         Generate embedding vector for the given text.
         
@@ -135,7 +135,7 @@ class AIProvider(ABC):
         """Get the name of this AI provider."""
         return self.__class__.__name__.replace("Provider", "").lower()
     
-    def get_provider_info(self) -> Dict[str, Any]:
+    def get_provider_info(self) -> dict[str, Any]:
         """Get provider information and status."""
         return {
             "name": self.get_provider_name(),
@@ -149,7 +149,7 @@ class AIProvider(ABC):
         """Get the default model for this provider."""
         pass
     
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """Get available models for this provider."""
         # Default implementation - can be overridden by providers
         return [self.current_model]

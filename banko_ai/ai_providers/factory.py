@@ -5,18 +5,19 @@ This module provides a factory pattern for creating AI provider instances
 based on configuration.
 """
 
-from typing import Dict, Any, Type
-from .base import AIProvider, AIProviderError
-from .openai_provider import OpenAIProvider
+from typing import Any
+
 from .aws_provider import AWSProvider
-from .watsonx_provider import WatsonxProvider
+from .base import AIProvider, AIProviderError
 from .gemini_provider import GeminiProvider
+from .openai_provider import OpenAIProvider
+from .watsonx_provider import WatsonxProvider
 
 
 class AIProviderFactory:
     """Factory for creating AI provider instances."""
     
-    _providers: Dict[str, Type[AIProvider]] = {
+    _providers: dict[str, type[AIProvider]] = {
         "openai": OpenAIProvider,
         "aws": AWSProvider,
         "watsonx": WatsonxProvider,
@@ -24,7 +25,7 @@ class AIProviderFactory:
     }
     
     @classmethod
-    def create_provider(cls, service_name: str, config: Dict[str, Any], cache_manager=None) -> AIProvider:
+    def create_provider(cls, service_name: str, config: dict[str, Any], cache_manager=None) -> AIProvider:
         """
         Create an AI provider instance.
         
@@ -73,7 +74,7 @@ class AIProviderFactory:
         return list(cls._providers.keys())
     
     @classmethod
-    def register_provider(cls, name: str, provider_class: Type[AIProvider]) -> None:
+    def register_provider(cls, name: str, provider_class: type[AIProvider]) -> None:
         """
         Register a new AI provider.
         

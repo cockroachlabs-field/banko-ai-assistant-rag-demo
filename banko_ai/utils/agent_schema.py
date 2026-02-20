@@ -10,10 +10,10 @@ Creates tables for:
 - Document processing
 """
 
-from sqlalchemy import text
-from typing import Optional
 import sys
+from typing import Optional
 
+from sqlalchemy import text
 
 AGENT_SCHEMA_SQL = """
 -- Agent state and coordination

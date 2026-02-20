@@ -8,9 +8,10 @@ Provides WebSocket-based updates for:
 - Decision making
 """
 
-from flask import Blueprint, render_template, jsonify
-from flask_socketio import emit
 from datetime import datetime
+
+from flask import Blueprint, jsonify, render_template
+from flask_socketio import emit
 from sqlalchemy import text
 
 agent_dashboard = Blueprint('agent_dashboard', __name__)
@@ -25,9 +26,10 @@ def dashboard():
 @agent_dashboard.route('/api/agents/status')
 def get_all_agent_status():
     """Get status of all registered agents"""
-    from ..config.settings import get_config
     from sqlalchemy import create_engine
     from sqlalchemy.pool import NullPool
+
+    from ..config.settings import get_config
     
     config = get_config()
     engine = create_engine(config.database_url, poolclass=NullPool)
@@ -77,9 +79,10 @@ def get_all_agent_status():
 @agent_dashboard.route('/api/agents/activity')
 def get_recent_activity():
     """Get recent agent decisions and activity (last 10 minutes only)"""
-    from ..config.settings import get_config
     from sqlalchemy import create_engine
     from sqlalchemy.pool import NullPool
+
+    from ..config.settings import get_config
     
     config = get_config()
     engine = create_engine(config.database_url, poolclass=NullPool)
@@ -135,9 +138,10 @@ def get_recent_activity():
 @agent_dashboard.route('/api/agents/stats')
 def get_agent_stats():
     """Get agent memory and task statistics"""
-    from ..config.settings import get_config
     from sqlalchemy import create_engine
     from sqlalchemy.pool import NullPool
+
+    from ..config.settings import get_config
     
     config = get_config()
     engine = create_engine(config.database_url, poolclass=NullPool)
@@ -241,9 +245,10 @@ def emit_agent_decision(agent_id, decision_type, confidence, reasoning):
     """Emit agent decision via WebSocket"""
     try:
         # Get agent info from database
-        from ..config.settings import get_config
         from sqlalchemy import create_engine
         from sqlalchemy.pool import NullPool
+
+        from ..config.settings import get_config
         
         config = get_config()
         engine = create_engine(config.database_url, poolclass=NullPool)

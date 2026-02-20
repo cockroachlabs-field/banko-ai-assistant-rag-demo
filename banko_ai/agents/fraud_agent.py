@@ -11,14 +11,14 @@ This agent:
 """
 
 import json
-from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from typing import Any
 
 from langchain_core.tools import Tool
 
 from .base_agent import BaseAgent
-from .tools.search_tools import create_search_tools
 from .tools.analysis_tools import create_analysis_tools
+from .tools.search_tools import create_search_tools
 
 
 class FraudAgent(BaseAgent):
@@ -92,7 +92,7 @@ Be thorough but not overly cautious. False positives are costly."""
         self.fraud_threshold = fraud_threshold
         self.duplicate_window_days = duplicate_window_days
     
-    def analyze_expense(self, expense_id: str) -> Dict[str, Any]:
+    def analyze_expense(self, expense_id: str) -> dict[str, Any]:
         """
         Analyze a single expense for fraud indicators.
         
@@ -275,7 +275,7 @@ Provide a concise explanation of why this is or isn't fraud. Be specific about t
         self,
         hours: int = 1,
         limit: int = 50
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Scan recent expenses for fraud (autonomous worker mode).
         
@@ -341,8 +341,8 @@ Provide a concise explanation of why this is or isn't fraud. Be specific about t
         self,
         decision_id: str,
         feedback: str,
-        notes: Optional[str] = None
-    ) -> Dict[str, Any]:
+        notes: str | None = None
+    ) -> dict[str, Any]:
         """
         Learn from human feedback on fraud decisions.
         

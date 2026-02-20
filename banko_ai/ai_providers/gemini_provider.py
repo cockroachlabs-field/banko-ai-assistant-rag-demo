@@ -4,32 +4,33 @@ Google Gemini AI provider implementation.
 This module provides Google Vertex AI/Gemini integration for vector search and RAG responses.
 """
 
-import os
 import json
-from typing import List, Dict, Any, Optional
+import os
+from typing import Any
+
+import psycopg2
 from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import OperationalError, DBAPIError
-import psycopg2
+from sqlalchemy.exc import DBAPIError, OperationalError
 
 try:
+    import google.generativeai as genai
+    import vertexai
     from google.cloud import aiplatform
     from google.oauth2 import service_account
-    import vertexai
     from vertexai.generative_models import GenerativeModel
-    import google.generativeai as genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
 
-from .base import AIProvider, SearchResult, RAGResponse, AIConnectionError, AIAuthenticationError
-from ..utils.db_retry import db_retry, create_resilient_engine, TRANSIENT_ERRORS
+from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry
+from .base import AIAuthenticationError, AIConnectionError, AIProvider, RAGResponse, SearchResult
 
 
 class GeminiProvider(AIProvider):
     """Google Gemini AI provider implementation."""
 
-    def __init__(self, config: Dict[str, Any], cache_manager=None):
+    def __init__(self, config: dict[str, Any], cache_manager=None):
         """Initialize Gemini provider."""
         if not GEMINI_AVAILABLE:
             raise AIConnectionError("Google Cloud AI Platform not available. Install with: pip install google-cloud-aiplatform vertexai")
@@ -114,7 +115,7 @@ class GeminiProvider(AIProvider):
         """Get the default Gemini model."""
         return "gemini-1.5-pro"
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """Get available Gemini models."""
         return [
             "gemini-1.5-pro",
@@ -148,19 +149,19 @@ class GeminiProvider(AIProvider):
     def search_expenses(
         self,
         query: str,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         limit: int = 10,
         threshold: float = 0.7
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Search for expenses using vector similarity with caching."""
         try:
-            print(f"\n🔍 GEMINI VECTOR SEARCH (with caching):")
+            print("\n🔍 GEMINI VECTOR SEARCH (with caching):")
             print(f"1. Query: '{query}' | Limit: {limit}")
             
             # Generate query embedding with cache support
             if self.cache_manager:
                 query_embedding = self.cache_manager._get_embedding_with_cache(query)
-                print(f"2. Embedding generated (with cache support)")
+                print("2. Embedding generated (with cache support)")
                 
                 # Check vector_search_cache for cached results
                 cached_results = self.cache_manager.get_cached_vector_search(query_embedding, limit)
@@ -183,11 +184,11 @@ class GeminiProvider(AIProvider):
                             }
                         ))
                     return results_list
-                print(f"3. ❌ Vector search cache MISS, querying database")
+                print("3. ❌ Vector search cache MISS, querying database")
             else:
                 embedding_model = self._get_embedding_model()
                 query_embedding = embedding_model.encode([query])[0]
-                print(f"2. Embedding generated (no cache available)")
+                print("2. Embedding generated (no cache available)")
 
             # Convert to PostgreSQL vector format (JSON string)
             search_embedding = json.dumps(query_embedding.tolist())
@@ -349,13 +350,13 @@ class GeminiProvider(AIProvider):
     def generate_rag_response(
         self,
         query: str,
-        context: List[SearchResult],
-        user_id: Optional[str] = None,
+        context: list[SearchResult],
+        user_id: str | None = None,
         language: str = "en"
     ) -> RAGResponse:
         """Generate RAG response using Google Gemini (following WatsonX pattern)."""
         try:
-            print(f"\n🤖 GOOGLE GEMINI RAG (with caching):")
+            print("\n🤖 GOOGLE GEMINI RAG (with caching):")
             print(f"1. Query: '{query[:60]}...'")
 
             # DEBUG: Check what we received
@@ -402,7 +403,7 @@ class GeminiProvider(AIProvider):
                     query, search_results_dict, "gemini"
                 )
                 if cached_response:
-                    print(f"2. ✅ Response cache HIT! Returning cached response")
+                    print("2. ✅ Response cache HIT! Returning cached response")
                     return RAGResponse(
                         response=cached_response,
                         sources=context,
@@ -414,9 +415,9 @@ class GeminiProvider(AIProvider):
                             'cached': True
                         }
                     )
-                print(f"2. ❌ Response cache MISS, generating fresh response")
+                print("2. ❌ Response cache MISS, generating fresh response")
             else:
-                print(f"2. No cache manager available, generating fresh response")
+                print("2. No cache manager available, generating fresh response")
 
             # Generate financial insights from search results (following WatsonX pattern)
             print(f"DEBUG: About to call _get_financial_insights with {len(context)} items")
@@ -429,7 +430,7 @@ class GeminiProvider(AIProvider):
 
             try:
                 budget_recommendations = self._generate_budget_recommendations(insights, query)
-                print(f"DEBUG: Budget recommendations generated successfully")
+                print("DEBUG: Budget recommendations generated successfully")
             except Exception as e:
                 print(f"DEBUG: Error in _generate_budget_recommendations: {e}")
                 budget_recommendations = ""
@@ -474,7 +475,7 @@ class GeminiProvider(AIProvider):
 
                 # Add financial summary
                 if insights:
-                    search_results_text += f"\n\n**📊 Financial Summary:**\n"
+                    search_results_text += "\n\n**📊 Financial Summary:**\n"
                     search_results_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
                     search_results_text += f"• Number of Transactions: **{insights['num_transactions']}**\n"
                     search_results_text += f"• Average Transaction: **${insights['avg_transaction']:.2f}**\n"
@@ -646,7 +647,7 @@ Based on your expense data, I found {len(context)} relevant records. Here's a co
                 }
             )
 
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> list[float]:
         """Generate embedding for text."""
         try:
             embedding_model = self._get_embedding_model()

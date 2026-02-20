@@ -5,16 +5,19 @@ This module creates and configures the Flask application with all routes and fun
 """
 
 import os
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+import uuid
+from datetime import datetime
+
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from flask_socketio import SocketIO
 from sqlalchemy import text
 
-from ..config.settings import get_config
 from ..ai_providers.factory import AIProviderFactory
-from ..vector_search.search import VectorSearchEngine
-from ..vector_search.generator import EnhancedExpenseGenerator
+from ..config.settings import get_config
 from ..utils.cache_manager import BankoCacheManager
 from ..utils.db_retry import create_resilient_engine
+from ..vector_search.generator import EnhancedExpenseGenerator
+from ..vector_search.search import VectorSearchEngine
 from .auth import UserManager
 
 
@@ -139,7 +142,7 @@ def auto_setup_data_if_needed(database_url: str):
                     # Re-check the database status
                     db_connected, db_message, table_exists, record_count = check_database_connection(database_url)
                 else:
-                    print(f"❌ Failed to create table")
+                    print("❌ Failed to create table")
                     return False
             except Exception as e:
                 print(f"❌ Table creation error: {e}")
@@ -205,7 +208,7 @@ def create_app() -> Flask:
     user_manager = UserManager()
     cache_manager = BankoCacheManager()
     search_engine = VectorSearchEngine(config.database_url, cache_manager)
-    expense_generator = EnhancedExpenseGenerator(config.database_url)
+    EnhancedExpenseGenerator(config.database_url)
     
     # Initialize AI provider
     print(f"🔧 Initializing AI Provider: {config.ai_service}")
@@ -230,7 +233,7 @@ def create_app() -> Flask:
     def index():
         """Main application page."""
         # Ensure user is logged in
-        user_id = user_manager.get_current_user()['id'] if user_manager.get_current_user() else None
+        user_manager.get_current_user()['id'] if user_manager.get_current_user() else None
         current_user = user_manager.get_current_user()
         
         # Get AI provider info for display
@@ -546,7 +549,6 @@ def create_app() -> Flask:
     @app.route('/api/upload-receipt', methods=['POST'])
     def upload_receipt():
         """Handle receipt upload and process with Agent system"""
-        import uuid
         import tempfile
         from pathlib import Path
         
@@ -575,8 +577,8 @@ def create_app() -> Flask:
             
             # Initialize Receipt Agent
             try:
+                from banko_ai.agents.llm_factory import get_embedding_model, get_llm_for_agent
                 from banko_ai.agents.receipt_agent import ReceiptAgent
-                from banko_ai.agents.llm_factory import get_llm_for_agent, get_embedding_model
                 
                 # Use centralized LLM factory based on configured provider
                 llm = get_llm_for_agent(temperature=0.7)
@@ -625,16 +627,12 @@ def create_app() -> Flask:
                         'message': f"Processing receipt from {extracted.get('merchant', 'Unknown')}",
                         'timestamp': datetime.now().isoformat()
                     })
-                except:
+                except Exception:
                     pass
                 
                 # Step 1: Add expense to expenses table
                 expense_id = None
                 try:
-                    from datetime import datetime
-                    from sqlalchemy import text
-                    import uuid
-                    
                     # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
                     engine = create_resilient_engine(config.database_url)
                     
@@ -746,7 +744,7 @@ def create_app() -> Flask:
                                 "payment_method": extracted.get('payment_method', 'unknown'),
                             },
                         )
-                        print(f"   🔍 Indexed in CockroachDB vectorstore")
+                        print("   🔍 Indexed in CockroachDB vectorstore")
                     except Exception as vs_err:
                         print(f"   ⚠️  Vectorstore indexing skipped: {vs_err}")
                     
@@ -759,7 +757,7 @@ def create_app() -> Flask:
                             'message': f"Added expense: {extracted.get('merchant', 'Unknown')} - ${amount}",
                             'timestamp': datetime.now().isoformat()
                         })
-                    except:
+                    except Exception:
                         pass
                     
                 except Exception as e:
@@ -771,7 +769,7 @@ def create_app() -> Flask:
                 fraud_result = "✅ No issues detected"
                 try:
                     from banko_ai.agents.fraud_agent import FraudAgent
-                    from banko_ai.agents.llm_factory import get_llm_for_agent, get_embedding_model
+                    from banko_ai.agents.llm_factory import get_embedding_model, get_llm_for_agent
                     
                     # Use centralized LLM factory based on configured provider
                     fraud_llm = get_llm_for_agent(temperature=0.7)
@@ -786,7 +784,7 @@ def create_app() -> Flask:
                         duplicate_window_days=config.fraud_duplicate_window_days
                     )
                     
-                    print(f"🕵️  Running fraud check...")
+                    print("🕵️  Running fraud check...")
                     
                     # Emit update: Fraud Agent started
                     try:
@@ -797,7 +795,7 @@ def create_app() -> Flask:
                             'message': 'Scanning for suspicious patterns...',
                             'timestamp': datetime.now().isoformat()
                         })
-                    except:
+                    except Exception:
                         pass
                     
                     # Analyze the newly created expense for fraud
@@ -820,7 +818,7 @@ def create_app() -> Flask:
                             'message': fraud_result,
                             'timestamp': datetime.now().isoformat()
                         })
-                    except:
+                    except Exception:
                         pass
                     
                 except Exception as e:
@@ -843,7 +841,7 @@ def create_app() -> Flask:
                         alert_threshold=0.8
                     )
                     
-                    print(f"📊 Running budget check...")
+                    print("📊 Running budget check...")
                     
                     # Emit update: Budget Agent started
                     try:
@@ -854,7 +852,7 @@ def create_app() -> Flask:
                             'message': 'Analyzing budget impact...',
                             'timestamp': datetime.now().isoformat()
                         })
-                    except:
+                    except Exception:
                         pass
                     
                     # Get budget from config (can be set via MONTHLY_BUDGET_DEFAULT env var)
@@ -885,7 +883,7 @@ def create_app() -> Flask:
                             'message': budget_result,
                             'timestamp': datetime.now().isoformat()
                         })
-                    except:
+                    except Exception:
                         pass
                     
                 except Exception as e:
@@ -948,8 +946,9 @@ def create_app() -> Flask:
                 
                 # Persist user message in CockroachDB chat history
                 try:
-                    from banko_ai.utils.crdb_chat_history import get_chat_history
                     from langchain_core.messages import HumanMessage
+
+                    from banko_ai.utils.crdb_chat_history import get_chat_history
                     chat_session_id = session.get('session_id', session.sid if hasattr(session, 'sid') else 'default')
                     crdb_history = get_chat_history(chat_session_id, database_url=config.database_url)
                     crdb_history.add_message(HumanMessage(content=user_message))
@@ -1066,7 +1065,7 @@ def create_app() -> Flask:
         # Get AI provider info for display (without making LLM calls)
         if ai_provider:
             # Use cached provider info to avoid LLM calls
-            provider_name = ai_provider.get_provider_name()
+            ai_provider.get_provider_name()
             current_model = getattr(ai_provider, 'current_model', 'Unknown')
             # Check if we have API credentials without making a call
             has_credentials = bool(
@@ -1076,7 +1075,6 @@ def create_app() -> Flask:
             )
             connection_status = 'connected' if has_credentials else 'demo'
         else:
-            provider_name = 'Unknown'
             current_model = 'Unknown'
             connection_status = 'disconnected'
         
@@ -1202,6 +1200,7 @@ def create_app() -> Flask:
     def watsonx_diagnostics():
         """Watsonx connection diagnostics endpoint"""
         import socket
+
         import requests
         
         results = {

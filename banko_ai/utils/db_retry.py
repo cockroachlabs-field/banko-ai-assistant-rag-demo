@@ -6,12 +6,12 @@ operations that fail due to transient errors like connection blips, HAProxy
 resets, or network issues.
 """
 
-import time
 import functools
-from typing import Callable, Type, Tuple, Optional
-from sqlalchemy.exc import OperationalError, DBAPIError
-import psycopg2
+import time
+from collections.abc import Callable
 
+import psycopg2
+from sqlalchemy.exc import DBAPIError, OperationalError
 
 # Transient errors that should trigger a retry
 TRANSIENT_ERRORS = (
@@ -67,7 +67,7 @@ def db_retry(
     initial_delay: float = 0.5,
     backoff_factor: float = 2.0,
     max_delay: float = 10.0,
-    exceptions: Tuple[Type[Exception], ...] = TRANSIENT_ERRORS
+    exceptions: tuple[type[Exception], ...] = TRANSIENT_ERRORS
 ):
     """
     Decorator to retry database operations on transient failures.
@@ -188,8 +188,9 @@ def create_resilient_engine(database_url: str, **kwargs):
     Returns:
         Configured SQLAlchemy engine
     """
-    from sqlalchemy import create_engine
     import os
+
+    from sqlalchemy import create_engine
     
     # Get pool configuration from environment variables with sensible defaults
     # CockroachDB docs recommend larger pools for production workloads

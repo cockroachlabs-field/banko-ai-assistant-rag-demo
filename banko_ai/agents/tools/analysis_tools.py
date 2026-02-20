@@ -8,14 +8,15 @@ Provides:
 """
 
 import json
-from typing import Dict, Any, List
 from datetime import datetime, timedelta
+from typing import Any
+
 from langchain_core.tools import Tool
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
 
-def create_analysis_tools(database_url: str) -> List[Tool]:
+def create_analysis_tools(database_url: str) -> list[Tool]:
     """
     Create analysis tools for agents.
     

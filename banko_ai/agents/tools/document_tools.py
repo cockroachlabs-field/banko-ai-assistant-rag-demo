@@ -10,25 +10,26 @@ Provides:
 import json
 import os
 import tempfile
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from typing import Any
+
 from langchain_core.tools import Tool
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
 # OCR imports
 try:
-    import pytesseract
-    from PIL import Image
-    from pdf2image import convert_from_path
     import PyPDF2
+    import pytesseract
+    from pdf2image import convert_from_path
+    from PIL import Image
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False
     print("⚠️  OCR libraries not available. Install: pip install pytesseract pdf2image Pillow PyPDF2")
 
 
-def create_document_tools(database_url: str, embedding_model) -> List[Tool]:
+def create_document_tools(database_url: str, embedding_model) -> list[Tool]:
     """
     Create document processing tools.
     
@@ -139,7 +140,7 @@ def create_document_tools(database_url: str, embedding_model) -> List[Tool]:
                 'metadata': {
                     'pages': page_count if 'page_count' in locals() else len(text_parts),
                     'text_length': len(full_text),
-                    'method': 'direct' if text_parts and not 'images' in locals() else 'ocr'
+                    'method': 'direct' if text_parts and 'images' not in locals() else 'ocr'
                 }
             }, indent=2)
         
@@ -227,8 +228,8 @@ Example:
         document_type: str,
         filename: str,
         extracted_text: str,
-        extracted_data: Dict[str, Any],
-        s3_key: Optional[str] = None
+        extracted_data: dict[str, Any],
+        s3_key: str | None = None
     ) -> str:
         """
         Store document information in the database.

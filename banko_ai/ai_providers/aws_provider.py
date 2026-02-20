@@ -4,23 +4,24 @@ AWS Bedrock AI provider implementation.
 This module provides AWS Bedrock integration for vector search and RAG responses.
 """
 
-import os
 import json
-from typing import List, Dict, Any, Optional
+import os
+from typing import Any
+
 import boto3
+import psycopg2
 from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import OperationalError, DBAPIError
-import psycopg2
+from sqlalchemy.exc import DBAPIError, OperationalError
 
-from .base import AIProvider, SearchResult, RAGResponse, AIConnectionError, AIAuthenticationError
-from ..utils.db_retry import db_retry, create_resilient_engine, TRANSIENT_ERRORS
+from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry
+from .base import AIAuthenticationError, AIConnectionError, AIProvider, RAGResponse, SearchResult
 
 
 class AWSProvider(AIProvider):
     """AWS Bedrock AI provider implementation."""
     
-    def __init__(self, config: Dict[str, Any], cache_manager=None):
+    def __init__(self, config: dict[str, Any], cache_manager=None):
         """Initialize AWS provider."""
         # Support both config and environment variables with defaults
         self.access_key_id = config.get("access_key_id") or os.getenv("AWS_ACCESS_KEY_ID")
@@ -54,14 +55,14 @@ class AWSProvider(AIProvider):
                     region_name=self.region
                 )
             elif self.access_key_id and self.secret_access_key:
-                print(f"🔐 Using AWS credentials from environment/config")
+                print("🔐 Using AWS credentials from environment/config")
                 self.session = boto3.Session(
                     aws_access_key_id=self.access_key_id,
                     aws_secret_access_key=self.secret_access_key,
                     region_name=self.region
                 )
             else:
-                print(f"🔐 Using default AWS credential chain")
+                print("🔐 Using default AWS credential chain")
                 self.session = boto3.Session(region_name=self.region)
             
             # Create Bedrock client from session
@@ -77,7 +78,7 @@ class AWSProvider(AIProvider):
             
         except Exception as e:
             error_msg = str(e)
-            print(f"\n⚠️ AWS Bedrock initialization failed!")
+            print("\n⚠️ AWS Bedrock initialization failed!")
             print(f"   Error: {error_msg}")
             
             # Provide specific help based on error type
@@ -106,7 +107,7 @@ class AWSProvider(AIProvider):
         """Get the default AWS model."""
         return "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
     
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """Get available AWS models."""
         return [
             "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -142,19 +143,19 @@ class AWSProvider(AIProvider):
     def search_expenses(
         self, 
         query: str, 
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         limit: int = 10,
         threshold: float = 0.7
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Search for expenses using vector similarity with caching."""
         try:
-            print(f"\n🔍 AWS BEDROCK VECTOR SEARCH (with caching):")
+            print("\n🔍 AWS BEDROCK VECTOR SEARCH (with caching):")
             print(f"1. Query: '{query}' | Limit: {limit}")
             
             # Generate query embedding with cache support
             if self.cache_manager:
                 query_embedding = self.cache_manager._get_embedding_with_cache(query)
-                print(f"2. Embedding generated (with cache support)")
+                print("2. Embedding generated (with cache support)")
                 
                 # Check vector_search_cache for cached results
                 cached_results = self.cache_manager.get_cached_vector_search(query_embedding, limit)
@@ -177,11 +178,11 @@ class AWSProvider(AIProvider):
                             }
                         ))
                     return results_list
-                print(f"3. ❌ Vector search cache MISS, querying database")
+                print("3. ❌ Vector search cache MISS, querying database")
             else:
                 embedding_model = self._get_embedding_model()
                 query_embedding = embedding_model.encode([query])[0]
-                print(f"2. Embedding generated (no cache available)")
+                print("2. Embedding generated (no cache available)")
             
             # Convert to PostgreSQL vector format (JSON string)
             search_embedding = json.dumps(query_embedding.tolist())
@@ -349,13 +350,13 @@ class AWSProvider(AIProvider):
     def generate_rag_response(
         self, 
         query: str, 
-        context: List[SearchResult],
-        user_id: Optional[str] = None,
+        context: list[SearchResult],
+        user_id: str | None = None,
         language: str = "en"
     ) -> RAGResponse:
         """Generate RAG response using AWS Bedrock."""
         try:
-            print(f"\n🤖 AWS BEDROCK RAG (with caching):")
+            print("\n🤖 AWS BEDROCK RAG (with caching):")
             print(f"1. Query: '{query[:60]}...'")
             
             # Check for cached response first
@@ -384,7 +385,7 @@ class AWSProvider(AIProvider):
                     query, search_results_dict, "aws"
                 )
                 if cached_response:
-                    print(f"2. ✅ Response cache HIT! Returning cached response")
+                    print("2. ✅ Response cache HIT! Returning cached response")
                     return RAGResponse(
                         response=cached_response,
                         sources=context,
@@ -396,9 +397,9 @@ class AWSProvider(AIProvider):
                             'cached': True
                         }
                     )
-                print(f"2. ❌ Response cache MISS, generating fresh response")
+                print("2. ❌ Response cache MISS, generating fresh response")
             else:
-                print(f"2. No cache manager available, generating fresh response")
+                print("2. No cache manager available, generating fresh response")
             
             # Generate financial insights
             insights = self._get_financial_insights(context)
@@ -447,7 +448,7 @@ class AWSProvider(AIProvider):
                 search_results_text = "\n".join(context_parts)
                 
                 if insights:
-                    search_results_text += f"\n\n**📊 Financial Summary:**\n"
+                    search_results_text += "\n\n**📊 Financial Summary:**\n"
                     search_results_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
                     search_results_text += f"• Number of Transactions: **{insights['num_transactions']}**\n"
                     search_results_text += f"• Average Transaction: **${insights['avg_transaction']:.2f}**\n"
@@ -555,7 +556,7 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
         except Exception as e:
             raise AIConnectionError(f"RAG response generation failed: {str(e)}")
     
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> list[float]:
         """Generate embedding for text."""
         try:
             embedding_model = self._get_embedding_model()
