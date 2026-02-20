@@ -22,10 +22,10 @@ def normalize_crdb_url(url: str) -> str:
         return url.replace("postgres://", "cockroachdb+psycopg://", 1)
     return url
 
-_engine: Optional[CockroachDBEngine] = None
+_engine: CockroachDBEngine | None = None
 
 
-def get_crdb_engine(database_url: Optional[str] = None) -> CockroachDBEngine:
+def get_crdb_engine(database_url: str | None = None) -> CockroachDBEngine:
     """Get or create the singleton CockroachDBEngine.
 
     Args:

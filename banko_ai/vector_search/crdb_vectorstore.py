@@ -5,10 +5,7 @@ VECTOR type with C-SPANN indexes, replacing hand-rolled SQL queries.
 """
 
 import os
-from typing import Any, Dict, List, Optional
-
-from langchain_core.embeddings import Embeddings
-from sentence_transformers import SentenceTransformer
+from typing import Any
 
 from langchain_cockroachdb import (
     CockroachDBEngine,
@@ -16,6 +13,8 @@ from langchain_cockroachdb import (
     CSPANNIndex,
     DistanceStrategy,
 )
+from langchain_core.embeddings import Embeddings
+from sentence_transformers import SentenceTransformer
 
 from ..utils.crdb_engine import get_crdb_engine
 
@@ -26,24 +25,24 @@ class _SentenceTransformerEmbeddings(Embeddings):
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self._model = SentenceTransformer(model_name)
 
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [e.tolist() for e in self._model.encode(texts)]
 
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(self, text: str) -> list[float]:
         return self._model.encode(text).tolist()
 
-    async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
         return self.embed_documents(texts)
 
-    async def aembed_query(self, text: str) -> List[float]:
+    async def aembed_query(self, text: str) -> list[float]:
         return self.embed_query(text)
 
 
 # ---------------------------------------------------------------------------
 # Module-level singleton
 # ---------------------------------------------------------------------------
-_vectorstore: Optional[CockroachDBVectorStore] = None
-_embeddings: Optional[_SentenceTransformerEmbeddings] = None
+_vectorstore: CockroachDBVectorStore | None = None
+_embeddings: _SentenceTransformerEmbeddings | None = None
 
 TABLE_NAME = "expense_vectors"
 VECTOR_DIM = 384
@@ -58,7 +57,7 @@ def get_embeddings() -> _SentenceTransformerEmbeddings:
     return _embeddings
 
 
-def get_vectorstore(database_url: Optional[str] = None) -> CockroachDBVectorStore:
+def get_vectorstore(database_url: str | None = None) -> CockroachDBVectorStore:
     """Get or create the singleton CockroachDBVectorStore.
 
     On first call this creates the ``expense_vectors`` table (IF NOT EXISTS)
@@ -99,8 +98,8 @@ def get_vectorstore(database_url: Optional[str] = None) -> CockroachDBVectorStor
 def search_expenses_via_vectorstore(
     query: str,
     limit: int = 5,
-    metadata_filter: Optional[Dict[str, Any]] = None,
-) -> List[Dict[str, Any]]:
+    metadata_filter: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """Semantic search over expense documents.
 
     Returns a list of dicts compatible with the existing search API so
@@ -111,7 +110,7 @@ def search_expenses_via_vectorstore(
         query, k=limit, filter=metadata_filter
     )
 
-    search_results: List[Dict[str, Any]] = []
+    search_results: list[dict[str, Any]] = []
     for doc, score in results:
         meta = doc.metadata or {}
         search_results.append({
@@ -130,8 +129,8 @@ def search_expenses_via_vectorstore(
 def index_expense_document(
     expense_id: str,
     description: str,
-    metadata: Dict[str, Any],
-    doc_id: Optional[str] = None,
+    metadata: dict[str, Any],
+    doc_id: str | None = None,
 ) -> str:
     """Add or update a single expense in the vectorstore.
 
@@ -157,8 +156,8 @@ def index_expense_document(
 
 
 def bulk_index_expenses(
-    expenses: List[Dict[str, Any]],
-) -> List[str]:
+    expenses: list[dict[str, Any]],
+) -> list[str]:
     """Bulk-insert expense documents into the vectorstore."""
     import uuid as _uuid
 

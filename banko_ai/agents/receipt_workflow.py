@@ -10,12 +10,10 @@ restarts and can be inspected / replayed.
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TypedDict
-
-from langgraph.graph import END, StateGraph
+from typing import Any, TypedDict
 
 from langchain_cockroachdb import CockroachDBSaver
-
+from langgraph.graph import END, StateGraph
 
 # ---------------------------------------------------------------------------
 # Workflow state schema
@@ -28,10 +26,10 @@ class ReceiptWorkflowState(TypedDict, total=False):
     user_id: str
     database_url: str
     # Receipt agent output
-    extracted: Dict[str, Any]
+    extracted: dict[str, Any]
     expense_id: str
     receipt_status: str
-    receipt_errors: List[str]
+    receipt_errors: list[str]
     # Fraud agent output
     fraud_result: str
     fraud_detected: bool
@@ -50,8 +48,8 @@ class ReceiptWorkflowState(TypedDict, total=False):
 
 def receipt_node(state: ReceiptWorkflowState) -> dict:
     """Extract data from the uploaded receipt using the Receipt Agent."""
+    from banko_ai.agents.llm_factory import get_embedding_model, get_llm_for_agent
     from banko_ai.agents.receipt_agent import ReceiptAgent
-    from banko_ai.agents.llm_factory import get_llm_for_agent, get_embedding_model
 
     llm = get_llm_for_agent(temperature=0.7)
     embedding_model = get_embedding_model()
@@ -93,7 +91,7 @@ def fraud_node(state: ReceiptWorkflowState) -> dict:
         return {"fraud_result": "Skipped (no expense_id)", "fraud_detected": False}
 
     from banko_ai.agents.fraud_agent import FraudAgent
-    from banko_ai.agents.llm_factory import get_llm_for_agent, get_embedding_model
+    from banko_ai.agents.llm_factory import get_embedding_model, get_llm_for_agent
     from banko_ai.config.settings import get_config
 
     cfg = get_config()
@@ -183,8 +181,8 @@ def run_receipt_workflow(
     file_path: str,
     user_id: str,
     database_url: str,
-    expense_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    expense_id: str | None = None,
+) -> dict[str, Any]:
     """Execute the full receipt workflow synchronously.
 
     Uses CockroachDBSaver as a context-managed checkpointer so the
