@@ -5,9 +5,9 @@ This module enriches expense descriptions with merchant context and other releva
 information to improve vector search accuracy and relevance.
 """
 
-from typing import Dict, Any, Optional
-from datetime import datetime
 import re
+from datetime import datetime
+from typing import Any
 
 
 class DataEnricher:
@@ -62,7 +62,7 @@ class DataEnricher:
         
         return enriched_description
     
-    def _get_merchant_context(self, merchant: str, amount: float) -> Optional[str]:
+    def _get_merchant_context(self, merchant: str, amount: float) -> str | None:
         """Get merchant-specific context."""
         merchant_lower = merchant.lower()
         
@@ -96,7 +96,7 @@ class DataEnricher:
         
         return None
     
-    def _get_amount_context(self, amount: float) -> Optional[str]:
+    def _get_amount_context(self, amount: float) -> str | None:
         """Get amount-based context."""
         if amount < 10:
             return "small purchase"
@@ -109,7 +109,7 @@ class DataEnricher:
         else:
             return "large transaction"
     
-    def _get_category_context(self, category: str, merchant: str) -> Optional[str]:
+    def _get_category_context(self, category: str, merchant: str) -> str | None:
         """Get category-specific context."""
         category_lower = category.lower()
         
@@ -130,7 +130,7 @@ class DataEnricher:
         
         return None
     
-    def _get_payment_context(self, payment_method: str) -> Optional[str]:
+    def _get_payment_context(self, payment_method: str) -> str | None:
         """Get payment method context."""
         payment_lower = payment_method.lower()
         
@@ -147,7 +147,7 @@ class DataEnricher:
         
         return None
     
-    def _get_temporal_context(self, date: datetime) -> Optional[str]:
+    def _get_temporal_context(self, date: datetime) -> str | None:
         """Get temporal context based on date."""
         from datetime import date as date_type
         # Convert both to datetime for consistent comparison
@@ -169,7 +169,7 @@ class DataEnricher:
         else:
             return "in the past"
     
-    def _get_merchant_category(self, merchant: str) -> Optional[str]:
+    def _get_merchant_category(self, merchant: str) -> str | None:
         """Get merchant category for additional context."""
         merchant_lower = merchant.lower()
         

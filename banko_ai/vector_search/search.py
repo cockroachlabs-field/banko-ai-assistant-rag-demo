@@ -5,20 +5,22 @@ This module provides vector similarity search functionality with user-specific
 filtering and advanced indexing support.
 """
 
-import os
 import json
-from typing import List, Dict, Any, Optional, Tuple
+import os
+import time
+from typing import Any
+
 from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
 
 from ..ai_providers.base import SearchResult
-from ..utils.db_retry import db_retry, create_resilient_engine
+from ..utils.db_retry import create_resilient_engine, db_retry
 
 
 class VectorSearchEngine:
     """Vector search engine for expense data with user-specific filtering."""
     
-    def __init__(self, database_url: Optional[str] = None, cache_manager=None):
+    def __init__(self, database_url: str | None = None, cache_manager=None):
         """Initialize the vector search engine."""
         self.database_url = database_url or os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
         self.cache_manager = cache_manager
@@ -34,12 +36,12 @@ class VectorSearchEngine:
         self.embedding_model = SentenceTransformer(embedding_model_name)
     
     @db_retry(max_attempts=3, initial_delay=0.5)
-    def simple_search_expenses(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    def simple_search_expenses(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """
         Simple search function that matches the original implementation exactly.
         Returns list of dictionaries like the original search_expenses function.
         """
-        print(f"\n🔍 SIMPLE VECTOR SEARCH:")
+        print("\n🔍 SIMPLE VECTOR SEARCH:")
         print(f"1. Query: '{query}' | Limit: {limit}")
         
         # Generate embedding
@@ -47,7 +49,6 @@ class VectorSearchEngine:
         print(f"2. Generated embedding with {len(raw_embedding)} dimensions")
         
         # Convert to PostgreSQL vector format (matching original implementation)
-        import json
         search_embedding = json.dumps(raw_embedding.flatten().tolist())
         
         # Use the exact same query as the original implementation
@@ -75,11 +76,11 @@ class VectorSearchEngine:
     def search_expenses(
         self, 
         query: str, 
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         limit: int = 10,
         threshold: float = 0.7,
         use_user_index: bool = True
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """
         Search for expenses using vector similarity.
         
@@ -93,10 +94,10 @@ class VectorSearchEngine:
         Returns:
             List of SearchResult objects
         """
-        print(f"\n🔍 VECTOR SEARCH (with caching):")
+        print("\n🔍 VECTOR SEARCH (with caching):")
         print(f"1. Query: '{query}' | Limit: {limit}")
         
-        tracker = get_current_tracker()
+        tracker = None
         
         # Use cached embedding generation if available
         if self.cache_manager:
@@ -111,7 +112,7 @@ class VectorSearchEngine:
             # Check for cached vector search results
             start_time = time.time()
             cached_results = self.cache_manager.get_cached_vector_search(raw_embedding, limit)
-            cache_duration = (time.time() - start_time) * 1000
+            (time.time() - start_time) * 1000
             
             if cached_results:
                 print(f"2. ✅ Vector search cache HIT! Found {len(cached_results)} cached results")
@@ -136,7 +137,7 @@ class VectorSearchEngine:
                         }
                     ))
                 return search_results
-            print(f"2. ❌ Vector search cache MISS, querying database")
+            print("2. ❌ Vector search cache MISS, querying database")
             if tracker:
                 tracker.add_cache_check('Vector Search', hit=False)
         else:
@@ -145,12 +146,11 @@ class VectorSearchEngine:
             query_embedding = self.embedding_model.encode([query])[0]
             embed_duration = (time.time() - start_time) * 1000
             raw_embedding = query_embedding
-            print(f"2. Generated fresh embedding (no cache available)")
+            print("2. Generated fresh embedding (no cache available)")
             if tracker:
                 tracker.add_embedding_generation(query, len(raw_embedding), embed_duration)
         
         # Convert to PostgreSQL vector format (matching original implementation)
-        import json
         search_embedding = json.dumps(raw_embedding.flatten().tolist())
         
         # Build SQL query based on whether we're using user-specific search
@@ -218,7 +218,7 @@ class VectorSearchEngine:
                     })
                 
                 self.cache_manager.cache_vector_search_results(raw_embedding, search_results_dict)
-                print(f"4. ✅ Cached vector search results for future queries")
+                print("4. ✅ Cached vector search results for future queries")
             
             return results
     
@@ -267,9 +267,9 @@ class VectorSearchEngine:
     def search_by_category(
         self, 
         category: str, 
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         limit: int = 10
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Search expenses by category."""
         sql = """
         SELECT 
@@ -325,9 +325,9 @@ class VectorSearchEngine:
     def search_by_merchant(
         self, 
         merchant: str, 
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         limit: int = 10
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Search expenses by merchant."""
         sql = """
         SELECT 
@@ -384,7 +384,7 @@ class VectorSearchEngine:
         self, 
         user_id: str, 
         days: int = 30
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get spending summary for a specific user."""
         sql = """
         SELECT 
@@ -428,7 +428,7 @@ class VectorSearchEngine:
         self, 
         expense_id: str, 
         limit: int = 5
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Find expenses similar to a given expense."""
         # First get the expense details
         expense_sql = """

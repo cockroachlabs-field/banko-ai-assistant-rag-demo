@@ -11,6 +11,7 @@ __email__ = "virag.tripathi@gmail.com"
 
 from .config.settings import Config
 
+
 def create_app():
     """Create Flask application (lazy import)."""
     from .web.app import create_app as _create_app

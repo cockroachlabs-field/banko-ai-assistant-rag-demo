@@ -8,13 +8,13 @@ Provides common functionality:
 - Cross-region coordination
 """
 
-import uuid
 import json
+import uuid
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
+from typing import Any
 
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import Tool
 from sqlalchemy import text
 
@@ -32,13 +32,13 @@ class AgentDecision:
     """Represents an agent's decision with reasoning"""
     decision_id: str
     decision_type: str
-    context: Dict[str, Any]
+    context: dict[str, Any]
     reasoning: str
-    action: Dict[str, Any]
+    action: dict[str, Any]
     confidence: float
     created_at: datetime
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage"""
         data = asdict(self)
         data['created_at'] = data['created_at'].isoformat()
@@ -62,9 +62,9 @@ class BaseAgent:
         agent_type: str,
         region: str,
         llm: Any,  # LangChain LLM instance
-        tools: Optional[List[Tool]] = None,
-        database_url: Optional[str] = None,
-        system_prompt: Optional[str] = None
+        tools: list[Tool] | None = None,
+        database_url: str | None = None,
+        system_prompt: str | None = None
     ):
         """
         Initialize the base agent.
@@ -154,7 +154,7 @@ Be concise but thorough in your responses."""
             print(f"⚠️  Could not register agent: {e}")
             # Non-fatal - agent can still work without registration
     
-    def update_status(self, status: str, task: Optional[Dict] = None):
+    def update_status(self, status: str, task: dict | None = None):
         """Update agent status in database"""
         self.status = status
         self.current_task = task
@@ -193,9 +193,9 @@ Be concise but thorough in your responses."""
     def store_decision(
         self,
         decision_type: str,
-        context: Dict[str, Any],
+        context: dict[str, Any],
         reasoning: str,
-        action: Dict[str, Any],
+        action: dict[str, Any],
         confidence: float
     ) -> AgentDecision:
         """
@@ -272,7 +272,7 @@ Be concise but thorough in your responses."""
                     confidence=confidence,
                     reasoning=reasoning
                 )
-            except Exception as e:
+            except Exception:
                 # Don't fail if WebSocket not available
                 pass
                 
@@ -281,7 +281,7 @@ Be concise but thorough in your responses."""
         
         return decision
     
-    def think(self, user_input: str, context: Optional[Dict] = None) -> str:
+    def think(self, user_input: str, context: dict | None = None) -> str:
         """
         Agent's thinking process using the LLM.
         
@@ -355,8 +355,8 @@ Be concise but thorough in your responses."""
         user_id: str,
         memory_type: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> Optional[str]:
+        metadata: dict[str, Any] | None = None
+    ) -> str | None:
         """
         Store a memory with vector embedding for semantic search.
         
@@ -417,9 +417,9 @@ Be concise but thorough in your responses."""
         self,
         user_id: str,
         query: str,
-        memory_type: Optional[str] = None,
+        memory_type: str | None = None,
         limit: int = 5
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Retrieve memories using semantic search.
         
@@ -499,9 +499,9 @@ Be concise but thorough in your responses."""
         self,
         target_agent_id: str,
         task_type: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         priority: int = 5
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Create a task for another agent.
         
@@ -553,7 +553,7 @@ Be concise but thorough in your responses."""
             print(f"⚠️  Could not create task: {e}")
             return None
     
-    def get_pending_tasks(self) -> List[Dict[str, Any]]:
+    def get_pending_tasks(self) -> list[dict[str, Any]]:
         """
         Get all pending tasks assigned to this agent.
         
@@ -611,7 +611,7 @@ Be concise but thorough in your responses."""
         self,
         task_id: str,
         status: str,
-        result: Optional[Dict[str, Any]] = None
+        result: dict[str, Any] | None = None
     ) -> bool:
         """
         Update the status of a task.
@@ -660,7 +660,7 @@ Be concise but thorough in your responses."""
             print(f"⚠️  Could not update task status: {e}")
             return False
     
-    def get_info(self) -> Dict[str, Any]:
+    def get_info(self) -> dict[str, Any]:
         """Get agent information"""
         return {
             'agent_id': self.agent_id,

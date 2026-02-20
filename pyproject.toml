@@ -58,13 +58,13 @@ dependencies = [
     
     # Agent Framework / LangGraph
     "langgraph>=0.2.0",
-    "langchain>=0.3.0,<0.4.0",
-    "langchain-core>=0.3.0,<0.4.0",
-    "langchain-openai>=0.2.0,<0.3.0",
-    "langchain-aws>=0.2.0,<0.3.0",
-    "langchain-ibm>=0.3.0,<0.4.0",
-    "langchain-google-genai>=2.0.0,<3.0.0",
-    "langchain-community>=0.3.0,<0.4.0",
+    "langchain>=0.3.0",
+    "langchain-core>=1.2.11",
+    "langchain-openai>=0.2.0",
+    "langchain-aws>=0.2.0",
+    "langchain-ibm>=0.3.0",
+    "langchain-google-genai>=2.0.0",
+    "langchain-community>=0.3.0",
     
     # Document Processing (NEW)
     "pytesseract>=0.3.10,<0.4.0",

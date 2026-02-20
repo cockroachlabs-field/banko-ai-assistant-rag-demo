@@ -8,13 +8,14 @@ Provides:
 """
 
 import json
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 from langchain_core.tools import Tool
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
 
-def create_search_tools(database_url: str, embedding_model) -> List[Tool]:
+def create_search_tools(database_url: str, embedding_model) -> list[Tool]:
     """
     Create search tools for agents.
     
@@ -28,7 +29,7 @@ def create_search_tools(database_url: str, embedding_model) -> List[Tool]:
     
     def vector_search_expenses(
         query: str,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         limit: int = 5
     ) -> str:
         """
@@ -111,7 +112,7 @@ def create_search_tools(database_url: str, embedding_model) -> List[Tool]:
             })
     
     def sql_search_expenses(
-        filters: Dict[str, Any],
+        filters: dict[str, Any],
         limit: int = 10
     ) -> str:
         """

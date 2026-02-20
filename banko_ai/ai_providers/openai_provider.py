@@ -4,24 +4,25 @@ OpenAI AI provider implementation.
 This module provides OpenAI integration for vector search and RAG responses.
 """
 
-import os
 import json
-from typing import List, Dict, Any, Optional
+import os
+from typing import Any
+
+import numpy as np
+import psycopg2
 from openai import OpenAI
 from sentence_transformers import SentenceTransformer
-import numpy as np
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import OperationalError, DBAPIError
-import psycopg2
+from sqlalchemy.exc import DBAPIError, OperationalError
 
-from .base import AIProvider, SearchResult, RAGResponse, AIConnectionError, AIAuthenticationError
-from ..utils.db_retry import db_retry, create_resilient_engine, TRANSIENT_ERRORS
+from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry
+from .base import AIAuthenticationError, AIConnectionError, AIProvider, RAGResponse, SearchResult
 
 
 class OpenAIProvider(AIProvider):
     """OpenAI AI provider implementation."""
     
-    def __init__(self, config: Dict[str, Any], cache_manager=None):
+    def __init__(self, config: dict[str, Any], cache_manager=None):
         """Initialize OpenAI provider."""
         # Store cache manager
         self.cache_manager = cache_manager
@@ -63,7 +64,7 @@ class OpenAIProvider(AIProvider):
         """Get the default OpenAI model."""
         return "gpt-4o-mini"
     
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """Get available OpenAI models."""
         return [
             "gpt-3.5-turbo",
@@ -100,19 +101,19 @@ class OpenAIProvider(AIProvider):
     def search_expenses(
         self, 
         query: str, 
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         limit: int = 10,
         threshold: float = 0.7
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Search for expenses using vector similarity with caching."""
         try:
-            print(f"\n🔍 OPENAI VECTOR SEARCH (with caching):")
+            print("\n🔍 OPENAI VECTOR SEARCH (with caching):")
             print(f"1. Query: '{query}' | Limit: {limit}")
             
             # Generate query embedding with cache support
             if self.cache_manager:
                 query_embedding = self.cache_manager._get_embedding_with_cache(query)
-                print(f"2. Embedding generated (with cache support)")
+                print("2. Embedding generated (with cache support)")
                 
                 # Check vector_search_cache for cached results
                 cached_results = self.cache_manager.get_cached_vector_search(query_embedding, limit)
@@ -135,11 +136,11 @@ class OpenAIProvider(AIProvider):
                             }
                         ))
                     return results_list
-                print(f"3. ❌ Vector search cache MISS, querying database")
+                print("3. ❌ Vector search cache MISS, querying database")
             else:
                 embedding_model = self._get_embedding_model()
                 query_embedding = embedding_model.encode([query])[0]
-                print(f"2. Embedding generated (no cache available)")
+                print("2. Embedding generated (no cache available)")
             
             # Convert to PostgreSQL vector format (JSON string)
             search_embedding = json.dumps(query_embedding.tolist())
@@ -230,13 +231,13 @@ class OpenAIProvider(AIProvider):
     def generate_rag_response(
         self, 
         query: str, 
-        context: List[SearchResult],
-        user_id: Optional[str] = None,
+        context: list[SearchResult],
+        user_id: str | None = None,
         language: str = "en"
     ) -> RAGResponse:
         """Generate RAG response using OpenAI (matching gemini/watsonx pattern)."""
         try:
-            print(f"\n🤖 OPENAI RAG (with caching):")
+            print("\n🤖 OPENAI RAG (with caching):")
             print(f"1. Query: '{query[:60]}...'")
             
             # Check for cached response first
@@ -279,7 +280,7 @@ class OpenAIProvider(AIProvider):
                     query, search_results_dict, "openai"
                 )
                 if cached_response:
-                    print(f"2. ✅ Response cache HIT! Returning cached response")
+                    print("2. ✅ Response cache HIT! Returning cached response")
                     return RAGResponse(
                         response=cached_response,
                         sources=context,
@@ -291,9 +292,9 @@ class OpenAIProvider(AIProvider):
                             'cached': True
                         }
                     )
-                print(f"2. ❌ Response cache MISS, generating fresh response")
+                print("2. ❌ Response cache MISS, generating fresh response")
             else:
-                print(f"2. No cache manager available, generating fresh response")
+                print("2. No cache manager available, generating fresh response")
             
             # Generate financial insights from search results (following gemini/watsonx pattern)
             insights = self._get_financial_insights(context)
@@ -339,7 +340,7 @@ class OpenAIProvider(AIProvider):
                 
                 # Add financial summary
                 if insights:
-                    search_results_text += f"\n\n**📊 Financial Summary:**\n"
+                    search_results_text += "\n\n**📊 Financial Summary:**\n"
                     search_results_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
                     search_results_text += f"• Number of Transactions: **{insights['num_transactions']}**\n"
                     search_results_text += f"• Average Transaction: **${insights['avg_transaction']:.2f}**\n"
@@ -491,7 +492,7 @@ Based on your expense data, I found {len(context)} relevant records. Here's a co
                 }
             )
     
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> list[float]:
         """Generate embedding for text."""
         try:
             embedding_model = self._get_embedding_model()

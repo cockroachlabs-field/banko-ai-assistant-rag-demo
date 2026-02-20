@@ -6,8 +6,8 @@ variables with sensible defaults, making the application easy to configure and d
 """
 
 import os
-from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -25,20 +25,20 @@ class Config:
     
     # AI Service Configuration
     ai_service: str = "watsonx"  # openai, aws, watsonx, gemini
-    openai_api_key: Optional[str] = None
+    openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"  # gpt-4o-mini (default), gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o
-    aws_access_key_id: Optional[str] = None
-    aws_secret_access_key: Optional[str] = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
     
     # Fraud Detection Configuration
     fraud_duplicate_window_days: int = 60  # Days to look back for duplicates (60 for demo)
-    aws_profile: Optional[str] = None
+    aws_profile: str | None = None
     aws_region: str = "us-east-1"
     aws_model: str = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"  # Claude models
-    watsonx_api_key: Optional[str] = None
-    watsonx_project_id: Optional[str] = None
+    watsonx_api_key: str | None = None
+    watsonx_project_id: str | None = None
     watsonx_model: str = "openai/gpt-oss-120b"  # IBM models
-    google_project_id: Optional[str] = None
+    google_project_id: str | None = None
     google_location: str = "us-central1"
     google_model: str = "gemini-1.5-pro"  # Gemini models
     
@@ -88,7 +88,7 @@ class Config:
             parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             if parent_dir not in sys.path:
                 sys.path.insert(0, parent_dir)
-            from config import WATSONX_API_KEY, WATSONX_PROJECT_ID, WATSONX_MODEL_ID
+            from config import WATSONX_API_KEY, WATSONX_MODEL_ID, WATSONX_PROJECT_ID
             watsonx_api_key = WATSONX_API_KEY
             watsonx_project_id = WATSONX_PROJECT_ID
             watsonx_model = WATSONX_MODEL_ID
@@ -150,7 +150,7 @@ class Config:
             monthly_budget_default=float(os.getenv("MONTHLY_BUDGET_DEFAULT", "10000.0"))
         )
     
-    def get_ai_config(self) -> Dict[str, Any]:
+    def get_ai_config(self) -> dict[str, Any]:
         """Get AI service specific configuration."""
         config = {
             "service": self.ai_service,
@@ -178,7 +178,7 @@ class Config:
         }
         return config
     
-    def get_available_models(self) -> Dict[str, List[str]]:
+    def get_available_models(self) -> dict[str, list[str]]:
         """Get available models for each AI provider."""
         return {
             "openai": [
@@ -235,7 +235,7 @@ class Config:
 
 
 # Global configuration instance
-_config: Optional[Config] = None
+_config: Config | None = None
 
 
 def get_config() -> Config:

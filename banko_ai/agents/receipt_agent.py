@@ -9,8 +9,8 @@ This agent:
 """
 
 import json
-from typing import Dict, Any, Optional
 from pathlib import Path
+from typing import Any
 
 from langchain_core.tools import Tool
 
@@ -198,7 +198,7 @@ JSON:"""
                     print(f"📝 Extracted JSON from text: {cleaned[:200]}...")
                 else:
                     print(f"⚠️  Incomplete JSON in response: {cleaned[:500]}")
-                    raise ValueError(f"Could not extract complete JSON object")
+                    raise ValueError("Could not extract complete JSON object")
             
             # Try to parse as JSON
             print(f"📝 Attempting to parse JSON ({len(cleaned)} chars)...")
@@ -222,7 +222,7 @@ JSON:"""
         file_path: str,
         user_id: str,
         document_type: str = "receipt"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Complete workflow: Process a document from start to finish.
         
@@ -362,7 +362,7 @@ JSON:"""
         file_paths: list,
         user_id: str,
         document_type: str = "receipt"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process multiple documents in batch.
         

@@ -12,7 +12,7 @@ from typing import Optional
 class DatabaseMigration:
     """Database migration utilities."""
     
-    def __init__(self, database_url: Optional[str] = None):
+    def __init__(self, database_url: str | None = None):
         """Initialize migration manager."""
         self.database_url = database_url or os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
         self._engine = None
