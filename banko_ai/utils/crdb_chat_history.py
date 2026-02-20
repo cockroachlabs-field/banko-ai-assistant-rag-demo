@@ -14,7 +14,7 @@ from .crdb_engine import normalize_crdb_url
 
 def get_chat_history(
     session_id: str,
-    database_url: Optional[str] = None,
+    database_url: str | None = None,
     table_name: str = "chat_message_store",
 ) -> CockroachDBChatMessageHistory:
     """Return a CockroachDBChatMessageHistory for the given session.
