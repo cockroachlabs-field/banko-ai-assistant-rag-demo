@@ -61,6 +61,7 @@ The application uses a five-layer architecture designed for scalability, flexibi
 **Components**:
 - **Embeddings**: Converts text data into numerical vectors representing semantic meaning
 - **Semantic Search**: Finds relevant information by comparing vector similarity
+- **[langchain-cockroachdb](https://github.com/cockroachdb/langchain-cockroachdb) VectorStore**: LangChain-native `CockroachDBVectorStore` with C-SPANN indexes and cosine similarity
 - **Cache**: Stores frequent search results for faster responses
 
 **Location**: `banko_ai/vector_search/*.py`
@@ -74,8 +75,13 @@ The application uses a five-layer architecture designed for scalability, flexibi
   - **SQL Data**: Structured financial data (expenses table)
   - **Vector Data**: Embeddings for semantic search directly in the database
   - **Agent State**: Short-term memory of AI agents (agent_state, agent_memory, agent_tasks), allowing ongoing conversations and multi-step tasks to persist across restarts
+- **[langchain-cockroachdb](https://github.com/cockroachdb/langchain-cockroachdb)**: Official LangChain integration providing:
+  - **CockroachDBEngine**: Shared async connection pool (psycopg3)
+  - **CockroachDBVectorStore**: LangChain VectorStore backed by C-SPANN cosine indexes
+  - **CockroachDBChatMessageHistory**: Persistent chat history per session/thread
+  - **CockroachDBSaver**: LangGraph checkpointer for durable agent workflows
 
-**Location**: `banko_ai/utils/database.py`, `banko_ai/utils/agent_schema.py`
+**Location**: `banko_ai/utils/database.py`, `banko_ai/utils/agent_schema.py`, `banko_ai/utils/crdb_engine.py`, `banko_ai/utils/crdb_chat_history.py`
 
 This architecture enables:
 - **Semantic expense matching** using CockroachDB vector search with cosine similarity
@@ -86,7 +92,9 @@ This architecture enables:
 
 ## Features
 
-- **Vector Search**: Semantic expense search using CockroachDB vector indexes
+- **Vector Search**: Semantic expense search using CockroachDB C-SPANN vector indexes via [langchain-cockroachdb](https://github.com/cockroachdb/langchain-cockroachdb)
+- **Persistent Chat History**: Conversations stored in CockroachDB via `CockroachDBChatMessageHistory`, survive restarts
+- **LangGraph Workflows**: Multi-agent receipt pipeline (Receipt → Fraud → Budget) with `CockroachDBSaver` checkpointer
 - **Multi-AI Provider**: OpenAI, AWS Bedrock, IBM Watsonx, Google Gemini
 - **Dynamic Model Switching**: Change models without restarting
 - **User-Specific Indexing**: Optimized vector indexes per user
@@ -404,14 +412,17 @@ banko-ai help
 
 ## API Endpoints
 
-| Endpoint            | Method | Description                           |
-|---------------------|--------|---------------------------------------|
-| `/`                 | GET    | Web interface                         |
-| `/api/health`       | GET    | Health check                          |
-| `/api/ai-providers` | GET    | Available AI providers                |
-| `/api/models`       | GET    | Available models for current provider |
-| `/api/search`       | POST   | Vector search expenses                |
-| `/api/rag`          | POST   | RAG-based Q&A                         |
+| Endpoint                          | Method | Description                                         |
+|-----------------------------------|--------|-----------------------------------------------------|
+| `/`                               | GET    | Web interface                                       |
+| `/api/health`                     | GET    | Health check                                        |
+| `/api/ai-providers`               | GET    | Available AI providers                              |
+| `/api/models`                     | GET    | Available models for current provider               |
+| `/api/search`                     | POST   | Vector search expenses (original SQL-based)         |
+| `/api/vectorstore-search`         | POST   | Vector search via langchain-cockroachdb VectorStore |
+| `/api/rag`                        | POST   | RAG-based Q&A                                       |
+| `/api/chat-history/<session_id>`  | GET    | Retrieve persistent chat history for a session      |
+| `/api/chat-history/<session_id>`  | DELETE | Clear chat history for a session                    |
 
 ### Examples
 
@@ -419,8 +430,13 @@ banko-ai help
 # Health check
 curl http://localhost:5000/api/health
 
-# Search expenses
+# Search expenses (original)
 curl -X POST http://localhost:5000/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "food delivery", "limit": 5}'
+
+# Search expenses (langchain-cockroachdb vectorstore)
+curl -X POST http://localhost:5000/api/vectorstore-search \
   -H "Content-Type: application/json" \
   -d '{"query": "food delivery", "limit": 5}'
 
@@ -428,13 +444,22 @@ curl -X POST http://localhost:5000/api/search \
 curl -X POST http://localhost:5000/api/rag \
   -H "Content-Type: application/json" \
   -d '{"query": "What are my biggest expenses this month?", "limit": 5}'
+
+# Get chat history
+curl http://localhost:5000/api/chat-history/my-session-id
+
+# Clear chat history
+curl -X DELETE http://localhost:5000/api/chat-history/my-session-id
 ```
 
 ## Database Schema
 
 ### Tables
 
-- **expenses**: Expense records with vector embeddings
+- **expenses**: Expense records with vector embeddings (original SQL-based search)
+- **expense_vectors**: LangChain VectorStore table (384-dim vectors, C-SPANN cosine index) via `langchain-cockroachdb`
+- **chat_message_store**: Persistent chat history per session via `CockroachDBChatMessageHistory`
+- **checkpoint**, **checkpoint_blobs**, **checkpoint_writes**: LangGraph workflow state via `CockroachDBSaver`
 - **query_cache**: Cached search results
 - **embedding_cache**: Cached embeddings
 - **vector_search_cache**: Cached vector search results
@@ -442,44 +467,39 @@ curl -X POST http://localhost:5000/api/rag \
 - **agent_state**: Agent state management
 - **agent_memory**: Agent memory and context
 - **agent_tasks**: Agent task queue
-- **conversations**: Chat conversation history
 - **documents**: Receipt and document storage
 
 ### Vector Indexes
 
-The application uses cosine similarity for semantic search:
+The application uses **cosine similarity** (`<=>`) with CockroachDB **C-SPANN** indexes (not IVFFlat):
 
 ```sql
--- General vector index (v25.4.0+)
-CREATE VECTOR INDEX idx_expenses_embedding 
-ON expenses (embedding);
+-- expense_vectors table (created automatically by langchain-cockroachdb)
+CREATE INDEX IF NOT EXISTS idx_cspann_expense_vectors_embedding
+ON expense_vectors
+USING cspann (embedding vector_cosine_ops);
 
--- User-specific vector index
-CREATE INDEX idx_expenses_user_embedding 
-ON expenses (user_id, embedding) 
-USING ivfflat (embedding vector_cosine_ops);
+-- expenses table
+CREATE INDEX idx_expenses_embedding
+ON expenses
+USING cspann (embedding vector_cosine_ops);
 
--- Agent memory index
-CREATE INDEX idx_agent_memory_embedding 
-ON agent_memory 
+-- Agent memory index (multi-tenant prefix)
+CREATE INDEX idx_agent_memory_embedding
+ON agent_memory
 USING cspann (user_id, embedding vector_cosine_ops);
 
--- Conversation index
-CREATE INDEX idx_conversations_embedding 
-ON conversations 
-USING cspann (user_id, message_embedding vector_cosine_ops);
-
 -- Document index
-CREATE INDEX idx_documents_embedding 
-ON documents 
+CREATE INDEX idx_documents_embedding
+ON documents
 USING cspann (user_id, embedding vector_cosine_ops);
 ```
 
 **Benefits:**
-- User-specific queries for faster search
-- Contextual results with merchant and amount information
-- Scalable performance for large datasets
-- Multi-tenant support with isolated user data
+- C-SPANN indexes provide 10-100x faster vector search than full table scans
+- Cosine similarity is the industry-standard metric for text embeddings
+- Multi-tenant prefix columns enable per-user index scoping
+- `langchain-cockroachdb` creates and manages indexes automatically
 
 ![Cache Statistics](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/cache-stats.png)
 
@@ -558,6 +578,53 @@ banko-ai clear-cache
 
 # Check cache statistics
 curl http://localhost:5000/api/cache/stats
+```
+
+## langchain-cockroachdb Integration
+
+This application uses the official [langchain-cockroachdb](https://github.com/cockroachdb/langchain-cockroachdb) library (v0.2.0+) for deep CockroachDB integration with the LangChain/LangGraph ecosystem.
+
+### Components Used
+
+| Component | Purpose | Table |
+|-----------|---------|-------|
+| `CockroachDBEngine` | Shared async connection pool (psycopg3) | — |
+| `CockroachDBVectorStore` | Semantic search with C-SPANN cosine indexes | `expense_vectors` |
+| `CockroachDBChatMessageHistory` | Persistent chat per session/thread | `chat_message_store` |
+| `CockroachDBSaver` | LangGraph checkpointer for durable workflows | `checkpoint*` tables |
+
+### Receipt Processing Workflow (LangGraph)
+
+The receipt upload triggers a multi-agent LangGraph workflow persisted by `CockroachDBSaver`:
+
+```
+receipt_node → fraud_node → budget_node → END
+```
+
+- **receipt_node**: OCR + data extraction via Receipt Agent
+- **fraud_node**: Duplicate/suspicious transaction analysis via Fraud Agent
+- **budget_node**: Spending impact check via Budget Agent
+
+State is checkpointed after every node, so the workflow survives crashes and can be inspected or replayed.
+
+### Dual Vector Storage
+
+Expenses are indexed into **two** stores for maximum flexibility:
+
+1. **`expenses` table** (original): Raw SQL with hand-crafted queries, used by the existing search engine
+2. **`expense_vectors` table** (new): LangChain `CockroachDBVectorStore` with automatic C-SPANN indexing, metadata filtering, and LangChain retriever compatibility
+
+### File Layout
+
+```
+banko_ai/
+├── utils/
+│   ├── crdb_engine.py          # Singleton CockroachDBEngine + URL normalization
+│   └── crdb_chat_history.py    # CockroachDBChatMessageHistory wrapper
+├── vector_search/
+│   └── crdb_vectorstore.py     # CockroachDBVectorStore wrapper + helpers
+└── agents/
+    └── receipt_workflow.py      # LangGraph StateGraph + CockroachDBSaver
 ```
 
 ## Testing Vector Search

@@ -354,6 +354,49 @@ def create_app() -> Flask:
     
     # OLD ROUTE REMOVED - replaced by /api/generate-data with SocketIO support below
     
+    # ── langchain-cockroachdb powered vectorstore search ──────────────────
+    @app.route('/api/vectorstore-search', methods=['POST'])
+    def api_vectorstore_search():
+        """Semantic search via langchain-cockroachdb CockroachDBVectorStore."""
+        try:
+            data = request.get_json()
+            query = data.get('query', '')
+            limit = data.get('limit', 5)
+            metadata_filter = data.get('filter')
+
+            from banko_ai.vector_search.crdb_vectorstore import search_expenses_via_vectorstore
+            results = search_expenses_via_vectorstore(query, limit=limit, metadata_filter=metadata_filter)
+
+            return jsonify({'success': True, 'results': results, 'query': query, 'source': 'cockroachdb-vectorstore'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    # ── langchain-cockroachdb chat history ─────────────────────────────────
+    @app.route('/api/chat-history/<session_id>', methods=['GET'])
+    def api_chat_history(session_id):
+        """Retrieve persistent chat history for a session."""
+        try:
+            from banko_ai.utils.crdb_chat_history import get_chat_history
+            history = get_chat_history(session_id, database_url=config.database_url)
+            messages = [
+                {"role": m.type, "content": m.content}
+                for m in history.messages
+            ]
+            return jsonify({'success': True, 'session_id': session_id, 'messages': messages})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/chat-history/<session_id>', methods=['DELETE'])
+    def api_clear_chat_history(session_id):
+        """Clear chat history for a session."""
+        try:
+            from banko_ai.utils.crdb_chat_history import get_chat_history
+            history = get_chat_history(session_id, database_url=config.database_url)
+            history.clear()
+            return jsonify({'success': True, 'cleared': session_id})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/user-summary')
     def api_user_summary():
         """API endpoint for user spending summary."""
@@ -688,6 +731,25 @@ def create_app() -> Flask:
                     print(f"   📝 Description: {description}")
                     print(f"   🏷️  Tags: {tags}")
                     
+                    # Also index into langchain-cockroachdb vectorstore
+                    try:
+                        from banko_ai.vector_search.crdb_vectorstore import index_expense_document
+                        index_expense_document(
+                            expense_id=expense_id,
+                            description=description,
+                            metadata={
+                                "user_id": user_id,
+                                "merchant": merchant,
+                                "shopping_type": category,
+                                "expense_amount": amount,
+                                "expense_date": str(expense_date),
+                                "payment_method": extracted.get('payment_method', 'unknown'),
+                            },
+                        )
+                        print(f"   🔍 Indexed in CockroachDB vectorstore")
+                    except Exception as vs_err:
+                        print(f"   ⚠️  Vectorstore indexing skipped: {vs_err}")
+                    
                     # Emit update: Expense added
                     try:
                         socketio.emit('agent_activity', {
@@ -884,6 +946,16 @@ def create_app() -> Flask:
                 session['chat'].append({'text': user_message, 'class': 'User'})
                 prompt = user_message
                 
+                # Persist user message in CockroachDB chat history
+                try:
+                    from banko_ai.utils.crdb_chat_history import get_chat_history
+                    from langchain_core.messages import HumanMessage
+                    chat_session_id = session.get('session_id', session.sid if hasattr(session, 'sid') else 'default')
+                    crdb_history = get_chat_history(chat_session_id, database_url=config.database_url)
+                    crdb_history.add_message(HumanMessage(content=user_message))
+                except Exception:
+                    pass
+                
                 # Map language codes to language names for AI prompt
                 language_map = {
                     'en-US': 'English',
@@ -947,6 +1019,13 @@ def create_app() -> Flask:
                     print(f"Response from {config.ai_service}: {rag_response_text}")
                     
                     session['chat'].append({'text': rag_response_text, 'class': 'Assistant'})
+                    
+                    # Persist assistant response in CockroachDB chat history
+                    try:
+                        from langchain_core.messages import AIMessage
+                        crdb_history.add_message(AIMessage(content=rag_response_text))
+                    except Exception:
+                        pass
                     
                 except Exception as e:
                     error_message = f"Sorry, I'm experiencing technical difficulties. Error: {str(e)}"

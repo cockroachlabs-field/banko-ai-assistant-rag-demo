@@ -100,25 +100,6 @@ CREATE INDEX IF NOT EXISTS idx_agent_decisions_feedback
 CREATE INDEX IF NOT EXISTS idx_agent_decisions_type 
     ON agent_decisions (decision_type, created_at DESC);
 
--- Conversation history (cross-session memory)
-CREATE TABLE IF NOT EXISTS conversations (
-    conversation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id STRING NOT NULL,
-    session_id STRING,
-    message_role STRING NOT NULL,
-    message_content TEXT NOT NULL,
-    message_embedding VECTOR(384),
-    metadata JSONB,
-    created_at TIMESTAMP DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_conversations_user 
-    ON conversations (user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_conversations_session 
-    ON conversations (session_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_conversations_embedding 
-    ON conversations USING cspann (user_id, message_embedding vector_cosine_ops);
-
 -- Documents and receipts
 CREATE TABLE IF NOT EXISTS documents (
     document_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -196,7 +177,6 @@ def create_agent_schema(database_url: str, verbose: bool = True) -> bool:
             print("  - agent_memory: Vector memory + metadata")
             print("  - agent_tasks: Cross-agent communication")
             print("  - agent_decisions: Decision audit log")
-            print("  - conversations: Chat history")
             print("  - documents: Receipt/document storage")
         
         return True
@@ -225,7 +205,6 @@ def verify_agent_schema(database_url: str) -> dict:
         'agent_memory', 
         'agent_tasks',
         'agent_decisions',
-        'conversations',
         'documents'
     ]
     
@@ -279,7 +258,7 @@ def drop_agent_schema(database_url: str, confirm: bool = False) -> bool:
         
         with engine.connect() as conn:
             # Drop in reverse order due to foreign keys
-            tables = ['documents', 'conversations', 'agent_decisions', 
+            tables = ['documents', 'agent_decisions',
                      'agent_tasks', 'agent_memory', 'agent_state']
             
             for table in tables:
