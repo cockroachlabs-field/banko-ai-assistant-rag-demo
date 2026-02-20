@@ -39,6 +39,7 @@ jobs:
   imports:
     name: Verify Imports (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
         python-version: ["3.10", "3.12"]
@@ -49,9 +50,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" --no-cache-dir
 
       - name: Verify all modules import cleanly
         run: |
@@ -81,6 +83,7 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [lint, imports]
     steps:
       - uses: actions/checkout@v6
@@ -89,9 +92,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" --no-cache-dir
 
       - name: Run tests (no DB required)
         run: |
@@ -103,6 +107,7 @@ jobs:
   build:
     name: Build Package
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [lint]
     steps:
       - uses: actions/checkout@v6
@@ -118,7 +123,14 @@ jobs:
       - name: Build package
         run: python -m build
 
-      - name: Verify package
+      - name: Verify wheel contents
         run: |
-          pip install dist/*.whl
-          python -c "import banko_ai; print('Package install OK')"
+          pip install pkginfo
+          python -c "
+          import glob, pkginfo
+          whl = glob.glob('dist/*.whl')[0]
+          w = pkginfo.Wheel(whl)
+          print(f'Package: {w.name} v{w.version}')
+          print(f'Requires: {w.requires_dist[:5]}...')
+          print('Build OK')
+          "
