@@ -42,7 +42,6 @@ dependencies = [
     # AI & Embeddings
     "sentence-transformers>=3.1.0,<4.0.0",
     "openai>=1.11.0,<2.0.0",
-    "tiktoken>=0.5.0,<1.0.0",
     
     # AWS Integration
     "boto3>=1.40.0,<1.41.0",
@@ -54,8 +53,11 @@ dependencies = [
     "vertexai>=1.43.0,<2.0.0",
     "google-generativeai>=0.8.0,<1.0.0",
     
-    # Agent Framework (NEW)
-    "langgraph>=0.2.0,<0.3.0",
+    # CockroachDB LangChain Integration (vectorstore, chat history, checkpointer)
+    "langchain-cockroachdb>=0.2.0",
+    
+    # Agent Framework / LangGraph
+    "langgraph>=0.2.0",
     "langchain>=0.3.0,<0.4.0",
     "langchain-core>=0.3.0,<0.4.0",
     "langchain-openai>=0.2.0,<0.3.0",
@@ -78,17 +80,11 @@ dependencies = [
     # Production Server (Updated for CVE-2024-1135 and CVE-2024-6827 fixes)
     "gunicorn>=23.0.0,<24.0.0",
     
-    # Object Storage (NEW)
-    "minio>=7.2.0,<8.0.0",
-    
     # Utilities
     "requests>=2.32.4,<3.0.0",
     "numpy>=1.26.0,<2.0.0",
     "pandas>=2.2.0,<3.0.0",
-    "faker>=24.0.0,<25.0.0",
-    "python-dateutil>=2.8.0,<3.0.0",
-    "pytz>=2024.0,<2025.0",
-    "tqdm>=4.66.3,<5.0.0"
+    "python-dateutil>=2.8.0,<3.0.0"
 ]
 
 [project.optional-dependencies]
@@ -118,7 +114,7 @@ banko_ai = ["templates/*", "static/*", "static/**/*", "*.html", "*.css", "*.js"]
 
 [tool.black]
 line-length = 88
-target-version = ['py38']
+target-version = ['py310']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -135,7 +131,7 @@ extend-exclude = '''
 '''
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

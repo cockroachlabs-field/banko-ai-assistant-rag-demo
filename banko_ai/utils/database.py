@@ -157,21 +157,6 @@ class DatabaseManager:
                 
                 conn.execute(text("CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks (status, priority DESC, created_at)"))
                 
-                # Conversations
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS conversations (
-                        conversation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                        user_id STRING NOT NULL,
-                        agent_id UUID REFERENCES agent_state(agent_id),
-                        messages JSONB NOT NULL,
-                        context JSONB,
-                        created_at TIMESTAMP DEFAULT now(),
-                        updated_at TIMESTAMP DEFAULT now()
-                    )
-                """))
-                
-                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations (user_id, updated_at DESC)"))
-                
                 # Documents
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS documents (
