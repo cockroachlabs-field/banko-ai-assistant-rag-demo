@@ -7,11 +7,29 @@ resets, or network issues.
 """
 
 import functools
+import os
 import time
 from collections.abc import Callable
 
 import psycopg2
 from sqlalchemy.exc import DBAPIError, OperationalError
+
+
+def normalize_db_url(url: str) -> str:
+    """Normalize postgresql:// or postgres:// to cockroachdb:// so the
+    sqlalchemy-cockroachdb dialect handles CockroachDB version strings."""
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "cockroachdb://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "cockroachdb://", 1)
+    return url
+
+
+def get_database_url(url: str | None = None) -> str:
+    """Get and normalize the database URL from argument or DATABASE_URL env var."""
+    raw = url or os.getenv("DATABASE_URL", "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
+    return normalize_db_url(raw)
+
 
 # Transient errors that should trigger a retry
 TRANSIENT_ERRORS = (
@@ -188,9 +206,9 @@ def create_resilient_engine(database_url: str, **kwargs):
     Returns:
         Configured SQLAlchemy engine
     """
-    import os
-
     from sqlalchemy import create_engine
+    
+    database_url = normalize_db_url(database_url)
     
     # Get pool configuration from environment variables with sensible defaults
     # CockroachDB docs recommend larger pools for production workloads

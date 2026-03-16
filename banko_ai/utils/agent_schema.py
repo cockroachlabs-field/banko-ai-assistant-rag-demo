@@ -281,12 +281,9 @@ if __name__ == "__main__":
     Run this script directly to create agent schema:
     python -m banko_ai.utils.agent_schema
     """
-    import os
+    from .db_retry import get_database_url
     
-    database_url = os.getenv(
-        'DATABASE_URL',
-        'cockroachdb://root@localhost:26257/defaultdb?sslmode=disable'
-    )
+    database_url = get_database_url()
     
     print(f"Database: {database_url.split('@')[1] if '@' in database_url else database_url}")
     print()

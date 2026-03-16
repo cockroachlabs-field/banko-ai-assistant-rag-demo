@@ -14,7 +14,7 @@ from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
 
 from ..ai_providers.base import SearchResult
-from ..utils.db_retry import create_resilient_engine, db_retry
+from ..utils.db_retry import create_resilient_engine, db_retry, get_database_url
 
 
 class VectorSearchEngine:
@@ -22,7 +22,7 @@ class VectorSearchEngine:
     
     def __init__(self, database_url: str | None = None, cache_manager=None):
         """Initialize the vector search engine."""
-        self.database_url = database_url or os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
+        self.database_url = get_database_url(database_url)
         self.cache_manager = cache_manager
         
         # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)

@@ -10,6 +10,7 @@ from typing import Optional
 from langchain_cockroachdb import CockroachDBChatMessageHistory
 
 from .crdb_engine import normalize_crdb_url
+from .db_retry import get_database_url
 
 
 def get_chat_history(
@@ -26,12 +27,7 @@ def get_chat_history(
         database_url: CockroachDB connection string (falls back to env).
         table_name: Table name for messages.
     """
-    url = normalize_crdb_url(
-        database_url or os.getenv(
-            "DATABASE_URL",
-            "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable",
-        )
-    )
+    url = normalize_crdb_url(get_database_url(database_url))
 
     history = CockroachDBChatMessageHistory(
         session_id=session_id,

@@ -25,12 +25,11 @@ from sqlalchemy import Boolean, Column, DateTime, Float, Integer, MetaData, Stri
 from sqlalchemy import Text as TextColumn
 from sqlalchemy.dialects.postgresql import JSONB
 
-from .db_retry import create_resilient_engine, db_retry
+from .db_retry import create_resilient_engine, db_retry, get_database_url
 
 # Database configuration
-DB_URI = os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
+DB_URI = get_database_url()
 
-# Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
 engine = create_resilient_engine(DB_URI)
 
 class CustomJSONEncoder(json.JSONEncoder):

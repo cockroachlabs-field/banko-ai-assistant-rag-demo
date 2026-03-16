@@ -10,6 +10,8 @@ import secrets
 from dataclasses import dataclass
 from typing import Any
 
+from ..utils.db_retry import get_database_url
+
 
 @dataclass
 class Config:
@@ -68,14 +70,8 @@ class Config:
     @classmethod
     def from_env(cls) -> "Config":
         """Create configuration from environment variables."""
-        # Database configuration - match original app.py
-        database_url = os.getenv("DATABASE_URL", "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
-        
-        # Normalize postgresql:// to cockroachdb:// so sqlalchemy-cockroachdb dialect is used
-        if database_url.startswith("postgresql://"):
-            database_url = database_url.replace("postgresql://", "cockroachdb://", 1)
-        elif database_url.startswith("postgres://"):
-            database_url = database_url.replace("postgres://", "cockroachdb://", 1)
+        # Database configuration
+        database_url = get_database_url()
         
         # Parse database URL for individual components
         db_host = os.getenv("DATABASE_HOST", "localhost")

@@ -15,7 +15,7 @@ from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError, OperationalError
 
-from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry
+from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry, get_database_url
 from .base import AIAuthenticationError, AIConnectionError, AIProvider, RAGResponse, SearchResult
 
 
@@ -89,9 +89,8 @@ class OpenAIProvider(AIProvider):
     def _get_db_engine(self):
         """Get database engine with proper connection pooling."""
         if self.db_engine is None:
-            database_url = os.getenv("DATABASE_URL", "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
+            database_url = get_database_url()
             try:
-                # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
                 self.db_engine = create_resilient_engine(database_url)
             except Exception as e:
                 raise AIConnectionError(f"Failed to connect to database: {str(e)}")
