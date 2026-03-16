@@ -97,28 +97,16 @@ class VectorSearchEngine:
         print("\n🔍 VECTOR SEARCH (with caching):")
         print(f"1. Query: '{query}' | Limit: {limit}")
         
-        tracker = None
-        
-        # Use cached embedding generation if available
         if self.cache_manager:
             start_time = time.time()
             raw_embedding = self.cache_manager._get_embedding_with_cache(query)
             embed_duration = (time.time() - start_time) * 1000
+            print(f"   Embedding generated in {embed_duration:.1f}ms")
             
-            # Track embedding (cache hit/miss is tracked in cache_manager)
-            if tracker:
-                tracker.add_embedding_generation(query, len(raw_embedding), embed_duration)
-            
-            # Check for cached vector search results
-            start_time = time.time()
             cached_results = self.cache_manager.get_cached_vector_search(raw_embedding, limit)
-            (time.time() - start_time) * 1000
             
             if cached_results:
                 print(f"2. ✅ Vector search cache HIT! Found {len(cached_results)} cached results")
-                if tracker:
-                    tracker.add_cache_check('Vector Search', hit=True)
-                # Convert cached results to SearchResult objects
                 search_results = []
                 for result in cached_results[:limit]:
                     search_results.append(SearchResult(
@@ -138,17 +126,12 @@ class VectorSearchEngine:
                     ))
                 return search_results
             print("2. ❌ Vector search cache MISS, querying database")
-            if tracker:
-                tracker.add_cache_check('Vector Search', hit=False)
         else:
-            # Fallback to direct embedding generation
             start_time = time.time()
             query_embedding = self.embedding_model.encode([query])[0]
             embed_duration = (time.time() - start_time) * 1000
             raw_embedding = query_embedding
-            print("2. Generated fresh embedding (no cache available)")
-            if tracker:
-                tracker.add_embedding_generation(query, len(raw_embedding), embed_duration)
+            print(f"2. Generated fresh embedding in {embed_duration:.1f}ms (no cache available)")
         
         # Convert to PostgreSQL vector format (matching original implementation)
         search_embedding = json.dumps(raw_embedding.flatten().tolist())
@@ -194,9 +177,7 @@ class VectorSearchEngine:
                 }
             ))
             
-            print(f"3. Database query returned {len(results)} expense records")
-            if tracker:
-                tracker.add_vector_search(query, len(results), query_duration)
+            print(f"3. Database query returned {len(results)} expense records in {query_duration:.1f}ms")
             
             # Cache the results for future use (convert back to dict format for caching)
             if self.cache_manager and results:
@@ -264,122 +245,6 @@ class VectorSearchEngine:
         """
     
     @db_retry(max_attempts=3, initial_delay=0.5)
-    def search_by_category(
-        self, 
-        category: str, 
-        user_id: str | None = None,
-        limit: int = 10
-    ) -> list[SearchResult]:
-        """Search expenses by category."""
-        sql = """
-        SELECT 
-            expense_id,
-            user_id,
-            description,
-            merchant,
-            expense_amount,
-            expense_date,
-            1.0 as similarity_score,
-            shopping_type,
-            payment_method,
-            recurring,
-            tags
-        FROM expenses
-        WHERE shopping_type ILIKE %s
-        """
-        
-        params = [f"%{category}%"]
-        
-        if user_id:
-            sql += " AND user_id = %s"
-            params.append(user_id)
-        
-        sql += " ORDER BY expense_date DESC LIMIT %s"
-        params.append(limit)
-        
-        with self.engine.connect() as conn:
-            result = conn.execute(text(sql), params)
-            rows = result.fetchall()
-        
-        results = []
-        for row in rows:
-            results.append(SearchResult(
-                expense_id=str(row[0]),
-                user_id=str(row[1]),
-                description=row[2] or "",
-                merchant=row[3] or "",
-                amount=float(row[4]),
-                date=str(row[5]),
-                similarity_score=float(row[6]),
-                metadata={
-                    "shopping_type": row[7],
-                    "payment_method": row[8],
-                    "recurring": row[9],
-                    "tags": row[10]
-                }
-            ))
-        
-        return results
-    
-    @db_retry(max_attempts=3, initial_delay=0.5)
-    def search_by_merchant(
-        self, 
-        merchant: str, 
-        user_id: str | None = None,
-        limit: int = 10
-    ) -> list[SearchResult]:
-        """Search expenses by merchant."""
-        sql = """
-        SELECT 
-            expense_id,
-            user_id,
-            description,
-            merchant,
-            expense_amount,
-            expense_date,
-            1.0 as similarity_score,
-            shopping_type,
-            payment_method,
-            recurring,
-            tags
-        FROM expenses
-        WHERE merchant ILIKE %s
-        """
-        
-        params = [f"%{merchant}%"]
-        
-        if user_id:
-            sql += " AND user_id = %s"
-            params.append(user_id)
-        
-        sql += " ORDER BY expense_date DESC LIMIT %s"
-        params.append(limit)
-        
-        with self.engine.connect() as conn:
-            result = conn.execute(text(sql), params)
-            rows = result.fetchall()
-        
-        results = []
-        for row in rows:
-            results.append(SearchResult(
-                expense_id=str(row[0]),
-                user_id=str(row[1]),
-                description=row[2] or "",
-                merchant=row[3] or "",
-                amount=float(row[4]),
-                date=str(row[5]),
-                similarity_score=float(row[6]),
-                metadata={
-                    "shopping_type": row[7],
-                    "payment_method": row[8],
-                    "recurring": row[9],
-                    "tags": row[10]
-                }
-            ))
-        
-        return results
-    
-    @db_retry(max_attempts=3, initial_delay=0.5)
     def get_user_spending_summary(
         self, 
         user_id: str, 
@@ -423,69 +288,4 @@ class VectorSearchEngine:
         
         return summary
     
-    @db_retry(max_attempts=3, initial_delay=0.5)
-    def get_similar_expenses(
-        self, 
-        expense_id: str, 
-        limit: int = 5
-    ) -> list[SearchResult]:
-        """Find expenses similar to a given expense."""
-        # First get the expense details
-        expense_sql = """
-        SELECT user_id, description, merchant, embedding
-        FROM expenses
-        WHERE expense_id = %s
-        """
-        
-        with self.engine.connect() as conn:
-            result = conn.execute(text(expense_sql), [expense_id])
-            row = result.fetchone()
-            
-            if not row:
-                return []
-            
-            user_id, description, merchant, embedding = row
-            
-            # Search for similar expenses
-            similar_sql = """
-            SELECT 
-                expense_id,
-                user_id,
-                description,
-                merchant,
-                expense_amount,
-                expense_date,
-                1 - (embedding <=> %s) as similarity_score,
-                shopping_type,
-                payment_method,
-                recurring,
-                tags
-            FROM expenses
-            WHERE expense_id != %s
-            AND user_id = %s
-            ORDER BY similarity_score DESC
-            LIMIT %s
-            """
-            
-            result = conn.execute(text(similar_sql), [embedding, expense_id, user_id, limit])
-            rows = result.fetchall()
-        
-        results = []
-        for row in rows:
-            results.append(SearchResult(
-                expense_id=str(row[0]),
-                user_id=str(row[1]),
-                description=row[2] or "",
-                merchant=row[3] or "",
-                amount=float(row[4]),
-                date=str(row[5]),
-                similarity_score=float(row[6]),
-                metadata={
-                    "shopping_type": row[7],
-                    "payment_method": row[8],
-                    "recurring": row[9],
-                    "tags": row[10]
-                }
-            ))
-        
-        return results
+

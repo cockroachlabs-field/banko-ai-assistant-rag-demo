@@ -731,74 +731,39 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                 for i, result in enumerate(context):
                     print(f"🔍 DEBUG: Real Result {i+1}: {result.merchant} - ${result.amount} - {result.description[:50]}...")
             
-            # Re-enable AI generation with real search results
-            if True:  # Re-enabled AI generation with real data
-                # Return structured demo response if no API credentials
-                if not self.api_key or not self.project_id:
-                    ai_response = f"""## Financial Analysis for: "{query}"
+            insights = self._get_financial_insights(context)
+            budget_recommendations = self._generate_budget_recommendations(insights, query)
+
+            if not self.api_key or not self.project_id:
+                table_text = ""
+                if context:
+                    table_text = "\n".join([
+                        f"• **{result.metadata.get('shopping_type', 'Unknown')}** at {result.merchant}: ${result.amount} on {result.date} ({result.metadata.get('payment_method', 'Unknown')}) - {result.description}"
+                        for result in context
+                    ])
+
+                ai_response = f"""## Financial Analysis for: "{query}"
 
 ### 📋 Transaction Details
-No expense records found for this query.
+{table_text if table_text else 'No expense records found for this query.'}
 
 ### 📊 Financial Summary
-No data available for analysis.
-
-### 🤖 AI-Powered Insights
-I couldn't find any relevant expense records for your query. Please try:
-- Different keywords (e.g., "groceries", "restaurants", "transportation")
-- Broader categories (e.g., "food", "shopping", "bills")
-- Time periods (e.g., "last month", "this week")
-
-**Note**: I need API credentials to generate more detailed AI-powered insights."""
-                else:
-                    # Generate financial insights from search results
-                    insights = self._get_financial_insights(context)
-                    budget_recommendations = self._generate_budget_recommendations(insights, query)
-                    
-                    # Create table text from search results
-                    table_text = ""
-                    if context:
-                        table_text = "\n".join([
-                            f"• **{result.metadata.get('shopping_type', 'Unknown')}** at {result.merchant}: ${result.amount} on {result.date} ({result.metadata.get('payment_method', 'Unknown')}) - {result.description}"
-                            for result in context
-                        ])
-                    
-                    # Create context text with financial summary
-                    context_text = f"""**📊 Financial Summary:**
 • Total Amount: ${insights.get('total_amount', 0):.2f}
 • Number of Transactions: {insights.get('num_transactions', 0)}
 • Average Transaction: ${insights.get('avg_transaction', 0):.2f}
-• Top Category: {insights.get('top_category', ('Unknown', 0))[0] if insights.get('top_category') else 'Unknown'}
-• Most frequent category: {insights.get('top_category', ('Unknown', 0))[0] if insights.get('top_category') else 'Unknown'}
 
-**Recommendations:**
-{budget_recommendations if budget_recommendations else '• Consider reviewing your spending patterns regularly' + chr(10) + '• Set up budget alerts for high-value categories'}
+### 🤖 Recommendations
+{budget_recommendations if budget_recommendations else '• Consider reviewing your spending patterns regularly'}
 
-**Note**: I can see {len(context)} relevant expense records, but I need API credentials to generate more detailed AI-powered insights."""
-                    
-                    ai_response = f"""## Financial Analysis for: "{query}"
-
-### 📋 Transaction Details
-{table_text}
-
-### 📊 Financial Summary
-{context_text}"""
+**Note**: Set WATSONX_API_KEY and WATSONX_PROJECT_ID for AI-powered insights."""
             else:
-                # Make actual Watsonx API call with enhanced prompt (copied from original)
                 try:
-                    # Generate financial insights from search results
-                    insights = self._get_financial_insights(context)
-                    budget_recommendations = self._generate_budget_recommendations(insights, query)
-                    
-                    # Prepare the search results context with enhanced analysis (copied from original)
                     search_results_text = ""
                     if context:
                         search_results_text = "\n".join(
                             f"• **{result.metadata.get('shopping_type', 'Unknown')}** at {result.merchant}: ${result.amount} ({result.metadata.get('payment_method', 'Unknown')}) - {result.description}"
                             for result in context
                         )
-                        
-                        # Add financial summary (copied from original)
                         if insights:
                             search_results_text += "\n\n**📊 Financial Summary:**\n"
                             search_results_text += f"• Total Amount: **${insights['total_amount']:.2f}**\n"
@@ -809,8 +774,7 @@ I couldn't find any relevant expense records for your query. Please try:
                                 search_results_text += f"• Top Category: **{cat}** (${amt:.2f})\n"
                     else:
                         search_results_text = "No specific expense records found for this query."
-                    
-                    # Create optimized prompt (copied from original)
+
                     enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
 
 Q: {query}
@@ -821,41 +785,16 @@ Data:
 {budget_recommendations if budget_recommendations else ''}
 
 Provide helpful insights with numbers, markdown formatting, and actionable advice."""
-                    
-                    # Prepare messages for chat format (copied from original)
-                    messages = [
-                        {
-                            "role": "user",
-                            "content": enhanced_prompt
-                        }
-                    ]
-                    
-                    # Call Watsonx API (copied from original implementation)
+
+                    messages = [{"role": "user", "content": enhanced_prompt}]
                     ai_response = self._call_watsonx_api(messages)
-                    
-                except Exception as e:
-                    # Fallback to structured response if API call fails
-                    error_msg = str(e)
-                    ai_response = "## Financial Analysis for: \"" + query + "\"\n\n"
-                    ai_response += "### 📋 Transaction Details\n"
-                    ai_response += search_results_text if 'search_results_text' in locals() else 'No data available'
-                    ai_response += "\n\n### 📊 Financial Summary\n"
-                    ai_response += f"{insights.get('total_amount', 0):.2f} total across {insights.get('num_transactions', 0)} transactions"
-                    ai_response += "\n\n### 🤖 AI-Powered Insights\n"
-                    ai_response += f"Based on your expense data, I found {len(context)} relevant records. Here's a comprehensive analysis:\n\n"
-                    ai_response += "**Spending Analysis:**\n"
-                    ai_response += f"- Total Amount: ${insights.get('total_amount', 0):.2f}\n"
-                    ai_response += f"- Transaction Count: {insights.get('num_transactions', 0)}\n"
-                    ai_response += f"- Average Transaction: ${insights.get('avg_transaction', 0):.2f}\n"
-                    top_category = insights.get('top_category', ('Unknown', 0))
-                    ai_response += "- Top Category: " + (top_category[0] if top_category else 'Unknown') + " ($" + f"{top_category[1]:.2f}" + " if top_category else 0)\n\n"
-                    ai_response += "**Smart Recommendations:**\n"
-                    ai_response += budget_recommendations if budget_recommendations else '• Monitor your spending patterns regularly\n• Consider setting up budget alerts\n• Review high-value transactions for optimization opportunities'
-                    ai_response += "\n\n**Next Steps:**\n"
-                    ai_response += "• Track your spending trends over time\n"
-                    ai_response += "• Set realistic budget goals for each category\n"
-                    ai_response += "• Review and optimize your payment methods\n\n"
-                    ai_response += "**Note**: API call failed, showing structured analysis above."
+
+                except Exception:
+                    ai_response = f"## Financial Analysis for: \"{query}\"\n\n"
+                    ai_response += f"Found {len(context)} relevant records.\n"
+                    ai_response += f"Total: ${insights.get('total_amount', 0):.2f} across {insights.get('num_transactions', 0)} transactions.\n\n"
+                    ai_response += budget_recommendations if budget_recommendations else "• Monitor your spending patterns regularly"
+                    ai_response += "\n\n**Note**: API call failed, showing structured analysis."
             
             # Cache the response for future similar queries
             if self.cache_manager and ai_response:
