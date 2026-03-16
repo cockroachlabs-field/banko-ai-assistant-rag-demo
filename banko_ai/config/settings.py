@@ -6,6 +6,7 @@ variables with sensible defaults, making the application easy to configure and d
 """
 
 import os
+import secrets
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,7 +44,7 @@ class Config:
     google_model: str = "gemini-1.5-pro"  # Gemini models
     
     # Application Configuration
-    secret_key: str = "your-secret-key-change-in-production"
+    secret_key: str = ""
     debug: bool = False
     host: str = "0.0.0.0"
     port: int = 5000
@@ -81,22 +82,9 @@ class Config:
         # AI Service configuration - match original app.py
         ai_service = os.getenv("AI_SERVICE", "watsonx").lower()
         
-        # Try to load from config.py like the original app.py does
-        try:
-            import sys
-            # Add parent directory to path to import config.py
-            parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            if parent_dir not in sys.path:
-                sys.path.insert(0, parent_dir)
-            from config import WATSONX_API_KEY, WATSONX_MODEL_ID, WATSONX_PROJECT_ID
-            watsonx_api_key = WATSONX_API_KEY
-            watsonx_project_id = WATSONX_PROJECT_ID
-            watsonx_model = WATSONX_MODEL_ID
-        except ImportError:
-            # Fall back to environment variables
-            watsonx_api_key = os.getenv("WATSONX_API_KEY")
-            watsonx_project_id = os.getenv("WATSONX_PROJECT_ID")
-            watsonx_model = os.getenv("WATSONX_MODEL", "openai/gpt-oss-120b")
+        watsonx_api_key = os.getenv("WATSONX_API_KEY")
+        watsonx_project_id = os.getenv("WATSONX_PROJECT_ID")
+        watsonx_model = os.getenv("WATSONX_MODEL", "openai/gpt-oss-120b")
         
         return cls(
             # Database
@@ -128,7 +116,7 @@ class Config:
             google_model=os.getenv("GOOGLE_MODEL", "gemini-1.5-pro"),
             
             # Application
-            secret_key=os.getenv("SECRET_KEY", "your-secret-key-change-in-production"),
+            secret_key=os.getenv("SECRET_KEY", ""),
             debug=os.getenv("DEBUG", "false").lower() == "true",
             host=os.getenv("HOST", "0.0.0.0"),
             port=int(os.getenv("PORT", "5000")),
@@ -216,6 +204,10 @@ class Config:
         """Validate configuration and raise errors for missing required values."""
         if not self.database_url:
             raise ValueError("DATABASE_URL is required")
+        
+        if not self.secret_key:
+            self.secret_key = secrets.token_hex(32)
+            print("Warning: SECRET_KEY not set. Generated a random key for this session.")
         
         # Validate AI service specific requirements
         if self.ai_service == "openai" and not self.openai_api_key:
