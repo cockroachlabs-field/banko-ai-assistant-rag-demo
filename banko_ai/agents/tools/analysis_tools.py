@@ -248,7 +248,7 @@ def create_analysis_tools(database_url: str) -> list[Tool]:
     
     def find_duplicates(user_id: str, days: int = 30) -> str:
         """
-        Find potential duplicate expenses.
+        Find potential duplicate expenses (same merchant + amount within window).
         
         Args:
             user_id: User ID to check
@@ -261,22 +261,23 @@ def create_analysis_tools(database_url: str) -> list[Tool]:
             engine = create_engine(database_url, poolclass=NullPool)
             
             with engine.connect() as conn:
-                # Calculate cutoff date in Python (safer than SQL interval with parameter)
                 cutoff_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
                 
+                # Find duplicates: same merchant + amount within the window
+                # (not requiring same date -- catches re-uploaded receipts)
                 result = conn.execute(text("""
                     WITH grouped AS (
                         SELECT 
                             merchant,
                             expense_amount,
-                            DATE(expense_date) as date,
                             COUNT(*) as count,
                             ARRAY_AGG(expense_id) as expense_ids,
-                            ARRAY_AGG(description) as descriptions
+                            ARRAY_AGG(description) as descriptions,
+                            ARRAY_AGG(expense_date::TEXT) as dates
                         FROM expenses
                         WHERE user_id = :user_id
                         AND expense_date >= :cutoff_date
-                        GROUP BY merchant, expense_amount, DATE(expense_date)
+                        GROUP BY merchant, expense_amount
                         HAVING COUNT(*) > 1
                     )
                     SELECT * FROM grouped
@@ -289,10 +290,10 @@ def create_analysis_tools(database_url: str) -> list[Tool]:
                     duplicates.append({
                         'merchant': row[0],
                         'amount': float(row[1]),
-                        'date': row[2].isoformat() if row[2] else None,
-                        'count': int(row[3]),
-                        'expense_ids': [str(id) for id in row[4]],
-                        'descriptions': row[5]
+                        'count': int(row[2]),
+                        'expense_ids': [str(eid) for eid in row[3]],
+                        'descriptions': row[4],
+                        'dates': row[5]
                     })
             
             engine.dispose()

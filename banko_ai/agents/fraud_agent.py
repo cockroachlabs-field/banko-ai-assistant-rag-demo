@@ -125,29 +125,64 @@ Be thorough but not overly cautious. False positives are costly."""
             expense = expense_data['expense']
             user_id = expense['user_id']
             
-            # Signal 1: Check for duplicates
-            # Note: Default 60-day window is for demo purposes with test data
-            # Production should use 7-14 days for true duplicate detection
-            # Configure via FRAUD_DUPLICATE_WINDOW_DAYS environment variable
-            duplicate_result = self.execute_tool(
-                'find_duplicates',
-                user_id=user_id,
-                days=self.duplicate_window_days
-            )
-            duplicate_data = json.loads(duplicate_result)
+            # Normalize field names (tool returns expense_amount/expense_date)
+            expense['amount'] = expense.get('amount') or expense.get('expense_amount', 0)
+            expense['date'] = expense.get('date') or expense.get('expense_date', '')
             
-            if duplicate_data.get('success') and duplicate_data.get('count', 0) > 0:
-                # Check if current expense is in duplicates
-                for dup_group in duplicate_data.get('duplicates', []):
-                    if expense_id in dup_group.get('expense_ids', []):
-                        result['signals'].append({
-                            'type': 'duplicate',
-                            'severity': 'high',
-                            'details': f"Duplicate transaction: {dup_group['count']} occurrences of ${dup_group['amount']} at {dup_group['merchant']}"
-                        })
-                        result['confidence'] += 0.4
-                        result['fraud_detected'] = True
-                        break
+            # Signal 1: Check for duplicates
+            # First do a direct check: any other expense with same merchant+amount for this user?
+            from sqlalchemy import create_engine, text
+            from sqlalchemy.pool import NullPool
+            try:
+                dup_engine = create_engine(self.database_url, poolclass=NullPool)
+                with dup_engine.connect() as conn:
+                    dup_result = conn.execute(text("""
+                        SELECT expense_id::TEXT, merchant, expense_amount, expense_date
+                        FROM expenses
+                        WHERE user_id = :user_id
+                        AND merchant = :merchant
+                        AND expense_amount = :amount
+                        AND expense_id != :expense_id
+                    """), {
+                        'user_id': user_id,
+                        'merchant': expense['merchant'],
+                        'amount': expense['amount'],
+                        'expense_id': expense_id
+                    })
+                    dup_rows = dup_result.fetchall()
+                dup_engine.dispose()
+                
+                if dup_rows:
+                    result['signals'].append({
+                        'type': 'duplicate',
+                        'severity': 'high',
+                        'details': f"Duplicate transaction: {len(dup_rows) + 1} occurrences of ${expense['amount']} at {expense['merchant']}"
+                    })
+                    result['confidence'] += 0.4
+                    result['fraud_detected'] = True
+            except Exception as dup_err:
+                print(f"⚠️  Duplicate check error: {dup_err}")
+            
+            # Also run the general duplicate scan via tool
+            if not result['fraud_detected']:
+                duplicate_result = self.execute_tool(
+                    'find_duplicates',
+                    user_id=user_id,
+                    days=self.duplicate_window_days
+                )
+                duplicate_data = json.loads(duplicate_result)
+                
+                if duplicate_data.get('success') and duplicate_data.get('count', 0) > 0:
+                    for dup_group in duplicate_data.get('duplicates', []):
+                        if expense_id in dup_group.get('expense_ids', []):
+                            result['signals'].append({
+                                'type': 'duplicate',
+                                'severity': 'high',
+                                'details': f"Duplicate transaction: {dup_group['count']} occurrences of ${dup_group['amount']} at {dup_group['merchant']}"
+                            })
+                            result['confidence'] += 0.4
+                            result['fraud_detected'] = True
+                            break
             
             # Signal 2: Statistical anomaly detection
             anomaly_result = self.execute_tool(
@@ -306,10 +341,10 @@ Provide a concise explanation of why this is or isn't fraud. Be specific about t
                 result = conn.execute(text("""
                     SELECT expense_id
                     FROM expenses
-                    WHERE created_at >= NOW() - INTERVAL ':hours hours'
-                    ORDER BY created_at DESC
+                    WHERE expense_date >= CURRENT_DATE - :days
+                    ORDER BY expense_date DESC
                     LIMIT :limit
-                """), {'hours': hours, 'limit': limit})
+                """), {'days': max(1, hours // 24), 'limit': limit})
                 
                 expense_ids = [row[0] for row in result.fetchall()]
             
