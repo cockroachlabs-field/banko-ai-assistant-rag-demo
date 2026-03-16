@@ -7,7 +7,7 @@ This module provides database schema creation and management functionality.
 import os
 from typing import Optional
 
-from .db_retry import create_resilient_engine
+from .db_retry import create_resilient_engine, get_database_url
 
 
 class DatabaseManager:
@@ -15,7 +15,7 @@ class DatabaseManager:
     
     def __init__(self, database_url: str | None = None):
         """Initialize database manager."""
-        self.database_url = database_url or os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/banko_ai?sslmode=disable")
+        self.database_url = get_database_url(database_url)
         self._engine = None
     
     @property

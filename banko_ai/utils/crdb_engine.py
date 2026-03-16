@@ -4,10 +4,11 @@ Provides a single async connection pool backed by langchain-cockroachdb
 that all components (vectorstore, chat history, checkpointer) share.
 """
 
-import os
 from typing import Optional
 
 from langchain_cockroachdb import CockroachDBEngine
+
+from .db_retry import get_database_url
 
 
 def normalize_crdb_url(url: str) -> str:
@@ -39,12 +40,7 @@ def get_crdb_engine(database_url: str | None = None) -> CockroachDBEngine:
     if _engine is not None:
         return _engine
 
-    url = database_url or os.getenv(
-        "DATABASE_URL",
-        "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable",
-    )
-
-    url = normalize_crdb_url(url)
+    url = normalize_crdb_url(get_database_url(database_url))
 
     _engine = CockroachDBEngine.from_connection_string(
         url,

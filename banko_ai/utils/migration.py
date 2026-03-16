@@ -8,13 +8,15 @@ for user-specific vector indexing and other enhancements.
 import os
 from typing import Optional
 
+from .db_retry import get_database_url
+
 
 class DatabaseMigration:
     """Database migration utilities."""
     
     def __init__(self, database_url: str | None = None):
         """Initialize migration manager."""
-        self.database_url = database_url or os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
+        self.database_url = get_database_url(database_url)
         self._engine = None
     
     @property

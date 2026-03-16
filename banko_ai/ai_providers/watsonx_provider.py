@@ -28,7 +28,7 @@ import requests
 from sqlalchemy.exc import DBAPIError, OperationalError
 
 from ..ai_providers.base import AIConnectionError, AIProvider, RAGResponse, SearchResult
-from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry
+from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry, get_database_url
 
 
 class WatsonxProvider(AIProvider):
@@ -106,8 +106,7 @@ class WatsonxProvider(AIProvider):
             from sqlalchemy import text
             
             # Database connection with proper pooling
-            DB_URI = os.getenv("DATABASE_URL", "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
-            # Use official sqlalchemy-cockroachdb dialect (no conversion needed!)
+            DB_URI = get_database_url()
             engine = create_resilient_engine(DB_URI)
             
             # Generate embedding with cache support

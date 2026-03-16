@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from ..utils.db_retry import create_resilient_engine
+from ..utils.db_retry import create_resilient_engine, get_database_url
 from .enrichment import DataEnricher
 
 
@@ -22,7 +22,7 @@ class EnhancedExpenseGenerator:
     
     def __init__(self, database_url: str | None = None):
         """Initialize the enhanced expense generator."""
-        self.database_url = database_url or os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
+        self.database_url = get_database_url(database_url)
         self._engine = None
         self.enricher = DataEnricher()
         self._embedding_model = None

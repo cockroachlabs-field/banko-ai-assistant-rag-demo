@@ -190,10 +190,8 @@ def run_receipt_workflow(
 
     Returns the final state dict.
     """
-    url = database_url or os.getenv(
-        "DATABASE_URL",
-        "postgresql://root@localhost:26257/defaultdb?sslmode=disable",
-    )
+    from ..utils.db_retry import get_database_url
+    url = get_database_url(database_url)
 
     with CockroachDBSaver.from_conn_string(url) as checkpointer:
         checkpointer.setup()
