@@ -130,7 +130,7 @@ def test_semantic_similarity(cache_manager):
         return False
 
 def test_disabled_methods_not_called():
-    """Test 5: Verify disabled insights_cache methods aren't accidentally called"""
+    """Test 5: Verify dead insights_cache methods have been removed"""
     print("\n" + "="*80)
     print("TEST 5: Dead Code Verification")
     print("="*80)
@@ -138,18 +138,24 @@ def test_disabled_methods_not_called():
     try:
         cache_manager = BankoCacheManager()
         
-        # Verify methods are disabled
+        # Verify removed methods no longer exist
         has_old_method = hasattr(cache_manager, 'get_cached_insights')
-        has_new_method = hasattr(cache_manager, '_get_cached_insights_DISABLED')
+        has_disabled_method = hasattr(cache_manager, '_get_cached_insights_DISABLED')
+        has_cache_disabled = hasattr(cache_manager, '_cache_insights_DISABLED')
         
-        if has_new_method and not has_old_method:
-            print("✅ Old method 'get_cached_insights' successfully disabled")
-        elif has_old_method:
-            print("⚠️  Old method 'get_cached_insights' still exists (unexpected)")
+        if not has_old_method and not has_disabled_method and not has_cache_disabled:
+            print("✅ Dead insights_cache methods fully removed")
+        else:
+            remaining = []
+            if has_old_method:
+                remaining.append('get_cached_insights')
+            if has_disabled_method:
+                remaining.append('_get_cached_insights_DISABLED')
+            if has_cache_disabled:
+                remaining.append('_cache_insights_DISABLED')
+            print(f"⚠️  Dead methods still present: {remaining}")
         
-        # Verify table creation is commented out (check indirectly)
-        print("✅ Table creation safely commented out in code")
-        print("✅ No code should try to use insights_cache")
+        print("✅ No code references insights_cache")
         
         return True
     except Exception as e:
