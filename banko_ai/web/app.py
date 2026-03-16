@@ -705,11 +705,11 @@ def create_app() -> Flask:
                             INSERT INTO expenses (
                                 expense_id, user_id, expense_amount, shopping_type,
                                 merchant, expense_date, description, payment_method,
-                                tags, embedding, created_at
+                                tags, embedding
                             ) VALUES (
                                 :expense_id, :user_id, :amount, :category,
                                 :merchant, :date, :description, :payment_method,
-                                :tags, CAST(:embedding AS VECTOR(384)), NOW()
+                                :tags, CAST(:embedding AS VECTOR(384))
                             )
                         """), {
                             'expense_id': expense_id,
