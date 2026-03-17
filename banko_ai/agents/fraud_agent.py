@@ -129,8 +129,7 @@ Be thorough but not overly cautious. False positives are costly."""
             expense['amount'] = expense.get('amount') or expense.get('expense_amount', 0)
             expense['date'] = expense.get('date') or expense.get('expense_date', '')
             
-            # Signal 1: Check for duplicates
-            # First do a direct check: any other expense with same merchant+amount for this user?
+            # Signal 1: Check for duplicates within the configured window
             from sqlalchemy import create_engine, text
             from sqlalchemy.pool import NullPool
             try:
@@ -143,11 +142,13 @@ Be thorough but not overly cautious. False positives are costly."""
                         AND merchant = :merchant
                         AND expense_amount = :amount
                         AND expense_id != :expense_id
+                        AND expense_date >= CURRENT_DATE - :window_days
                     """), {
                         'user_id': user_id,
                         'merchant': expense['merchant'],
                         'amount': expense['amount'],
-                        'expense_id': expense_id
+                        'expense_id': expense_id,
+                        'window_days': self.duplicate_window_days,
                     })
                     dup_rows = dup_result.fetchall()
                 dup_engine.dispose()
@@ -338,13 +339,15 @@ Provide a concise explanation of why this is or isn't fraud. Be specific about t
             engine = create_engine(self.database_url, poolclass=NullPool)
             
             with engine.connect() as conn:
+                from datetime import datetime, timedelta
+                cutoff_date = (datetime.now() - timedelta(hours=hours)).date()
                 result = conn.execute(text("""
                     SELECT expense_id
                     FROM expenses
-                    WHERE expense_date >= CURRENT_DATE - :days
+                    WHERE expense_date >= :cutoff
                     ORDER BY expense_date DESC
                     LIMIT :limit
-                """), {'days': max(1, hours // 24), 'limit': limit})
+                """), {'cutoff': cutoff_date, 'limit': limit})
                 
                 expense_ids = [row[0] for row in result.fetchall()]
             
