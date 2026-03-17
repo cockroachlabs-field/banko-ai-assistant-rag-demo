@@ -122,16 +122,29 @@ class GeminiProvider(AIProvider):
         
         if GEMINI_AVAILABLE:
             try:
-                client = self.genai_client or genai.Client(api_key=os.getenv("GOOGLE_API_KEY", ""))
-                models = []
-                for m in client.models.list():
-                    name = m.name.replace('models/', '') if m.name else ''
-                    if 'gemini' in name:
-                        supported = [a for a in (m.supported_actions or [])]
-                        if 'generateContent' in supported:
-                            models.append(name)
-                if models:
-                    return sorted(models)
+                # Use existing client, or create one matching the auth method
+                client = self.genai_client
+                if not client:
+                    api_key = os.getenv("GOOGLE_API_KEY")
+                    if api_key:
+                        client = genai.Client(api_key=api_key)
+                    elif self.project_id:
+                        client = genai.Client(
+                            vertexai=True,
+                            project=self.project_id,
+                            location=self.location,
+                        )
+                
+                if client:
+                    models = []
+                    for m in client.models.list():
+                        name = m.name.replace('models/', '') if m.name else ''
+                        if 'gemini' in name:
+                            supported = [a for a in (m.supported_actions or [])]
+                            if 'generateContent' in supported:
+                                models.append(name)
+                    if models:
+                        return sorted(models)
             except Exception as e:
                 print(f"⚠️  Could not list Gemini models: {e}")
         
