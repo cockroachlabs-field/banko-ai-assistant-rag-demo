@@ -589,28 +589,10 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
             raise AIConnectionError(f"Embedding generation failed: {str(e)}")
     
     def test_connection(self) -> bool:
-        """Test AWS Bedrock connection."""
+        """Test AWS Bedrock connection by verifying credentials (no tokens consumed)."""
         try:
-            payload = {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 5,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "text": "Hello"}]
-                    }
-                ]
-            }
-            
-            response = self.bedrock_client.invoke_model(
-                modelId=self.current_model,
-                contentType="application/json",
-                accept="application/json",
-                body=json.dumps(payload)
-            )
-            
-            response_body = json.loads(response['body'].read())
-            return response_body['content'][0]['text'] is not None
-            
+            sts = boto3.client('sts', region_name=self.region)
+            sts.get_caller_identity()
+            return True
         except Exception:
             return False
