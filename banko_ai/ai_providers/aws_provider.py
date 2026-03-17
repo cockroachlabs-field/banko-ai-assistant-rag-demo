@@ -405,7 +405,7 @@ class AWSProvider(AIProvider):
                         search_results_dict.append(result)
                 
                 cached_response = self.cache_manager.get_cached_response(
-                    query, search_results_dict, "aws"
+                    query, search_results_dict, "aws", language=language
                 )
                 if cached_response:
                     print("2. ✅ Response cache HIT! Returning cached response")
@@ -565,7 +565,8 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                 
                 self.cache_manager.cache_response(
                     query, ai_response, search_results_dict, "aws",
-                    int(prompt_tokens), int(response_tokens)
+                    int(prompt_tokens), int(response_tokens),
+                    language=language
                 )
                 print(f"3. ✅ Cached response (est. {int(prompt_tokens + response_tokens)} tokens)")
             

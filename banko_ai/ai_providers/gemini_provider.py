@@ -426,7 +426,7 @@ class GeminiProvider(AIProvider):
                         raise
 
                 cached_response = self.cache_manager.get_cached_response(
-                    query, search_results_dict, "gemini"
+                    query, search_results_dict, "gemini", language=language
                 )
                 if cached_response:
                     print("2. ✅ Response cache HIT! Returning cached response")
@@ -647,7 +647,8 @@ Based on your expense data, I found {len(context)} relevant records. Here's a co
 
                 self.cache_manager.cache_response(
                     query, ai_response, search_results_dict, "gemini",
-                    int(prompt_tokens), int(response_tokens)
+                    int(prompt_tokens), int(response_tokens),
+                    language=language
                 )
                 print(f"3. ✅ Cached response (est. {int(prompt_tokens + response_tokens)} tokens)")
 

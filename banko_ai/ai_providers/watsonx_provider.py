@@ -433,7 +433,7 @@ class WatsonxProvider(AIProvider):
             # Check for cached response first
             if self.cache_manager:
                 cached_response = self.cache_manager.get_cached_response(
-                    prompt, search_results, "watsonx"
+                    prompt, search_results, "watsonx", language=language
                 )
                 if cached_response:
                     print("2. ✅ Response cache HIT! Returning cached response")
@@ -500,7 +500,8 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                 
                 self.cache_manager.cache_response(
                     prompt, response, search_results, "watsonx",
-                    int(prompt_tokens), int(response_tokens)
+                    int(prompt_tokens), int(response_tokens),
+                    language=language
                 )
                 print(f"5. ✅ Cached response (est. {int(prompt_tokens + response_tokens)} tokens)")
             
@@ -726,7 +727,7 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                     })
                 
                 cached_response = self.cache_manager.get_cached_response(
-                    query, search_results_dict, "watsonx"
+                    query, search_results_dict, "watsonx", language=language
                 )
                 if cached_response:
                     print("2. ✅ Response cache HIT! Returning cached response")
@@ -851,7 +852,8 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                 
                 self.cache_manager.cache_response(
                     query, ai_response, search_results_dict, "watsonx",
-                    int(prompt_tokens), int(response_tokens)
+                    int(prompt_tokens), int(response_tokens),
+                    language=language
                 )
                 print(f"3. ✅ Cached response (est. {int(prompt_tokens + response_tokens)} tokens)")
             

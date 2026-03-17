@@ -117,12 +117,13 @@ class BankoCacheManager:
                 response_tokens INTEGER DEFAULT 0,
                 prompt_tokens INTEGER DEFAULT 0,
                 ai_service STRING NOT NULL,
+                language STRING NOT NULL DEFAULT 'en',
                 expense_data_hash STRING,
                 created_at TIMESTAMP DEFAULT now(),
                 expires_at TIMESTAMP,
                 hit_count INTEGER DEFAULT 0,
                 last_accessed TIMESTAMP DEFAULT now(),
-                UNIQUE (query_hash, ai_service),
+                UNIQUE (query_hash, ai_service, language),
                 INDEX idx_query_hash (query_hash),
                 INDEX idx_expires_at (expires_at),
                 INDEX idx_ai_service (ai_service),
@@ -285,7 +286,7 @@ class BankoCacheManager:
         return embedding
     
     @db_retry(max_attempts=3, initial_delay=0.5)
-    def get_cached_response(self, query: str, expense_data: list[dict], ai_service: str) -> str | None:
+    def get_cached_response(self, query: str, expense_data: list[dict], ai_service: str, language: str = "en") -> str | None:
         """
         Check if we have a cached response for a similar query.
         
@@ -293,6 +294,7 @@ class BankoCacheManager:
             query: User query text
             expense_data: Current expense data context
             ai_service: AI service being used (watsonx, bedrock)
+            language: Response language code or name
         
         Returns:
             Cached response text if found, None otherwise
@@ -304,6 +306,7 @@ class BankoCacheManager:
         # Debug: Print what we're searching for
         print("   🔎 Searching query_cache:")
         print(f"      - ai_service: '{ai_service}'")
+        print(f"      - language: '{language}'")
         print(f"      - expense_hash: {expense_hash}")
         print(f"      - query: '{query[:60]}...'")
         print(f"      - similarity_threshold: {self.similarity_threshold}")
@@ -330,6 +333,7 @@ class BankoCacheManager:
                        now() as current_time
                 FROM query_cache 
                 WHERE ai_service = :ai_service 
+                  AND language = :language
                   AND expense_data_hash = :expense_hash
                   AND expires_at > now()
                   AND query_embedding IS NOT NULL
@@ -337,7 +341,6 @@ class BankoCacheManager:
                 LIMIT 5
             """)
         else:
-            # Lenient mode: match on similarity alone (ignore expense_hash)
             similarity_query = text("""
                 SELECT cache_id, query_text, response_text, response_tokens, prompt_tokens,
                        query_embedding <=> :query_embedding as similarity_distance,
@@ -347,6 +350,7 @@ class BankoCacheManager:
                        now() as current_time
                 FROM query_cache 
                 WHERE ai_service = :ai_service 
+                  AND language = :language
                   AND expires_at > now()
                   AND query_embedding IS NOT NULL
                 ORDER BY query_embedding <=> :query_embedding
@@ -368,6 +372,7 @@ class BankoCacheManager:
                 result = conn.execute(similarity_query, {
                     'query_embedding': json.dumps(query_embedding.tolist()),
                     'ai_service': ai_service,
+                    'language': language,
                     'expense_hash': expense_hash
                 })
                 
@@ -436,7 +441,8 @@ class BankoCacheManager:
         return None
     
     def cache_response(self, query: str, response: str, expense_data: list[dict], 
-                      ai_service: str, prompt_tokens: int = 0, response_tokens: int = 0):
+                      ai_service: str, prompt_tokens: int = 0, response_tokens: int = 0,
+                      language: str = "en"):
         """
         Cache a query response for future use.
         
@@ -447,6 +453,7 @@ class BankoCacheManager:
             ai_service: AI service used
             prompt_tokens: Number of prompt tokens used
             response_tokens: Number of response tokens generated
+            language: Response language code or name
         """
         query_hash = self._generate_hash(query)
         query_embedding = self._get_embedding_with_cache(query)
@@ -459,14 +466,14 @@ class BankoCacheManager:
                 insert_query = text("""
                     INSERT INTO query_cache (
                         query_hash, query_text, query_embedding, response_text,
-                        response_tokens, prompt_tokens, ai_service, expense_data_hash,
-                        expires_at
+                        response_tokens, prompt_tokens, ai_service, language,
+                        expense_data_hash, expires_at
                     ) VALUES (
                         :query_hash, :query_text, :query_embedding, :response_text,
-                        :response_tokens, :prompt_tokens, :ai_service, :expense_hash,
-                        :expires_at
+                        :response_tokens, :prompt_tokens, :ai_service, :language,
+                        :expense_hash, :expires_at
                     )
-                    ON CONFLICT (query_hash, ai_service) DO UPDATE SET
+                    ON CONFLICT (query_hash, ai_service, language) DO UPDATE SET
                         response_text = EXCLUDED.response_text,
                         response_tokens = EXCLUDED.response_tokens,
                         prompt_tokens = EXCLUDED.prompt_tokens,
@@ -485,6 +492,7 @@ class BankoCacheManager:
                     'response_tokens': response_tokens,
                     'prompt_tokens': prompt_tokens,
                     'ai_service': ai_service,
+                    'language': language,
                     'expense_hash': expense_hash,
                     'expires_at': expires_at
                 })
