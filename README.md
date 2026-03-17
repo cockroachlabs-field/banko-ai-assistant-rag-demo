@@ -42,12 +42,12 @@ Receipt uploads trigger a LangGraph pipeline: `Receipt -> Fraud -> Budget -> Don
 
 Abstraction layer with a standardized interface to multiple LLMs:
 
-- **IBM Watsonx** (GPT-OSS-120B, Llama, Granite models)
-- **OpenAI** (GPT-4o-mini, GPT-4o, GPT-4 Turbo)
-- **AWS Bedrock** (Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus)
+- **IBM Watsonx** (GPT-OSS-120B, Llama 3/4, Granite, Mistral)
+- **OpenAI** (GPT-4o-mini, GPT-4o, GPT-4.1, GPT-5)
+- **AWS Bedrock** (Claude Sonnet 4, Claude 3.5 Haiku, Claude Opus 4 via inference profiles)
 - **Google Gemini** (Gemini 2.0 Flash, Gemini 1.5 Pro, Gemini 1.5 Flash)
 
-Switch providers and models dynamically via the Settings page or environment variables -- no restart required.
+Models are **dynamically discovered** from each provider's API. Switch providers and models from the Settings page or via environment variables -- no restart required. Override with `WATSONX_MODELS`, `OPENAI_MODELS`, `AWS_MODELS`, or `GEMINI_MODELS` (comma-separated).
 
 **Location**: `banko_ai/ai_providers/`
 
@@ -203,7 +203,7 @@ export OPENAI_MODEL="gpt-4o-mini"  # Default
 export AWS_ACCESS_KEY_ID="your_access_key"
 export AWS_SECRET_ACCESS_KEY="your_secret_key"
 export AWS_REGION="us-east-1"
-export AWS_MODEL_ID="us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+export AWS_MODEL_ID="us.anthropic.claude-3-5-haiku-20241022-v1:0"
 ```
 
 #### Google Gemini

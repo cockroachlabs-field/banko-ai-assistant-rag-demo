@@ -1,14 +1,14 @@
-# 🐳 Docker Deployment Guide
+# Docker Deployment Guide
 
 Run Banko AI Assistant using Docker or Podman - no Python or pip installation required!
 
-## 📋 Prerequisites
+## Prerequisites
 
 - **Docker** or **Podman** installed
 - **AI Provider API Key** (OpenAI, AWS Bedrock, IBM Watsonx, or Google Gemini)
 - **CockroachDB** (included in docker-compose, or use external database)
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Option 1: Docker Compose with Built-in Database (Easiest)
 
@@ -105,7 +105,7 @@ docker pull virag/banko-ai-assistant:latest
 docker run -d \
   --name cockroachdb \
   -p 26257:26257 -p 8080:8080 \
-  cockroachdb/cockroach:v25.4.0 \
+  cockroachdb/cockroach:v25.4.6 \
   start-single-node --insecure
 
 # Wait for CockroachDB to be ready
@@ -170,7 +170,7 @@ docker build -t banko-ai-assistant:test .
 docker-compose up -d
 ```
 
-## 🎯 Using with Podman
+## Using with Podman
 
 Podman is a Docker alternative that doesn't require root privileges.
 
@@ -189,7 +189,7 @@ podman run -d \
   virag/banko-ai-assistant:latest
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -218,7 +218,7 @@ docker run -d \
   virag/banko-ai-assistant:latest
 ```
 
-## 📊 Multi-Architecture Support
+## Multi-Architecture Support
 
 Images are built for both amd64 and arm64:
 
@@ -231,7 +231,7 @@ docker pull --platform linux/amd64 virag/banko-ai-assistant:latest
 docker pull --platform linux/arm64 virag/banko-ai-assistant:latest
 ```
 
-## 🏭 Production Deployment
+## Production Deployment
 
 ### Using External CockroachDB Cluster
 
@@ -273,7 +273,7 @@ docker inspect --format='{{.State.Health.Status}}' banko-ai
 curl http://localhost:5000/api/health
 ```
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
 ### View Logs
 
@@ -327,7 +327,7 @@ docker-compose build --no-cache
 docker build --no-cache -t banko-ai-assistant:local .
 ```
 
-## 📦 Building and Publishing Images
+## Building and Publishing Images
 
 For maintainers - the repository includes a build script for creating multi-architecture images.
 
@@ -376,13 +376,13 @@ docker buildx build \
 
 **Note**: When using `--load` (local build), Docker can only load one platform at a time (your current architecture). Use `--push` to publish both architectures to Docker Hub.
 
-## 🆘 Support
+## Support
 
 - **Issues**: https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/issues
 - **Documentation**: [README.md](https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/blob/main/README.md)
 - **Docker Hub**: https://hub.docker.com/r/virag/banko-ai-assistant
 
-## 🔐 Security Notes
+## Security Notes
 
 1. **Never commit `.env` files** with sensitive credentials
 2. **Use secrets management** in production (Docker secrets, Kubernetes secrets, etc.)
@@ -391,6 +391,6 @@ docker buildx build \
 5. **Generate random SECRET_KEY** for each deployment
 6. **Keep images updated** for security patches
 
-## 📝 License
+## License
 
 MIT License - See [LICENSE](https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/blob/main/LICENSE) file for details.

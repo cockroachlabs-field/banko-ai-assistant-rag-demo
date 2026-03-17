@@ -1,36 +1,113 @@
-# 🔗 Banko AI Assistant API Documentation
+# Banko AI Assistant API Documentation
 
 ## Core Endpoints
 
-### Chat Interface
-- **POST `/banko`** - Main chat endpoint
-  - Body: `user_input=<query>`
-  - Returns: HTML response with AI answer
-
 ### Health & Status
-- **GET `/ai-status`** - Check AI service connectivity
-- **GET `/cache-stats`** - View cache performance metrics
-- **POST `/cache-cleanup`** - Manually trigger cache cleanup
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check (DB + AI provider status) |
+| `/api/ai-providers` | GET | List available AI providers |
+| `/api/models` | GET | List available models for current provider |
+| `/api/models` | POST | Switch to a different model |
+| `/api/agents/status` | GET | Agent dashboard data |
+| `/cache-stats` | GET | Cache performance metrics |
+| `/diagnostics/watsonx` | GET | Watsonx connection diagnostics |
+
+### Search & RAG
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/search` | POST | Vector search expenses (SQL-based) |
+| `/api/vectorstore-search` | POST | Vector search via langchain-cockroachdb VectorStore |
+| `/api/rag` | POST | RAG-based Q&A with AI insights |
+
+### Receipt & Agent Workflows
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/upload-receipt` | POST | Upload receipt image/PDF for agent processing |
+
+### Chat History
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/chat-history/<session_id>` | GET | Retrieve persistent chat history |
+| `/api/chat-history/<session_id>` | DELETE | Clear chat history for a session |
+
+### Data Management
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/generate-data` | POST | Generate sample expense data |
+| `/data-generator` | GET | Data generator UI |
 
 ### Web Interface
-- **GET `/`** - Main chat interface (redirects to `/banko`)
-- **GET `/banko`** - Chat interface
-- **GET `/home`** - Landing page
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Main web interface |
 
 ## Response Formats
 
-### AI Status Response
+### Health Response
 ```json
 {
-    "active_service_name": "IBM Watsonx",
-    "current_service": "watsonx",
-    "watsonx_available": true,
-    "aws_bedrock_available": true,
-    "caching_enabled": true,
-    "database": {
-        "connected": true,
-        "status": "Connected to CCL",
-        "record_count": 3000
+    "success": true,
+    "ai_provider": "connected",
+    "ai_provider_available": true,
+    "ai_service": "watsonx",
+    "current_model": "openai/gpt-oss-120b",
+    "database": "connected"
+}
+```
+
+### Models Response
+```json
+{
+    "success": true,
+    "provider": "aws",
+    "current": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+    "models": [
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+        "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+    ]
+}
+```
+
+### Search Response
+```json
+{
+    "success": true,
+    "query": "coffee expenses",
+    "results": [
+        {
+            "expense_id": "uuid",
+            "merchant": "Starbucks",
+            "amount": 20.47,
+            "date": "2025-08-07",
+            "description": "Spent $20.47 on coffee at Starbucks using Debit Card.",
+            "similarity_score": 0.41,
+            "metadata": {
+                "shopping_type": "Coffee",
+                "payment_method": "Debit Card"
+            }
+        }
+    ]
+}
+```
+
+### RAG Response
+```json
+{
+    "success": true,
+    "response": "Based on your expense data...",
+    "sources": [],
+    "metadata": {
+        "provider": "aws",
+        "model": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "cached": false,
+        "language": "en"
     }
 }
 ```
@@ -46,71 +123,88 @@
         "overall_hit_rate": 51.11,
         "total_tokens_saved": 1250,
         "estimated_cost_savings_usd": 0.025
-    },
-    "cache_details": {
-        "embedding": {"hits": 15, "misses": 8, "hit_rate": 65.22},
-        "vector_search": {"hits": 12, "misses": 10, "hit_rate": 54.55},
-        "response": {"hits": 8, "misses": 14, "hit_rate": 36.36}
     }
 }
 ```
 
 ## Usage Examples
 
-### cURL Examples
+### cURL
+
 ```bash
-# Check system health
-curl http://localhost:5000/ai-status
+# Health check
+curl http://localhost:5000/api/health
 
-# Send a chat message
-curl -X POST http://localhost:5000/banko \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "user_input=Show me my grocery spending"
+# Vector search
+curl -X POST http://localhost:5000/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "coffee shop expenses", "limit": 5}'
 
-# View cache performance
-curl http://localhost:5000/cache-stats
+# RAG query
+curl -X POST http://localhost:5000/api/rag \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What are my biggest expenses this month?"}'
 
-# Clear cache
-curl -X POST http://localhost:5000/cache-cleanup
+# List models
+curl http://localhost:5000/api/models
+
+# Switch model
+curl -X POST http://localhost:5000/api/models \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o"}'
+
+# Upload receipt
+curl -X POST http://localhost:5000/api/upload-receipt \
+  -F "receipt=@receipt.png"
+
+# Agent status
+curl http://localhost:5000/api/agents/status
 ```
 
-### Python Examples
+### Python
+
 ```python
 import requests
 
-# Check AI status
-response = requests.get('http://localhost:5000/ai-status')
-print(response.json())
+BASE = "http://localhost:5000"
 
-# Send chat query
-response = requests.post('http://localhost:5000/banko', 
-                        data={'user_input': 'What are my top expenses?'})
-print(response.text)
+# Health check
+r = requests.get(f"{BASE}/api/health")
+print(r.json())
 
-# Get cache stats
-response = requests.get('http://localhost:5000/cache-stats')
-print(response.json())
+# RAG query
+r = requests.post(f"{BASE}/api/rag", json={
+    "query": "Show me my grocery spending"
+})
+print(r.json()["response"])
+
+# Switch model
+r = requests.post(f"{BASE}/api/models", json={
+    "model": "gpt-4o-mini"
+})
+print(r.json())
 ```
 
 ## Environment Variables
 
-| Variable       | Description                                 | Default                                                        | Required |
-|----------------|---------------------------------------------|----------------------------------------------------------------|----------|
-| `AI_SERVICE`   | AI provider to use (`watsonx` or `bedrock`) | `watsonx`                                                      | No       |
-| `DATABASE_URL` | CockroachDB connection string               | `cockroachdb://root@localhost:26257/defaultdb?sslmode=disable` | No       |
-| `FLASK_ENV`    | Flask environment                           | `production`                                                   | No       |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | CockroachDB connection string | `cockroachdb://root@localhost:26257/defaultdb?sslmode=disable` |
+| `AI_SERVICE` | AI provider (`watsonx`, `openai`, `aws`, `gemini`) | `watsonx` |
+| `SECRET_KEY` | Flask session key (auto-generated if not set) | Random |
+
+See [README.md](../README.md) for full configuration including provider-specific settings, cache tuning, and database pool configuration.
 
 ## Error Responses
 
-### Common Error Codes
-- **503** - AI service unavailable
-- **500** - Internal server error
-- **400** - Bad request (missing user_input)
+| Code | Description |
+|------|-------------|
+| 400 | Bad request (missing parameters) |
+| 500 | Internal server error / AI provider unavailable |
 
-### Error Response Format
 ```json
 {
-    "error": "Error description",
-    "details": "Additional error details"
+    "success": false,
+    "error": "Error description"
 }
 ```
