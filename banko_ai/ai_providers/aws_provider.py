@@ -108,13 +108,37 @@ class AWSProvider(AIProvider):
         return "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
     
     def get_available_models(self) -> list[str]:
-        """Get available AWS models."""
+        """Get available AWS Bedrock models. Override with AWS_MODELS env var or auto-discover from API."""
+        extra = os.getenv("AWS_MODELS", "")
+        if extra:
+            return [m.strip() for m in extra.split(",") if m.strip()]
+        
+        models = set()
+        try:
+            bedrock_client = boto3.client('bedrock', region_name=self.region)
+            
+            # Foundation models
+            response = bedrock_client.list_foundation_models(byProvider='Anthropic')
+            for m in response.get('modelSummaries', []):
+                status = m.get('modelLifecycle', {}).get('status', '')
+                if status == 'ACTIVE' and 'claude' in m['modelId'].lower():
+                    models.add(m['modelId'])
+            
+            # Inference profiles (required for on-demand invocation of newer models)
+            response = bedrock_client.list_inference_profiles()
+            for p in response.get('inferenceProfileSummaries', []):
+                if p.get('status') == 'ACTIVE' and 'claude' in p['inferenceProfileId'].lower():
+                    models.add(p['inferenceProfileId'])
+            
+            if models:
+                return sorted(models)
+        except Exception as e:
+            print(f"⚠️  Could not list Bedrock models: {e}")
+        
         return [
-            "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
             "us.anthropic.claude-3-5-haiku-20241022-v1:0",
-            "us.anthropic.claude-3-opus-20240229-v1:0",
-            "us.anthropic.claude-3-sonnet-20240229-v1:0",
-            "us.anthropic.claude-3-haiku-20240307-v1:0"
+            "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+            "us.anthropic.claude-3-haiku-20240307-v1:0",
         ]
     
     def _get_embedding_model(self) -> SentenceTransformer:

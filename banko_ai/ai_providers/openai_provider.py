@@ -66,14 +66,17 @@ class OpenAIProvider(AIProvider):
     
     def get_available_models(self) -> list[str]:
         """Get available OpenAI models."""
-        return [
-            "gpt-3.5-turbo",
-            "gpt-3.5-turbo-16k", 
-            "gpt-4",
-            "gpt-4-turbo",
+        extra = os.getenv("OPENAI_MODELS", "")
+        defaults = [
+            "gpt-4o-mini",
             "gpt-4o",
-            "gpt-4o-mini"
+            "gpt-4-turbo",
+            "gpt-4",
+            "gpt-3.5-turbo",
         ]
+        if extra:
+            return [m.strip() for m in extra.split(",") if m.strip()]
+        return defaults
     
     def _get_embedding_model(self) -> SentenceTransformer:
         """Get or create the embedding model."""
