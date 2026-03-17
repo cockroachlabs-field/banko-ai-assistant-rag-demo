@@ -116,17 +116,25 @@ class GeminiProvider(AIProvider):
         return "gemini-1.5-pro"
 
     def get_available_models(self) -> list[str]:
-        """Get available Gemini models."""
+        """Get available Gemini models. Override with GEMINI_MODELS env var or auto-discover from API."""
         extra = os.getenv("GEMINI_MODELS", "")
-        defaults = [
-            "gemini-2.0-flash-001",
-            "gemini-1.5-pro",
-            "gemini-1.5-flash",
-            "gemini-1.0-pro",
-        ]
         if extra:
             return [m.strip() for m in extra.split(",") if m.strip()]
-        return defaults
+        
+        if GEMINI_AVAILABLE:
+            try:
+                models = []
+                for m in genai.list_models():
+                    if 'generateContent' in (m.supported_generation_methods or []):
+                        name = m.name.replace('models/', '')
+                        if 'gemini' in name:
+                            models.append(name)
+                if models:
+                    return sorted(models)
+            except Exception as e:
+                print(f"⚠️  Could not list Gemini models: {e}")
+        
+        return ["gemini-2.0-flash-001", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"]
 
     def _get_embedding_model(self) -> SentenceTransformer:
         """Get or create the embedding model."""

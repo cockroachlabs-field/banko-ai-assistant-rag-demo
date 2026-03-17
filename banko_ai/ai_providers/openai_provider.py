@@ -65,18 +65,24 @@ class OpenAIProvider(AIProvider):
         return "gpt-4o-mini"
     
     def get_available_models(self) -> list[str]:
-        """Get available OpenAI models."""
+        """Get available OpenAI models. Override with OPENAI_MODELS env var or auto-discover from API."""
         extra = os.getenv("OPENAI_MODELS", "")
-        defaults = [
-            "gpt-4o-mini",
-            "gpt-4o",
-            "gpt-4-turbo",
-            "gpt-4",
-            "gpt-3.5-turbo",
-        ]
         if extra:
             return [m.strip() for m in extra.split(",") if m.strip()]
-        return defaults
+        
+        if self.client:
+            try:
+                response = self.client.models.list()
+                models = [
+                    m.id for m in response.data
+                    if 'gpt' in m.id and 'instruct' not in m.id and 'realtime' not in m.id
+                ]
+                if models:
+                    return sorted(models)
+            except Exception as e:
+                print(f"⚠️  Could not list OpenAI models: {e}")
+        
+        return ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
     
     def _get_embedding_model(self) -> SentenceTransformer:
         """Get or create the embedding model."""

@@ -241,17 +241,36 @@ class WatsonxProvider(AIProvider):
             raise AIConnectionError(f"Search failed: {str(e)}")
     
     def get_available_models(self) -> list[str]:
-        """Get list of available Watsonx models."""
+        """Get list of available Watsonx models. Override with WATSONX_MODELS env var or auto-discover from API."""
         extra = os.getenv("WATSONX_MODELS", "")
-        defaults = [
-            'openai/gpt-oss-120b',
-            'meta-llama/llama-2-70b-chat',
-            'meta-llama/llama-2-13b-chat',
-            'meta-llama/llama-2-7b-chat',
-        ]
         if extra:
             return [m.strip() for m in extra.split(",") if m.strip()]
-        return defaults
+        
+        try:
+            access_token = self._get_access_token()
+            api_url = os.getenv("WATSONX_API_URL", "https://us-south.ml.cloud.ibm.com")
+            if '/ml/v1' in api_url or '?' in api_url:
+                from urllib.parse import urlparse
+                parsed = urlparse(api_url)
+                api_url = f"{parsed.scheme}://{parsed.netloc}"
+            
+            resp = requests.get(
+                f"{api_url}/ml/v1/foundation_model_specs?version=2023-05-29&limit=200",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=self.timeout
+            )
+            if resp.status_code == 200:
+                models = []
+                for m in resp.json().get('resources', []):
+                    tasks = [t.get('id', '') for t in m.get('tasks', [])]
+                    if 'generation' in tasks or 'chat' in tasks:
+                        models.append(m['model_id'])
+                if models:
+                    return sorted(models)
+        except Exception as e:
+            print(f"⚠️  Could not list Watsonx models: {e}")
+        
+        return ['openai/gpt-oss-120b']
     
     def set_model(self, model_id: str) -> bool:
         """Set the current model."""
