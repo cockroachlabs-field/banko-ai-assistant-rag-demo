@@ -14,9 +14,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError, OperationalError
 
 try:
-    import google.generativeai as genai
     import vertexai
+    from google import genai
     from google.cloud import aiplatform
+    from google.genai import types as genai_types
     from google.oauth2 import service_account
     from vertexai.generative_models import GenerativeModel
     GEMINI_AVAILABLE = True
@@ -85,15 +86,13 @@ class GeminiProvider(AIProvider):
                     print(f"⚠️  Vertex AI initialization failed: {vertex_error}")
                     print("🔄 Falling back to Generative AI API...")
 
-                    # Fallback to Generative AI API
+                    # Fallback to Generative AI API (google-genai SDK)
                     try:
-                        # Check if there's a GOOGLE_API_KEY environment variable
                         api_key = os.getenv("GOOGLE_API_KEY")
                         if api_key:
-                            genai.configure(api_key=api_key)
-                            self.genai_client = genai.GenerativeModel(self.model_name)
+                            self.genai_client = genai.Client(api_key=api_key)
                             self.use_vertex_ai = False
-                            print(f"✅ Initialized Generative AI API with model: {self.model_name}")
+                            print(f"✅ Initialized Google GenAI SDK with model: {self.model_name}")
                         else:
                             print("❌ No GOOGLE_API_KEY found for Generative AI API fallback")
                             raise AIConnectionError("Both Vertex AI and Generative AI API initialization failed - no API key")
@@ -123,11 +122,13 @@ class GeminiProvider(AIProvider):
         
         if GEMINI_AVAILABLE:
             try:
+                client = self.genai_client or genai.Client(api_key=os.getenv("GOOGLE_API_KEY", ""))
                 models = []
-                for m in genai.list_models():
-                    if 'generateContent' in (m.supported_generation_methods or []):
-                        name = m.name.replace('models/', '')
-                        if 'gemini' in name:
+                for m in client.models.list():
+                    name = m.name.replace('models/', '') if m.name else ''
+                    if 'gemini' in name:
+                        supported = [a for a in (m.supported_actions or [])]
+                        if 'generateContent' in supported:
                             models.append(name)
                 if models:
                     return sorted(models)
@@ -535,18 +536,18 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                         ai_response = "I apologize, but I couldn't generate a response at this time."
 
                 elif self.genai_client:
-                    # Use Generative AI API
-                    response = self.genai_client.generate_content(
-                        enhanced_prompt,
-                        generation_config={
-                            'temperature': 0.7,
-                            'max_output_tokens': 1000,
-                            'top_p': 0.9,
-                            'top_k': 40
-                        }
+                    # Use Google GenAI SDK
+                    response = self.genai_client.models.generate_content(
+                        model=self.model_name,
+                        contents=enhanced_prompt,
+                        config=genai_types.GenerateContentConfig(
+                            temperature=0.7,
+                            max_output_tokens=1000,
+                            top_p=0.9,
+                            top_k=40,
+                        ),
                     )
 
-                    # Extract response text
                     if response and response.text:
                         ai_response = response.text
                     else:
@@ -671,9 +672,11 @@ Based on your expense data, I found {len(context)} relevant records. Here's a co
     def test_connection(self) -> bool:
         """Test Gemini connection by listing models (no tokens consumed)."""
         try:
-            if GEMINI_AVAILABLE:
-                models = list(genai.list_models())
+            if GEMINI_AVAILABLE and self.genai_client:
+                models = list(self.genai_client.models.list())
                 return len(models) > 0
+            elif GEMINI_AVAILABLE and self.use_vertex_ai and self.vertex_client:
+                return True
             return False
         except Exception:
             return False
