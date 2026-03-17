@@ -37,7 +37,7 @@ class Config:
     fraud_duplicate_window_days: int = 60  # Days to look back for duplicates (60 for demo)
     aws_profile: str | None = None
     aws_region: str = "us-east-1"
-    aws_model: str = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"  # Claude models
+    aws_model: str = "us.anthropic.claude-3-5-haiku-20241022-v1:0"  # Claude inference profile
     watsonx_api_key: str | None = None
     watsonx_project_id: str | None = None
     watsonx_model: str = "openai/gpt-oss-120b"  # IBM models
@@ -106,7 +106,7 @@ class Config:
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
             aws_profile=os.getenv("AWS_PROFILE"),
             aws_region=os.getenv("AWS_REGION", "us-east-1"),
-            aws_model=os.getenv("AWS_MODEL", "us.anthropic.claude-3-5-sonnet-20241022-v2:0"),
+            aws_model=os.getenv("AWS_MODEL", "us.anthropic.claude-3-5-haiku-20241022-v1:0"),
             watsonx_api_key=watsonx_api_key,
             watsonx_project_id=watsonx_project_id,
             watsonx_model=watsonx_model,

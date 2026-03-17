@@ -117,11 +117,16 @@ class GeminiProvider(AIProvider):
 
     def get_available_models(self) -> list[str]:
         """Get available Gemini models."""
-        return [
+        extra = os.getenv("GEMINI_MODELS", "")
+        defaults = [
+            "gemini-2.0-flash-001",
             "gemini-1.5-pro",
             "gemini-1.5-flash",
-            "gemini-1.0-pro"
+            "gemini-1.0-pro",
         ]
+        if extra:
+            return [m.strip() for m in extra.split(",") if m.strip()]
+        return defaults
 
     def _get_embedding_model(self) -> SentenceTransformer:
         """Get or create the embedding model."""

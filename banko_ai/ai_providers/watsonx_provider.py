@@ -242,16 +242,16 @@ class WatsonxProvider(AIProvider):
     
     def get_available_models(self) -> list[str]:
         """Get list of available Watsonx models."""
-        # Only include models that are actually supported by Watsonx API
-        return [
+        extra = os.getenv("WATSONX_MODELS", "")
+        defaults = [
             'openai/gpt-oss-120b',
             'meta-llama/llama-2-70b-chat',
             'meta-llama/llama-2-13b-chat',
-            'meta-llama/llama-2-7b-chat'
-            # Note: IBM Granite models may not be available in all regions/projects
-            # 'ibm/granite-13b-chat-v2',
-            # 'ibm/granite-13b-instruct-v2'
+            'meta-llama/llama-2-7b-chat',
         ]
+        if extra:
+            return [m.strip() for m in extra.split(",") if m.strip()]
+        return defaults
     
     def set_model(self, model_id: str) -> bool:
         """Set the current model."""
