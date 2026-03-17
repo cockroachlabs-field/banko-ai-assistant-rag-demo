@@ -111,24 +111,6 @@ include = ["banko_ai*"]
 [tool.setuptools.package-data]
 banko_ai = ["templates/*", "static/*", "static/**/*", "*.html", "*.css", "*.js"]
 
-[tool.black]
-line-length = 88
-target-version = ['py310']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
-
 [tool.ruff]
 line-length = 120
 target-version = "py310"

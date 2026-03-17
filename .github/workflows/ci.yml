@@ -17,13 +17,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install lint tools
-        run: pip install ruff mypy
+        run: uv pip install --system ruff mypy
 
       - name: Ruff check
         run: ruff check banko_ai/
@@ -39,21 +42,23 @@ jobs:
   imports:
     name: Verify Imports (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     strategy:
       matrix:
         python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -e ".[dev]" --no-cache-dir
+        run: uv pip install --system -e ".[dev]"
 
       - name: Verify all modules import cleanly
         run: |
@@ -83,19 +88,21 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     needs: [lint, imports]
     steps:
       - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -e ".[dev]" --no-cache-dir
+        run: uv pip install --system -e ".[dev]"
 
       - name: Run tests (no DB required)
         run: |
@@ -112,20 +119,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install build tools
-        run: pip install build
-
       - name: Build package
-        run: python -m build
+        run: |
+          uv pip install --system build pkginfo
+          python -m build
 
       - name: Verify wheel contents
         run: |
-          pip install pkginfo
           python -c "
           import glob, pkginfo
           whl = glob.glob('dist/*.whl')[0]
