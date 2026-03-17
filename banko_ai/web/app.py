@@ -317,6 +317,16 @@ def create_app() -> Flask:
             data = request.get_json()
             query = data.get('query', '')
             language = data.get('language', 'en')
+
+            from banko_ai.utils.intent_classifier import is_financial_query, REDIRECT_MESSAGE
+            if not is_financial_query(query):
+                return jsonify({
+                    'success': True,
+                    'response': REDIRECT_MESSAGE,
+                    'sources': [],
+                    'metadata': {'cached': False, 'intent': 'off-topic'}
+                })
+
             # Use original simple logic - no user filtering
             search_results = search_engine.search_expenses(
                 query=query,
@@ -975,7 +985,15 @@ def create_app() -> Flask:
                 }
                 
                 target_language = language_map.get(response_language, 'English')
-                
+
+                from banko_ai.utils.intent_classifier import is_financial_query, REDIRECT_MESSAGE
+                if not is_financial_query(user_message):
+                    session['chat'].append({'text': REDIRECT_MESSAGE, 'class': 'Assistant'})
+                    return render_template('index.html',
+                                         chat=session['chat'],
+                                         ai_provider=ai_provider_display,
+                                         current_page='banko')
+
                 try:
                     # Use simple search that matches original implementation
                     if hasattr(ai_provider, 'search_expenses'):
