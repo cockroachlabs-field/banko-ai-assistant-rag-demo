@@ -669,37 +669,11 @@ Based on your expense data, I found {len(context)} relevant records. Here's a co
             raise AIConnectionError(f"Embedding generation failed: {str(e)}")
 
     def test_connection(self) -> bool:
-        """Test Gemini connection."""
+        """Test Gemini connection by listing models (no tokens consumed)."""
         try:
-            # Test with a simple completion using the appropriate client
-            if self.use_vertex_ai and self.vertex_client:
-                from vertexai.generative_models import GenerationConfig
-
-                generation_config = GenerationConfig(
-                    temperature=0.7,
-                    max_output_tokens=5
-                )
-
-                response = self.vertex_client.generate_content(
-                    "Hello",
-                    generation_config=generation_config
-                )
-
-                return response and response.text is not None
-
-            elif self.genai_client:
-                response = self.genai_client.generate_content(
-                    "Hello",
-                    generation_config={
-                        'temperature': 0.7,
-                        'max_output_tokens': 5
-                    }
-                )
-
-                return response and response.text is not None
-            else:
-                return False
-
-        except Exception as e:
-            print(f"❌ Gemini connection test failed: {str(e)}")
+            if GEMINI_AVAILABLE:
+                models = list(genai.list_models())
+                return len(models) > 0
+            return False
+        except Exception:
             return False

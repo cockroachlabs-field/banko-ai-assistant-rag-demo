@@ -588,17 +588,12 @@ Based on your expense data, I found {len(context)} relevant records. Here's a co
         return "\n".join(recommendations) if recommendations else ""
     
     def test_connection(self) -> bool:
-        """Test OpenAI connection."""
+        """Test OpenAI connection by listing models (no tokens consumed)."""
         if not self.client:
             return False
         
         try:
-            # Test with a simple completion
-            response = self.client.chat.completions.create(
-                model=self.current_model,
-                messages=[{"role": "user", "content": "Hello"}],
-                max_tokens=5
-            )
-            return response.choices[0].message.content is not None
+            self.client.models.list()
+            return True
         except Exception:
             return False
