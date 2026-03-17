@@ -4,10 +4,13 @@ Verifies that query_cache, embedding_cache, and vector_search_cache still work.
 """
 
 import os
+
 os.environ['DATABASE_URL'] = os.getenv('DATABASE_URL', 'cockroachdb://root@localhost:26257/defaultdb?sslmode=disable')
 
-from banko_ai.utils.cache_manager import BankoCacheManager
 import time
+
+from banko_ai.utils.cache_manager import BankoCacheManager
+
 
 def test_cache_manager_initialization():
     """Test 1: Cache manager initializes without errors"""
@@ -43,7 +46,7 @@ def test_embedding_cache(cache_manager):
         
         # Second call - should use cache
         start = time.time()
-        embedding2 = cache_manager._get_embedding_with_cache(test_text)
+        _ = cache_manager._get_embedding_with_cache(test_text)
         time2 = time.time() - start
         print(f"✅ Second call (cache hit): {time2*1000:.2f}ms")
         
@@ -116,11 +119,11 @@ def test_semantic_similarity(cache_manager):
         cached = cache_manager.get_cached_response(similar_query, test_data, "watsonx")
         
         if cached:
-            print(f"✅ SEMANTIC CACHE HIT for similar query!")
+            print("✅ SEMANTIC CACHE HIT for similar query!")
             print(f"   - Original: '{original_query}'")
             print(f"   - Similar:  '{similar_query}'")
         else:
-            print(f"⚠️  No semantic match (might need DB connection or threshold adjustment)")
+            print("⚠️  No semantic match (might need DB connection or threshold adjustment)")
         
         return True
     except Exception as e:
@@ -129,7 +132,7 @@ def test_semantic_similarity(cache_manager):
         traceback.print_exc()
         return False
 
-def test_disabled_methods_not_called():
+def test_dead_methods_removed():
     """Test 5: Verify dead insights_cache methods have been removed"""
     print("\n" + "="*80)
     print("TEST 5: Dead Code Verification")
@@ -190,7 +193,7 @@ def main():
     results.append(("Semantic Similarity", success))
     
     # Test 5: Dead code verification
-    success = test_disabled_methods_not_called()
+    success = test_dead_methods_removed()
     results.append(("Dead Code Check", success))
     
     # Summary
