@@ -60,13 +60,13 @@ class DatabaseManager:
                 # Create vector index for general search
                 conn.execute(text("""
                     CREATE VECTOR INDEX IF NOT EXISTS idx_expenses_embedding 
-                    ON expenses (embedding)
+                    ON expenses (embedding vector_cosine_ops)
                 """))
                 
                 # Create user-specific vector index
                 conn.execute(text("""
                     CREATE VECTOR INDEX IF NOT EXISTS idx_expenses_user_embedding 
-                    ON expenses (user_id, embedding)
+                    ON expenses (user_id, embedding vector_cosine_ops)
                 """))
                 
                 # Create additional indexes for common queries
@@ -263,6 +263,15 @@ class DatabaseManager:
     
     def get_record_count(self, table_name: str) -> int:
         """Get record count for a table."""
+        allowed_tables = {
+            'expenses', 'documents', 'agent_state', 'agent_decisions',
+            'agent_memory', 'agent_tasks', 'query_cache', 'embedding_cache',
+            'vector_search_cache', 'cache_stats', 'accounts', 'items',
+            'payments', 'payment_audit_log',
+        }
+        if table_name not in allowed_tables:
+            print(f"⚠️  get_record_count: table '{table_name}' not in allowlist")
+            return 0
         try:
             from sqlalchemy import text
             with self.engine.connect() as conn:

@@ -261,39 +261,35 @@ def create_analysis_tools(database_url: str) -> list[Tool]:
             engine = create_engine(database_url, poolclass=NullPool)
             
             with engine.connect() as conn:
-                cutoff_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-                
-                # Find duplicates: same merchant + amount within the window
-                # (not requiring same date -- catches re-uploaded receipts)
+                # Find duplicates: same merchant + amount + date
                 result = conn.execute(text("""
                     WITH grouped AS (
                         SELECT 
                             merchant,
                             expense_amount,
+                            expense_date,
                             COUNT(*) as count,
                             ARRAY_AGG(expense_id) as expense_ids,
-                            ARRAY_AGG(description) as descriptions,
-                            ARRAY_AGG(expense_date::TEXT) as dates
+                            ARRAY_AGG(description) as descriptions
                         FROM expenses
                         WHERE user_id = :user_id
-                        AND expense_date >= :cutoff_date
-                        GROUP BY merchant, expense_amount
+                        GROUP BY merchant, expense_amount, expense_date
                         HAVING COUNT(*) > 1
                     )
                     SELECT * FROM grouped
                     ORDER BY count DESC, expense_amount DESC
                     LIMIT 20
-                """), {'user_id': user_id, 'cutoff_date': cutoff_date})
+                """), {'user_id': user_id})
                 
                 duplicates = []
                 for row in result.fetchall():
                     duplicates.append({
                         'merchant': row[0],
                         'amount': float(row[1]),
-                        'count': int(row[2]),
-                        'expense_ids': [str(eid) for eid in row[3]],
-                        'descriptions': row[4],
-                        'dates': row[5]
+                        'date': str(row[2]),
+                        'count': int(row[3]),
+                        'expense_ids': [str(eid) for eid in row[4]],
+                        'descriptions': row[5],
                     })
             
             engine.dispose()

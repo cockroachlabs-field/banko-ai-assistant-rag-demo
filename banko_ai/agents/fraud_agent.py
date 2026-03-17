@@ -139,16 +139,16 @@ Be thorough but not overly cautious. False positives are costly."""
                         SELECT expense_id::TEXT, merchant, expense_amount, expense_date
                         FROM expenses
                         WHERE user_id = :user_id
-                        AND merchant = :merchant
+                        AND merchant ILIKE :merchant
                         AND expense_amount = :amount
+                        AND expense_date = :expense_date
                         AND expense_id != :expense_id
-                        AND expense_date >= CURRENT_DATE - :window_days
                     """), {
                         'user_id': user_id,
                         'merchant': expense['merchant'],
                         'amount': expense['amount'],
+                        'expense_date': expense['date'],
                         'expense_id': expense_id,
-                        'window_days': self.duplicate_window_days,
                     })
                     dup_rows = dup_result.fetchall()
                 dup_engine.dispose()

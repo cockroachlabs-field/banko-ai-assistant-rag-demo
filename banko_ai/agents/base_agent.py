@@ -637,20 +637,29 @@ Be concise but thorough in your responses."""
             )
             
             with engine.connect() as conn:
-                timestamp_field = 'started_at' if status == 'processing' else 'completed_at'
+                if status not in ('processing', 'completed', 'failed'):
+                    raise ValueError(f"Invalid task status: {status}")
                 
-                conn.execute(text(f"""
-                    UPDATE agent_tasks
-                    SET status = :status,
-                        result = :result,
-                        {timestamp_field} = :timestamp
-                    WHERE task_id = :task_id
-                """), {
-                    'task_id': task_id,
-                    'status': status,
-                    'result': json.dumps(result, default=json_serializer) if result else None,
-                    'timestamp': datetime.utcnow()
-                })
+                if status == 'processing':
+                    conn.execute(text("""
+                        UPDATE agent_tasks
+                        SET status = :status, result = :result, started_at = :timestamp
+                        WHERE task_id = :task_id
+                    """), {
+                        'task_id': task_id, 'status': status,
+                        'result': json.dumps(result, default=json_serializer) if result else None,
+                        'timestamp': datetime.utcnow()
+                    })
+                else:
+                    conn.execute(text("""
+                        UPDATE agent_tasks
+                        SET status = :status, result = :result, completed_at = :timestamp
+                        WHERE task_id = :task_id
+                    """), {
+                        'task_id': task_id, 'status': status,
+                        'result': json.dumps(result, default=json_serializer) if result else None,
+                        'timestamp': datetime.utcnow()
+                    })
                 conn.commit()
             
             engine.dispose()

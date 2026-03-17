@@ -803,7 +803,12 @@ def create_app() -> Flask:
                     
                     if fraud_check.get('fraud_detected', False):
                         confidence = fraud_check.get('confidence', 0)
-                        fraud_result = f"⚠️  Suspicious transaction detected (confidence: {confidence:.0%})"
+                        signals = fraud_check.get('signals', [])
+                        dup_signals = [s for s in signals if s.get('type') == 'duplicate']
+                        if dup_signals:
+                            fraud_result = f"⚠️  Duplicate detected: {dup_signals[0]['details']}"
+                        else:
+                            fraud_result = f"⚠️  Suspicious transaction detected (confidence: {confidence:.0%})"
                     else:
                         fraud_result = "✅ No issues detected"
                     

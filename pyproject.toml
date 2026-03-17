@@ -70,7 +70,7 @@ dependencies = [
     "pytesseract>=0.3.10,<0.4.0",
     "pdf2image>=1.16.3,<2.0.0",
     "Pillow>=12.1.1",
-    "PyPDF2>=3.0.0,<4.0.0",
+    "pypdf>=5.0.0",
     
     # Real-time Communication (NEW)
     "python-socketio>=5.10.0,<6.0.0",

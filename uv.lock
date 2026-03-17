@@ -224,7 +224,7 @@ dependencies = [
     { name = "pdf2image" },
     { name = "pillow" },
     { name = "psycopg2-binary" },
-    { name = "pypdf2" },
+    { name = "pypdf" },
     { name = "pytesseract" },
     { name = "python-dateutil" },
     { name = "python-socketio" },
@@ -273,7 +273,7 @@ requires-dist = [
     { name = "pdf2image", specifier = ">=1.16.3,<2.0.0" },
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.0,<3.0.0" },
-    { name = "pypdf2", specifier = ">=3.0.0,<4.0.0" },
+    { name = "pypdf", specifier = ">=5.0.0" },
     { name = "pytesseract", specifier = ">=0.3.10,<0.4.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
@@ -3587,12 +3587,15 @@ wheels = [
 ]
 
 [[package]]
-name = "pypdf2"
-version = "3.0.1"
+name = "pypdf"
+version = "6.9.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9f/bb/18dc3062d37db6c491392007dfd1a7f524bb95886eb956569ac38a23a784/PyPDF2-3.0.1.tar.gz", hash = "sha256:a74408f69ba6271f71b9352ef4ed03dc53a31aa404d29b5d31f53bfecfee1440", size = 227419, upload-time = "2022-12-31T10:36:13.13Z" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f9/fb/dc2e8cb006e80b0020ed20d8649106fe4274e82d8e756ad3e24ade19c0df/pypdf-6.9.1.tar.gz", hash = "sha256:ae052407d33d34de0c86c5c729be6d51010bf36e03035a8f23ab449bca52377d", size = 5311551, upload-time = "2026-03-17T10:46:07.876Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8e/5e/c86a5643653825d3c913719e788e41386bee415c2b87b4f955432f2de6b2/pypdf2-3.0.1-py3-none-any.whl", hash = "sha256:d16e4205cfee272fbdc0568b68d82be796540b1537508cef59388f839c191928", size = 232572, upload-time = "2022-12-31T10:36:10.327Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/f4/75543fa802b86e72f87e9395440fe1a89a6d149887e3e55745715c3352ac/pypdf-6.9.1-py3-none-any.whl", hash = "sha256:f35a6a022348fae47e092a908339a8f3dc993510c026bb39a96718fc7185e89f", size = 333661, upload-time = "2026-03-17T10:46:06.286Z" },
 ]
 
 [[package]]

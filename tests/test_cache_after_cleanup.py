@@ -9,128 +9,74 @@ os.environ['DATABASE_URL'] = os.getenv('DATABASE_URL', 'cockroachdb://root@local
 
 import time
 
+import pytest
+
 from banko_ai.utils.cache_manager import BankoCacheManager
 
 
-def test_cache_manager_initialization():
+@pytest.fixture(scope="module")
+def cache_manager():
+    """Create a shared cache manager instance for all tests in this module."""
+    return BankoCacheManager()
+
+
+def test_cache_manager_initialization(cache_manager):
     """Test 1: Cache manager initializes without errors"""
-    print("\n" + "="*80)
-    print("TEST 1: Cache Manager Initialization")
-    print("="*80)
-    
-    try:
-        cache_manager = BankoCacheManager()
-        print("✅ Cache manager initialized successfully")
-        print(f"   - Similarity threshold: {cache_manager.similarity_threshold}")
-        print(f"   - Cache TTL: {cache_manager.cache_ttl_hours} hours")
-        return True, cache_manager
-    except Exception as e:
-        print(f"❌ FAILED: {e}")
-        return False, None
+    assert cache_manager is not None
+    assert cache_manager.similarity_threshold > 0
+    assert cache_manager.cache_ttl_hours > 0
+
 
 def test_embedding_cache(cache_manager):
     """Test 2: Embedding cache works (should be fast on second call)"""
-    print("\n" + "="*80)
-    print("TEST 2: Embedding Cache")
-    print("="*80)
-    
-    try:
-        test_text = "Show me my restaurant expenses"
-        
-        # First call - should generate embedding
-        start = time.time()
-        embedding1 = cache_manager._get_embedding_with_cache(test_text)
-        time1 = time.time() - start
-        print(f"✅ First call (cache miss): {time1*1000:.2f}ms")
-        print(f"   - Embedding shape: {len(embedding1)}")
-        
-        # Second call - should use cache
-        start = time.time()
-        _ = cache_manager._get_embedding_with_cache(test_text)
-        time2 = time.time() - start
-        print(f"✅ Second call (cache hit): {time2*1000:.2f}ms")
-        
-        if time2 < time1:
-            print(f"✅ Cache speedup: {time1/time2:.1f}x faster")
-        
-        return True
-    except Exception as e:
-        print(f"❌ FAILED: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+    test_text = "Show me my restaurant expenses"
+
+    start = time.time()
+    embedding1 = cache_manager._get_embedding_with_cache(test_text)
+    time1 = time.time() - start
+    assert embedding1 is not None
+    assert len(embedding1) == 384
+
+    start = time.time()
+    embedding2 = cache_manager._get_embedding_with_cache(test_text)
+    time2 = time.time() - start
+
+    assert len(embedding2) == 384
+    # Second call should be faster (cache hit)
+    assert time2 <= time1 or time2 < 0.1
+
 
 def test_query_cache_storage(cache_manager):
     """Test 3: Query cache can store and retrieve responses"""
-    print("\n" + "="*80)
-    print("TEST 3: Query Cache Storage")
-    print("="*80)
-    
-    try:
-        test_query = "Show me my coffee shop expenses"
-        test_response = "You spent $45.20 at Starbucks this month."
-        test_data = [
-            {"expense_id": "1", "merchant": "Starbucks", "expense_amount": 45.20}
-        ]
-        
-        # Store in cache
-        cache_manager.cache_response(
-            test_query, 
-            test_response, 
-            test_data, 
-            "watsonx",
-            prompt_tokens=100,
-            response_tokens=50
-        )
-        print("✅ Response cached successfully")
-        
-        # Try to retrieve exact query
-        cached = cache_manager.get_cached_response(test_query, test_data, "watsonx")
-        if cached:
-            print("✅ Cache retrieval works")
-            print(f"   - Retrieved response: {cached[:50]}...")
-        else:
-            print("⚠️  Cache retrieval returned None (might be normal if DB not connected)")
-        
-        return True
-    except Exception as e:
-        print(f"❌ FAILED: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+    test_query = "Show me my coffee shop expenses for cache test"
+    test_response = "You spent $45.20 at Starbucks this month."
+    test_data = [
+        {"expense_id": "1", "merchant": "Starbucks", "expense_amount": 45.20}
+    ]
+
+    cache_manager.cache_response(
+        test_query, test_response, test_data, "watsonx",
+        prompt_tokens=100, response_tokens=50
+    )
+
+    cached = cache_manager.get_cached_response(test_query, test_data, "watsonx")
+    assert cached is not None, "Cache retrieval returned None"
+    assert "Starbucks" in cached
+
 
 def test_semantic_similarity(cache_manager):
     """Test 4: Semantic caching finds similar queries"""
-    print("\n" + "="*80)
-    print("TEST 4: Semantic Similarity Matching")
-    print("="*80)
-    
-    try:
-        # Store original query
-        original_query = "What did I spend at coffee shops?"
-        response = "Coffee shop total: $67.50"
-        test_data = [{"merchant": "Starbucks", "expense_amount": 67.50}]
-        
-        cache_manager.cache_response(original_query, response, test_data, "watsonx")
-        print(f"✅ Cached: '{original_query}'")
-        
-        # Try similar query (should match if similarity >= 0.85)
-        similar_query = "Show me my coffee shop spending"
-        cached = cache_manager.get_cached_response(similar_query, test_data, "watsonx")
-        
-        if cached:
-            print("✅ SEMANTIC CACHE HIT for similar query!")
-            print(f"   - Original: '{original_query}'")
-            print(f"   - Similar:  '{similar_query}'")
-        else:
-            print("⚠️  No semantic match (might need DB connection or threshold adjustment)")
-        
-        return True
-    except Exception as e:
-        print(f"❌ FAILED: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+    original_query = "What did I spend at coffee shops for similarity test?"
+    response = "Coffee shop total: $67.50"
+    test_data = [{"merchant": "Starbucks", "expense_amount": 67.50}]
+
+    cache_manager.cache_response(original_query, response, test_data, "watsonx")
+
+    similar_query = "Show me my coffee shop spending for similarity test"
+    cached = cache_manager.get_cached_response(similar_query, test_data, "watsonx")
+    # Semantic match depends on threshold; just verify no crash
+    if cached:
+        assert "67.50" in cached
 
 def test_dead_methods_removed():
     """Test 5: Verify dead insights_cache methods have been removed"""

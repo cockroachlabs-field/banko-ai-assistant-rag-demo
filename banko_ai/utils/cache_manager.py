@@ -110,7 +110,7 @@ class BankoCacheManager:
             -- Query cache for similar questions and responses
             CREATE TABLE IF NOT EXISTS query_cache (
                 cache_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                query_hash STRING UNIQUE NOT NULL,
+                query_hash STRING NOT NULL,
                 query_text STRING NOT NULL,
                 query_embedding VECTOR(384),
                 response_text TEXT NOT NULL,
@@ -122,6 +122,7 @@ class BankoCacheManager:
                 expires_at TIMESTAMP,
                 hit_count INTEGER DEFAULT 0,
                 last_accessed TIMESTAMP DEFAULT now(),
+                UNIQUE (query_hash, ai_service),
                 INDEX idx_query_hash (query_hash),
                 INDEX idx_expires_at (expires_at),
                 INDEX idx_ai_service (ai_service),
@@ -131,12 +132,13 @@ class BankoCacheManager:
             -- Embedding cache to avoid regenerating embeddings
             CREATE TABLE IF NOT EXISTS embedding_cache (
                 embedding_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                text_hash STRING UNIQUE NOT NULL,
+                text_hash STRING NOT NULL,
                 text_content STRING NOT NULL,
                 embedding VECTOR(384) NOT NULL,
                 model_name STRING NOT NULL DEFAULT 'all-MiniLM-L6-v2',
                 created_at TIMESTAMP DEFAULT now(),
                 access_count INTEGER DEFAULT 0,
+                UNIQUE (text_hash, model_name),
                 INDEX idx_text_hash (text_hash)
             );
             
@@ -232,23 +234,23 @@ class BankoCacheManager:
         text_hash = self._generate_hash(input_text)
         
         # Try to get from cache first
+        model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
         cache_query = text("""
             SELECT embedding, access_count
             FROM embedding_cache 
-            WHERE text_hash = :text_hash
+            WHERE text_hash = :text_hash AND model_name = :model_name
         """)
         with engine.connect() as conn:
-            result = conn.execute(cache_query, {'text_hash': text_hash})
+            result = conn.execute(cache_query, {'text_hash': text_hash, 'model_name': model_name})
             row = result.fetchone()
             
             if row:
-                # Cache hit - update access count
                 update_query = text("""
                     UPDATE embedding_cache 
                     SET access_count = access_count + 1 
-                    WHERE text_hash = :text_hash
+                    WHERE text_hash = :text_hash AND model_name = :model_name
                 """)
-                conn.execute(update_query, {'text_hash': text_hash})
+                conn.execute(update_query, {'text_hash': text_hash, 'model_name': model_name})
                 conn.commit()
                 
                 self._log_cache_stat('embedding', 'hit', tokens_saved=10)
@@ -264,14 +266,15 @@ class BankoCacheManager:
         try:
             with engine.connect() as conn:
                 insert_query = text("""
-                    INSERT INTO embedding_cache (text_hash, text_content, embedding, access_count)
-                    VALUES (:text_hash, :text_content, :embedding, 1)
-                    ON CONFLICT (text_hash) DO UPDATE SET access_count = embedding_cache.access_count + 1
+                    INSERT INTO embedding_cache (text_hash, text_content, embedding, model_name, access_count)
+                    VALUES (:text_hash, :text_content, :embedding, :model_name, 1)
+                    ON CONFLICT (text_hash, model_name) DO UPDATE SET access_count = embedding_cache.access_count + 1
                 """)
                 conn.execute(insert_query, {
                     'text_hash': text_hash,
-                    'text_content': input_text[:500],  # Truncate for storage
-                    'embedding': embedding_json
+                    'text_content': input_text[:500],
+                    'embedding': embedding_json,
+                    'model_name': model_name,
                 })
                 conn.commit()
                 self._log_cache_stat('embedding', 'miss')
@@ -463,7 +466,7 @@ class BankoCacheManager:
                         :response_tokens, :prompt_tokens, :ai_service, :expense_hash,
                         :expires_at
                     )
-                    ON CONFLICT (query_hash) DO UPDATE SET
+                    ON CONFLICT (query_hash, ai_service) DO UPDATE SET
                         response_text = EXCLUDED.response_text,
                         response_tokens = EXCLUDED.response_tokens,
                         prompt_tokens = EXCLUDED.prompt_tokens,
@@ -635,7 +638,7 @@ class BankoCacheManager:
                     COUNT(*) as count,
                     SUM(tokens_saved) as total_tokens_saved
                 FROM cache_stats 
-                WHERE timestamp >= now() - INTERVAL ':hours hours'
+                WHERE timestamp >= now() - (:hours * INTERVAL '1 hour')
                 GROUP BY cache_type, operation
             )
             SELECT 

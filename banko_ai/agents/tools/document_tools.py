@@ -19,14 +19,14 @@ from sqlalchemy.pool import NullPool
 
 # OCR imports
 try:
-    import PyPDF2
     import pytesseract
     from pdf2image import convert_from_path
     from PIL import Image
+    from pypdf import PdfReader
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False
-    print("⚠️  OCR libraries not available. Install: pip install pytesseract pdf2image Pillow PyPDF2")
+    print("⚠️  OCR libraries not available. Install: pip install pytesseract pdf2image Pillow pypdf")
 
 
 def create_document_tools(database_url: str, embedding_model) -> list[Tool]:
@@ -107,7 +107,7 @@ def create_document_tools(database_url: str, embedding_model) -> list[Tool]:
         if not OCR_AVAILABLE:
             return json.dumps({
                 'success': False,
-                'error': 'PDF processing libraries not installed. Install: pip install pytesseract pdf2image Pillow PyPDF2 && sudo apt-get install poppler-utils'
+                'error': 'PDF processing libraries not installed. Install: pip install pytesseract pdf2image Pillow pypdf && sudo apt-get install poppler-utils'
             })
         
         try:
@@ -115,7 +115,7 @@ def create_document_tools(database_url: str, embedding_model) -> list[Tool]:
             
             # Try direct text extraction first
             with open(pdf_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
+                pdf_reader = PdfReader(file)
                 page_count = len(pdf_reader.pages)
                 
                 for page_num in range(page_count):

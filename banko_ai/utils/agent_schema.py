@@ -215,12 +215,12 @@ def verify_agent_schema(database_url: str) -> dict:
         
         with engine.connect() as conn:
             for table in required_tables:
-                result = conn.execute(text(f"""
+                result = conn.execute(text("""
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables 
-                        WHERE table_name = '{table}'
+                        WHERE table_name = :table_name
                     )
-                """))
+                """), {'table_name': table})
                 results[table] = result.scalar()
         
         engine.dispose()
