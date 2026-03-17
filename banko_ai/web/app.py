@@ -318,7 +318,7 @@ def create_app() -> Flask:
             query = data.get('query', '')
             language = data.get('language', 'en')
 
-            from banko_ai.utils.intent_classifier import is_financial_query, REDIRECT_MESSAGE
+            from banko_ai.utils.intent_classifier import REDIRECT_MESSAGE, is_financial_query
             if not is_financial_query(query):
                 return jsonify({
                     'success': True,
@@ -986,7 +986,7 @@ def create_app() -> Flask:
                 
                 target_language = language_map.get(response_language, 'English')
 
-                from banko_ai.utils.intent_classifier import is_financial_query, REDIRECT_MESSAGE
+                from banko_ai.utils.intent_classifier import REDIRECT_MESSAGE, is_financial_query
                 if not is_financial_query(user_message):
                     session['chat'].append({'text': REDIRECT_MESSAGE, 'class': 'Assistant'})
                     return render_template('index.html',
@@ -1023,20 +1023,16 @@ def create_app() -> Flask:
                             })
                         search_results = search_results_dict
                     
-                    # Generate RAG response with language preference - use original simple approach
-                    if target_language != 'English':
-                        enhanced_prompt = f"{user_message}\n\nPlease respond in {target_language}."
-                        if hasattr(ai_provider, 'simple_rag_response'):
-                            rag_response_text = ai_provider.simple_rag_response(enhanced_prompt, search_results)
-                        else:
-                            rag_response = ai_provider.generate_rag_response(enhanced_prompt, search_results, None, response_language)
-                            rag_response_text = rag_response.response if hasattr(rag_response, 'response') else str(rag_response)
+                    # Generate RAG response with language preference
+                    if hasattr(ai_provider, 'simple_rag_response'):
+                        rag_response_text = ai_provider.simple_rag_response(
+                            user_message, search_results, language=target_language
+                        )
                     else:
-                        if hasattr(ai_provider, 'simple_rag_response'):
-                            rag_response_text = ai_provider.simple_rag_response(user_message, search_results)
-                        else:
-                            rag_response = ai_provider.generate_rag_response(user_message, search_results, None, response_language)
-                            rag_response_text = rag_response.response if hasattr(rag_response, 'response') else str(rag_response)
+                        rag_response = ai_provider.generate_rag_response(
+                            user_message, search_results, None, response_language
+                        )
+                        rag_response_text = rag_response.response if hasattr(rag_response, 'response') else str(rag_response)
                     
                     print(f"Response from {config.ai_service}: {rag_response_text}")
                     

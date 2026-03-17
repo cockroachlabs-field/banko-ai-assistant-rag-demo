@@ -421,7 +421,7 @@ class WatsonxProvider(AIProvider):
         
         return "\n".join(recommendations) if recommendations else ""
     
-    def simple_rag_response(self, prompt: str, search_results: list[dict[str, Any]]) -> str:
+    def simple_rag_response(self, prompt: str, search_results: list[dict[str, Any]], language: str = "English") -> str:
         """
         Simple RAG response that matches the original implementation exactly.
         Takes a prompt and list of dictionaries (like original search results).
@@ -466,7 +466,8 @@ class WatsonxProvider(AIProvider):
             else:
                 search_results_text = "No specific expense records found for this query."
             
-            # Create optimized prompt (matching original)
+            # Create optimized prompt
+            language_instruction = f" You MUST respond entirely in {language}." if language != "English" else ""
             enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
 
 Q: {prompt}
@@ -476,7 +477,7 @@ Data:
 
 {budget_recommendations if budget_recommendations else ''}
 
-Provide helpful insights with numbers, markdown formatting, and actionable advice."""
+Provide helpful insights with numbers, markdown formatting, and actionable advice.{language_instruction}"""
             
             # Prepare messages for chat format (matching original)
             messages = [
@@ -636,7 +637,13 @@ I couldn't find any relevant expense records for your query. Please try:
                     else:
                         search_results_text = "No specific expense records found for this query."
                     
-                    # Create optimized prompt (copied from original)
+                    # Create optimized prompt
+                    lang_code = language if language else "en"
+                    lang_instruction = ""
+                    if lang_code not in ("en", "en-US"):
+                        lang_names = {"es-ES": "Spanish", "fr-FR": "French", "de-DE": "German", "it-IT": "Italian", "pt-PT": "Portuguese", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese", "hi-IN": "Hindi"}
+                        lang_name = lang_names.get(lang_code, lang_code)
+                        lang_instruction = f" You MUST respond entirely in {lang_name}."
                     enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
 
 Q: {query}
@@ -646,9 +653,8 @@ Data:
 
 {budget_recommendations if budget_recommendations else ''}
 
-Provide helpful insights with numbers, markdown formatting, and actionable advice."""
+Provide helpful insights with numbers, markdown formatting, and actionable advice.{lang_instruction}"""
                     
-                    # Prepare messages for chat format (copied from original)
                     messages = [
                         {
                             "role": "user",
@@ -656,7 +662,7 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                         }
                     ]
                     
-                    # Call Watsonx API (copied from original implementation)
+                    # Call Watsonx API
                     response_text = self._call_watsonx_api(messages)
                     
                 except Exception as e:
@@ -793,6 +799,12 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                     else:
                         search_results_text = "No specific expense records found for this query."
 
+                    lang_code = language if language else "en"
+                    lang_instruction = ""
+                    if lang_code not in ("en", "en-US"):
+                        lang_names = {"es-ES": "Spanish", "fr-FR": "French", "de-DE": "German", "it-IT": "Italian", "pt-PT": "Portuguese", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese", "hi-IN": "Hindi"}
+                        lang_name = lang_names.get(lang_code, lang_code)
+                        lang_instruction = f" You MUST respond entirely in {lang_name}."
                     enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
 
 Q: {query}
@@ -802,7 +814,7 @@ Data:
 
 {budget_recommendations if budget_recommendations else ''}
 
-Provide helpful insights with numbers, markdown formatting, and actionable advice."""
+Provide helpful insights with numbers, markdown formatting, and actionable advice.{lang_instruction}"""
 
                     messages = [{"role": "user", "content": enhanced_prompt}]
                     ai_response = self._call_watsonx_api(messages)
