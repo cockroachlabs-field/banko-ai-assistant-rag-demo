@@ -96,18 +96,43 @@ def get_llm_for_agent(temperature: float = 0.7) -> Any:
             )
     
     elif config.ai_service == 'gemini':
-        try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            return ChatGoogleGenerativeAI(
-                model=config.google_model,
-                google_api_key=os.getenv('GOOGLE_API_KEY'),
-                temperature=temperature
-            )
-        except ImportError:
-            raise ImportError(
-                "langchain-google-genai is required for Gemini provider. "
-                "Install with: pip install langchain-google-genai"
-            )
+        # Try Vertex AI first (service account), then fall back to Generative AI API (API key)
+        google_api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
+        google_creds = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        google_project = os.getenv('GOOGLE_PROJECT_ID')
+        
+        if google_creds and google_project:
+            try:
+                import google.auth
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                credentials, _ = google.auth.default()
+                return ChatGoogleGenerativeAI(
+                    model=config.google_model,
+                    credentials=credentials,
+                    project=google_project,
+                    temperature=temperature
+                )
+            except Exception:
+                pass
+        
+        if google_api_key:
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                return ChatGoogleGenerativeAI(
+                    model=config.google_model,
+                    google_api_key=google_api_key,
+                    temperature=temperature
+                )
+            except ImportError:
+                raise ImportError(
+                    "langchain-google-genai is required for Gemini provider. "
+                    "Install with: pip install langchain-google-genai"
+                )
+        
+        raise ValueError(
+            "Gemini requires either GOOGLE_APPLICATION_CREDENTIALS + GOOGLE_PROJECT_ID "
+            "(Vertex AI) or GOOGLE_API_KEY (Generative AI API)"
+        )
     
     else:
         raise ValueError(
