@@ -28,7 +28,8 @@ class OpenAIProvider(AIProvider):
         self.cache_manager = cache_manager
         
         # Support both config and environment variables
-        self.api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY")
+        raw_key = config.get("api_key") or os.getenv("OPENAI_API_KEY")
+        self.api_key = raw_key.strip().replace('\n', '').replace(' ', '') if raw_key else None
         
         # Set the model in config so base class picks it up
         if "model" not in config:
