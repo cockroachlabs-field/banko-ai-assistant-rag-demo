@@ -11,12 +11,13 @@ from typing import Any
 from banko_ai.config.settings import get_config
 
 
-def get_llm_for_agent(temperature: float = 0.7) -> Any:
+def get_llm_for_agent(temperature: float = 0.7, model_override: str | None = None) -> Any:
     """
     Get LangChain-compatible LLM instance based on configured AI provider.
     
     Args:
         temperature: LLM temperature setting (0.0-1.0)
+        model_override: Use this model instead of the config default
         
     Returns:
         LangChain LLM instance
@@ -30,9 +31,14 @@ def get_llm_for_agent(temperature: float = 0.7) -> Any:
     if config.ai_service == 'openai':
         try:
             from langchain_openai import ChatOpenAI
+            api_key = os.getenv('OPENAI_API_KEY') or getattr(config, 'openai_api_key', None)
+            if api_key:
+                api_key = api_key.strip().replace('\n', '').replace(' ', '')
+            else:
+                print("⚠️ LLM Factory: OPENAI_API_KEY not found in environment")
             return ChatOpenAI(
-                model=config.openai_model,
-                api_key=os.getenv('OPENAI_API_KEY'),
+                model=model_override or config.openai_model,
+                api_key=api_key,
                 temperature=temperature
             )
         except ImportError:
@@ -45,7 +51,7 @@ def get_llm_for_agent(temperature: float = 0.7) -> Any:
         try:
             from langchain_aws import ChatBedrock
             return ChatBedrock(
-                model_id=config.aws_model,
+                model_id=model_override or config.aws_model,
                 region_name=os.getenv('AWS_REGION', 'us-east-1'),
                 model_kwargs={'temperature': temperature}
             )
@@ -75,7 +81,7 @@ def get_llm_for_agent(temperature: float = 0.7) -> Any:
                 watsonx_url = f"{parsed.scheme}://{parsed.netloc}"
             
             return WatsonxLLM(
-                model_id=config.watsonx_model,
+                model_id=model_override or config.watsonx_model,
                 url=watsonx_url,
                 apikey=config.watsonx_api_key or os.getenv('WATSONX_API_KEY'),
                 project_id=config.watsonx_project_id or os.getenv('WATSONX_PROJECT_ID'),
@@ -103,23 +109,32 @@ def get_llm_for_agent(temperature: float = 0.7) -> Any:
         
         if google_creds and google_project:
             try:
-                import google.auth
+                from google.oauth2 import service_account
                 from langchain_google_genai import ChatGoogleGenerativeAI
-                credentials, _ = google.auth.default()
-                return ChatGoogleGenerativeAI(
-                    model=config.google_model,
+                credentials = service_account.Credentials.from_service_account_file(
+                    google_creds,
+                    scopes=['https://www.googleapis.com/auth/cloud-platform']
+                )
+                selected_model = model_override or config.google_model
+                llm = ChatGoogleGenerativeAI(
+                    model=selected_model,
                     credentials=credentials,
                     project=google_project,
+                    location=os.getenv('GOOGLE_LOCATION', 'us-central1'),
+                    vertexai=True,
                     temperature=temperature
                 )
-            except Exception:
+                print(f"✅ LLM Factory: Created Gemini LLM via Vertex AI (model={selected_model})")
+                return llm
+            except Exception as e:
+                print(f"⚠️ LLM Factory: Vertex AI failed: {e}, trying API key fallback")
                 pass
         
         if google_api_key:
             try:
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 return ChatGoogleGenerativeAI(
-                    model=config.google_model,
+                    model=model_override or config.google_model,
                     google_api_key=google_api_key,
                     temperature=temperature
                 )

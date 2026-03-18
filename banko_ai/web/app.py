@@ -590,8 +590,9 @@ def create_app() -> Flask:
                 from banko_ai.agents.llm_factory import get_embedding_model, get_llm_for_agent
                 from banko_ai.agents.receipt_agent import ReceiptAgent
                 
-                # Use centralized LLM factory based on configured provider
-                llm = get_llm_for_agent(temperature=0.7)
+                # Use centralized LLM factory with the currently selected model
+                current_model = getattr(ai_provider, 'current_model', None)
+                llm = get_llm_for_agent(temperature=0.7, model_override=current_model)
                 embedding_model = get_embedding_model()
                 
                 receipt_agent = ReceiptAgent(
@@ -677,8 +678,8 @@ def create_app() -> Flask:
                     
                     # Generate embedding for expense using natural language
                     # This helps match conversational queries like "when did I go to X?"
-                    merchant = extracted.get('merchant', 'Unknown')
-                    category = extracted.get('category', 'general')
+                    merchant = extracted.get('merchant') or 'Unknown'
+                    category = extracted.get('category') or 'Other'
                     expense_text = f"Spent ${amount} at {merchant} for {category} on {expense_date.strftime('%Y-%m-%d') if hasattr(expense_date, 'strftime') else expense_date}"
                     
                     from sentence_transformers import SentenceTransformer
@@ -686,7 +687,7 @@ def create_app() -> Flask:
                     embedding = embedding_model.encode(expense_text).tolist()
                     
                     # Get category and items for tags and description
-                    category = extracted.get('category', 'general')
+                    category = extracted.get('category') or 'Other'
                     items = extracted.get('items', [])
                     
                     # Generate tags from merchant and category
@@ -702,7 +703,7 @@ def create_app() -> Flask:
                         item_list = ', '.join(items)
                         description = f"Spent ${amount:.2f} at {merchant} for {item_list}."
                     else:
-                        description = f"Spent ${amount:.2f} on {category} at {merchant}."
+                        description = f"Spent ${amount:.2f} on {category} at {merchant}"
                     
                     with engine.connect() as conn:
                         # Format embedding as array literal for CockroachDB
