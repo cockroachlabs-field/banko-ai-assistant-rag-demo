@@ -498,12 +498,15 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                 prompt_tokens = len(enhanced_prompt.split()) * 1.3  # ~1.3 tokens per word
                 response_tokens = len(response.split()) * 1.3
                 
-                self.cache_manager.cache_response(
-                    prompt, response, search_results, "watsonx",
-                    int(prompt_tokens), int(response_tokens),
-                    language=language
-                )
-                print(f"5. ✅ Cached response (est. {int(prompt_tokens + response_tokens)} tokens)")
+                if "API call failed" not in response:
+                    self.cache_manager.cache_response(
+                        prompt, response, search_results, "watsonx",
+                        int(prompt_tokens), int(response_tokens),
+                        language=language
+                    )
+                    print(f"5. ✅ Cached response (est. {int(prompt_tokens + response_tokens)} tokens)")
+                else:
+                    print("5. ⚠️ Skipped caching fallback response")
             
             return response
             
@@ -850,11 +853,12 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                 prompt_tokens = len(query.split()) * 1.3  # ~1.3 tokens per word
                 response_tokens = len(ai_response.split()) * 1.3
                 
-                self.cache_manager.cache_response(
-                    query, ai_response, search_results_dict, "watsonx",
-                    int(prompt_tokens), int(response_tokens),
-                    language=language
-                )
+                if "API call failed" not in ai_response:
+                    self.cache_manager.cache_response(
+                        query, ai_response, search_results_dict, "watsonx",
+                        int(prompt_tokens), int(response_tokens),
+                        language=language
+                    )
                 print(f"3. ✅ Cached response (est. {int(prompt_tokens + response_tokens)} tokens)")
             
             return RAGResponse(

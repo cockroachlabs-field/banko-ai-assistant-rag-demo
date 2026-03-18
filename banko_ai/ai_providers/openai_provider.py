@@ -475,12 +475,15 @@ Based on your expense data, I found {len(context)} relevant records. Here's a co
                     prompt_tokens = len(enhanced_prompt.split()) * 1.3
                     response_tokens = len(ai_response.split()) * 1.3
                 
-                self.cache_manager.cache_response(
-                    query, ai_response, search_results_dict, "openai",
-                    int(prompt_tokens), int(response_tokens),
-                    language=language
-                )
-                print(f"3. ✅ Cached response (est. {int(prompt_tokens + response_tokens)} tokens)")
+                if "API call failed" not in ai_response:
+                    self.cache_manager.cache_response(
+                        query, ai_response, search_results_dict, "openai",
+                        int(prompt_tokens), int(response_tokens),
+                        language=language
+                    )
+                    print(f"3. ✅ Cached response (est. {int(prompt_tokens + response_tokens)} tokens)")
+                else:
+                    print("3. ⚠️ Skipped caching fallback response")
             
             return RAGResponse(
                 response=ai_response,
