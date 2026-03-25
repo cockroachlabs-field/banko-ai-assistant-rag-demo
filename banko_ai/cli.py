@@ -443,7 +443,11 @@ Response Caching (all optional):
   - Demo mode (high cache hits): CACHE_THRESHOLD=0.75 CACHE_STRICT_MODE=false
   - Balanced (recommended): CACHE_THRESHOLD=0.75 CACHE_STRICT_MODE=true
   - Conservative (accuracy): CACHE_THRESHOLD=0.85 CACHE_STRICT_MODE=true
-  
+
+LangGraph Checkpointer:
+  CHECKPOINT_TTL_DAYS         Auto-expire checkpoints after N days (default: 7, 0 = disabled)
+                              Uses CockroachDB row-level TTL for automatic background cleanup.
+
   Quick start scripts:
   - ./start_demo_mode.sh      # Aggressive caching for demos
   - ./start_production_mode.sh  # Balanced for production

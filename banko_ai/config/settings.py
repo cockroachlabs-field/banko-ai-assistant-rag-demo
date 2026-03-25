@@ -67,6 +67,9 @@ class Config:
     # Agent Configuration
     monthly_budget_default: float = 10000.0  # Default monthly budget for budget agent
     
+    # Checkpointer Configuration
+    checkpoint_ttl_days: int = 7  # Auto-expire LangGraph checkpoints after N days (0 = disabled)
+    
     @classmethod
     def from_env(cls) -> "Config":
         """Create configuration from environment variables."""
@@ -137,7 +140,10 @@ class Config:
             default_user_count=int(os.getenv("DEFAULT_USER_COUNT", "100")),
             
             # Agent configuration
-            monthly_budget_default=float(os.getenv("MONTHLY_BUDGET_DEFAULT", "10000.0"))
+            monthly_budget_default=float(os.getenv("MONTHLY_BUDGET_DEFAULT", "10000.0")),
+            
+            # Checkpointer
+            checkpoint_ttl_days=int(os.getenv("CHECKPOINT_TTL_DAYS", "7")),
         )
     
     def get_ai_config(self) -> dict[str, Any]:

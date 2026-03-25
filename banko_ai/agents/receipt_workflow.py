@@ -196,6 +196,13 @@ def run_receipt_workflow(
     with CockroachDBSaver.from_conn_string(url) as checkpointer:
         checkpointer.setup()
 
+        from ..config.settings import get_config
+        cfg = get_config()
+        if cfg.checkpoint_ttl_days > 0:
+            checkpointer.enable_ttl(
+                ttl_interval=f"{cfg.checkpoint_ttl_days} days", cron="@daily"
+            )
+
         graph = build_receipt_graph()
         workflow = graph.compile(checkpointer=checkpointer)
 
