@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -259,7 +259,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.6,<4.0.0" },
     { name = "langchain", specifier = ">=1.0.0" },
     { name = "langchain-aws", specifier = ">=1.0.0" },
-    { name = "langchain-cockroachdb", specifier = ">=0.2.0" },
+    { name = "langchain-cockroachdb", specifier = ">=0.2.1" },
     { name = "langchain-community", specifier = ">=0.4.0" },
     { name = "langchain-core", specifier = ">=1.2.11" },
     { name = "langchain-google-genai", specifier = ">=4.0.0" },
@@ -1792,7 +1792,7 @@ wheels = [
 
 [[package]]
 name = "langchain-cockroachdb"
-version = "0.2.0"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "greenlet" },
@@ -1805,9 +1805,9 @@ dependencies = [
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "sqlalchemy-cockroachdb" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/13/f3/6125c843b4f60a46fb2594400b57ef9bbffbf7e6722ce911b6863c60cca7/langchain_cockroachdb-0.2.0.tar.gz", hash = "sha256:65c24b20d9c21edcf0a7f1ed51ed3ba92650a06378975e41eedaf2a3252e1b4a", size = 327444, upload-time = "2026-02-20T03:46:47.437Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/90/dace8998416cb72cc33a540e5e25093fd5da5b68009fa9d3f712898317ee/langchain_cockroachdb-0.2.1.tar.gz", hash = "sha256:7663cad7acd389515f85fdcf1cdac01bd66e439c5b8487af99efe60ab1a1d844", size = 335014, upload-time = "2026-03-24T23:51:19.395Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/c6/4410a29d45ff50d7c8b8a5bbe604d5c563bf052419eff5f8f47a2fa530dc/langchain_cockroachdb-0.2.0-py3-none-any.whl", hash = "sha256:cd75e8495aaa0861074d7efa1794767f4fd7dadf67a48e87ac51e65dd8318188", size = 36895, upload-time = "2026-02-20T03:46:44.263Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/b9/e31f9cd4c7445c66ba66b7011bd84fa981878243343aa3929230718648ba/langchain_cockroachdb-0.2.1-py3-none-any.whl", hash = "sha256:e40a02f83a549e04cf1915bd834f52c36229480c52875688b9a1d4e9cc3984e0", size = 39379, upload-time = "2026-03-24T23:51:18.224Z" },
 ]
 
 [[package]]
@@ -3885,7 +3885,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.32.5"
+version = "2.33.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -3893,9 +3893,9 @@ dependencies = [
     { name = "idna" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517, upload-time = "2025-08-18T20:46:02.573Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/34/64/8860370b167a9721e8956ae116825caff829224fbca0ca6e7bf8ddef8430/requests-2.33.0.tar.gz", hash = "sha256:c7ebc5e8b0f21837386ad0e1c8fe8b829fa5f544d8df3b2253bff14ef29d7652", size = 134232, upload-time = "2026-03-25T15:10:41.586Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6", size = 64738, upload-time = "2025-08-18T20:46:00.542Z" },
+    { url = "https://files.pythonhosted.org/packages/56/5d/c814546c2333ceea4ba42262d8c4d55763003e767fa169adc693bd524478/requests-2.33.0-py3-none-any.whl", hash = "sha256:3324635456fa185245e24865e810cecec7b4caf933d7eb133dcde67d48cee69b", size = 65017, upload-time = "2026-03-25T15:10:40.382Z" },
 ]
 
 [[package]]
