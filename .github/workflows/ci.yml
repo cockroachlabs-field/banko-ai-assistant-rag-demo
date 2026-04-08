@@ -104,9 +104,22 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -e ".[dev]"
 
-      - name: Run tests (no DB required)
+      - name: Start CockroachDB
         run: |
-          python -m pytest tests/test_env_config.py -v --tb=short || true
+          docker run -d --name cockroachdb \
+            -p 26257:26257 -p 8080:8080 \
+            cockroachdb/cockroach:latest \
+            start-single-node --insecure
+          for i in {1..30}; do
+            if docker exec cockroachdb cockroach sql --insecure --execute "SELECT 1" 2>/dev/null; then
+              echo "CockroachDB ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short --ignore=tests/test_env_config.py --ignore=tests/test_all_providers.py
         env:
           AI_SERVICE: openai
           DATABASE_URL: "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
