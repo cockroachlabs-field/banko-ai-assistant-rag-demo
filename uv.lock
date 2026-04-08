@@ -259,7 +259,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.6,<4.0.0" },
     { name = "langchain", specifier = ">=1.0.0" },
     { name = "langchain-aws", specifier = ">=1.0.0" },
-    { name = "langchain-cockroachdb", specifier = ">=0.2.0" },
+    { name = "langchain-cockroachdb", specifier = ">=0.2.1" },
     { name = "langchain-community", specifier = ">=0.4.0" },
     { name = "langchain-core", specifier = ">=1.2.11" },
     { name = "langchain-google-genai", specifier = ">=4.0.0" },
@@ -1792,7 +1792,7 @@ wheels = [
 
 [[package]]
 name = "langchain-cockroachdb"
-version = "0.2.0"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "greenlet" },
@@ -1805,9 +1805,9 @@ dependencies = [
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "sqlalchemy-cockroachdb" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/13/f3/6125c843b4f60a46fb2594400b57ef9bbffbf7e6722ce911b6863c60cca7/langchain_cockroachdb-0.2.0.tar.gz", hash = "sha256:65c24b20d9c21edcf0a7f1ed51ed3ba92650a06378975e41eedaf2a3252e1b4a", size = 327444, upload-time = "2026-02-20T03:46:47.437Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/90/dace8998416cb72cc33a540e5e25093fd5da5b68009fa9d3f712898317ee/langchain_cockroachdb-0.2.1.tar.gz", hash = "sha256:7663cad7acd389515f85fdcf1cdac01bd66e439c5b8487af99efe60ab1a1d844", size = 335014, upload-time = "2026-03-24T23:51:19.395Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/c6/4410a29d45ff50d7c8b8a5bbe604d5c563bf052419eff5f8f47a2fa530dc/langchain_cockroachdb-0.2.0-py3-none-any.whl", hash = "sha256:cd75e8495aaa0861074d7efa1794767f4fd7dadf67a48e87ac51e65dd8318188", size = 36895, upload-time = "2026-02-20T03:46:44.263Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/b9/e31f9cd4c7445c66ba66b7011bd84fa981878243343aa3929230718648ba/langchain_cockroachdb-0.2.1-py3-none-any.whl", hash = "sha256:e40a02f83a549e04cf1915bd834f52c36229480c52875688b9a1d4e9cc3984e0", size = 39379, upload-time = "2026-03-24T23:51:18.224Z" },
 ]
 
 [[package]]
