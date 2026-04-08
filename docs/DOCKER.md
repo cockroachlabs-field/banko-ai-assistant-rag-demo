@@ -193,7 +193,7 @@ podman run -d \
 
 ### Environment Variables
 
-All configuration is done via environment variables. See the main [README.md](https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/blob/main/README.md) for complete documentation.
+All configuration is done via environment variables. See the main [README.md](https://github.com/cockroachlabs-field/banko-ai-assistant/blob/main/README.md) for complete documentation.
 
 **Required:**
 - `DATABASE_URL` - CockroachDB connection string
@@ -378,8 +378,8 @@ docker buildx build \
 
 ## Support
 
-- **Issues**: https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/issues
-- **Documentation**: [README.md](https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/blob/main/README.md)
+- **Issues**: https://github.com/cockroachlabs-field/banko-ai-assistant/issues
+- **Documentation**: [README.md](https://github.com/cockroachlabs-field/banko-ai-assistant/blob/main/README.md)
 - **Docker Hub**: https://hub.docker.com/r/virag/banko-ai-assistant
 
 ## Security Notes
@@ -393,4 +393,4 @@ docker buildx build \
 
 ## License
 
-MIT License - See [LICENSE](https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/blob/main/LICENSE) file for details.
+MIT License - See [LICENSE](https://github.com/cockroachlabs-field/banko-ai-assistant/blob/main/LICENSE) file for details.

@@ -87,7 +87,7 @@ def create_document_tools(database_url: str, embedding_model) -> list[Tool]:
                            f"💡 Solution: Install tesseract OCR:\n" \
                            f"   Ubuntu/Debian: sudo apt-get install -y tesseract-ocr\n" \
                            f"   macOS: brew install tesseract\n" \
-                           f"   Or run: curl -fsSL https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/scripts/setup_system_deps.sh | bash"
+                           f"   Or run: curl -fsSL https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant/main/scripts/setup_system_deps.sh | bash"
             
             return json.dumps({
                 'success': False,
@@ -152,7 +152,7 @@ def create_document_tools(database_url: str, embedding_model) -> list[Tool]:
                            f"💡 Solution: Install poppler-utils system package:\n" \
                            f"   Ubuntu/Debian: sudo apt-get install -y poppler-utils\n" \
                            f"   macOS: brew install poppler\n" \
-                           f"   Or run: curl -fsSL https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/scripts/setup_system_deps.sh | bash"
+                           f"   Or run: curl -fsSL https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant/main/scripts/setup_system_deps.sh | bash"
             
             return json.dumps({
                 'success': False,

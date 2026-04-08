@@ -106,7 +106,7 @@ class GeminiProvider(AIProvider):
                 raise AIAuthenticationError("Google credentials are required")
 
         except Exception as e:
-            if isinstance(e, (AIConnectionError, AIAuthenticationError)):
+            if isinstance(e, AIConnectionError | AIAuthenticationError):
                 raise
             raise AIConnectionError(f"Failed to initialize Gemini provider: {str(e)}")
 

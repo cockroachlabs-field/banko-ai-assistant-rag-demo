@@ -9,11 +9,11 @@
 
 An AI-powered expense analysis application demonstrating Retrieval-Augmented Generation (RAG) and agentic-AI workflows with CockroachDB vector search and multiple AI provider support.
 
-![Banko AI Assistant](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/banko-ai-assistant-watsonx.gif)
+![Banko AI Assistant](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant/main/banko_ai/static/banko-ai-assistant-watsonx.gif)
 
 ## Architecture
 
-![Banko AI Architecture](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant-rag-demo/main/banko_ai/static/banko-ai-architecture.png)
+![Banko AI Architecture](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant/main/banko_ai/static/banko-ai-architecture.png)
 
 The application uses a five-layer architecture:
 
@@ -120,8 +120,8 @@ docker-compose up -d
 
 **Development**
 ```bash
-git clone https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo
-cd banko-ai-assistant-rag-demo
+git clone https://github.com/cockroachlabs-field/banko-ai-assistant
+cd banko-ai-assistant
 pip install -e ".[dev]"
 ```
 

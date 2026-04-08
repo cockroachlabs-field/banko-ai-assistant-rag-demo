@@ -540,7 +540,7 @@ Gemini-Specific Issues:
 - Vertex AI unavailable: Provider will auto-fallback to Generative AI API if GOOGLE_API_KEY is set
 - Service account issues: Ensure the JSON file path is correct and accessible
 
-For more information, visit: https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo
+For more information, visit: https://github.com/cockroachlabs-field/banko-ai-assistant
 """)
 
 

@@ -100,10 +100,10 @@ dev = [
 banko-ai = "banko_ai.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo"
-Repository = "https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo"
-Documentation = "https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo#readme"
-"Bug Tracker" = "https://github.com/cockroachlabs-field/banko-ai-assistant-rag-demo/issues"
+Homepage = "https://github.com/cockroachlabs-field/banko-ai-assistant"
+Repository = "https://github.com/cockroachlabs-field/banko-ai-assistant"
+Documentation = "https://github.com/cockroachlabs-field/banko-ai-assistant#readme"
+"Bug Tracker" = "https://github.com/cockroachlabs-field/banko-ai-assistant/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
