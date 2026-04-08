@@ -78,7 +78,7 @@ dependencies = [
     "eventlet>=0.33.0,<1.0.0",
     
     # Production Server (Updated for CVE-2024-1135 and CVE-2024-6827 fixes)
-    "gunicorn>=23.0.0,<24.0.0",
+    "gunicorn>=23.0.0,<26.0.0",
     
     # Utilities (CVE-2025-66418, CVE-2025-66471, CVE-2026-21441)
     "urllib3>=2.6.3",
