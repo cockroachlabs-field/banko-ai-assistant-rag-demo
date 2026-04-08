@@ -1,0 +1,99 @@
+name: Release to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 1.0.36)"
+        required: true
+        type: string
+
+jobs:
+  release:
+    name: Build, Test & Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify version matches pyproject.toml
+        run: |
+          TOML_VERSION=$(python -c "
+          import re
+          with open('pyproject.toml') as f:
+              m = re.search(r'version\s*=\s*\"(.+?)\"', f.read())
+              print(m.group(1))
+          ")
+          if [ "$TOML_VERSION" != "${{ inputs.version }}" ]; then
+            echo "::error::Version mismatch: pyproject.toml has $TOML_VERSION but release requested ${{ inputs.version }}"
+            exit 1
+          fi
+          echo "Version OK: $TOML_VERSION"
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Lint
+        run: ruff check banko_ai/
+
+      - name: Start CockroachDB
+        run: |
+          docker run -d --name cockroachdb \
+            -p 26257:26257 -p 8080:8080 \
+            cockroachdb/cockroach:latest \
+            start-single-node --insecure
+          echo "Waiting for CockroachDB..."
+          for i in {1..30}; do
+            if docker exec cockroachdb cockroach sql --insecure --execute "SELECT 1" 2>/dev/null; then
+              echo "CockroachDB ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short --ignore=tests/test_env_config.py --ignore=tests/test_all_providers.py
+        env:
+          AI_SERVICE: openai
+          DATABASE_URL: "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
+
+      - name: Build package
+        run: |
+          uv pip install --system build
+          python -m build
+
+      - name: Verify build
+        run: |
+          uv pip install --system pkginfo
+          python -c "
+          import glob, pkginfo
+          whl = glob.glob('dist/*.whl')[0]
+          w = pkginfo.Wheel(whl)
+          print(f'Package: {w.name} v{w.version}')
+          assert w.version == '${{ inputs.version }}', f'Wheel version {w.version} != ${{ inputs.version }}'
+          print('Build verified')
+          "
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Release v${{ inputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
