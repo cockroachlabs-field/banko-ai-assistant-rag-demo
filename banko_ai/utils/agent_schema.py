@@ -14,6 +14,31 @@ import sys
 from typing import Optional
 
 from sqlalchemy import text
+from sqlalchemy.sql import quoted_name
+
+# Whitelist of tables that drop_agent_schema is allowed to drop.
+# Adding to this list is a deliberate code change reviewed in PR.
+_ALLOWED_DROP_TABLES: frozenset[str] = frozenset({
+    "documents",
+    "agent_decisions",
+    "agent_tasks",
+    "agent_memory",
+    "agent_state",
+})
+
+
+def _tables_to_drop() -> list[str]:
+    """Return the ordered list of tables to drop. Indirection exists so tests
+    can monkeypatch and verify the safety check refuses unknown names."""
+    # Reverse FK order matters: documents -> agent_decisions -> tasks/memory -> state
+    return [
+        "documents",
+        "agent_decisions",
+        "agent_tasks",
+        "agent_memory",
+        "agent_state",
+    ]
+
 
 AGENT_SCHEMA_SQL = """
 -- Agent state and coordination
@@ -250,27 +275,35 @@ def drop_agent_schema(database_url: str, confirm: bool = False) -> bool:
     
     from sqlalchemy import create_engine
     from sqlalchemy.pool import NullPool
-    
+
+    print("🗑️  Dropping agent schema...")
+
+    # Defense-in-depth: validate table names before creating the engine.
+    # ValueError propagates to caller (not caught here).
+    tables = _tables_to_drop()
+    for table in tables:
+        if table not in _ALLOWED_DROP_TABLES:
+            raise ValueError(
+                f"Refusing to drop {table!r}: not in the allowed drop set "
+                f"{sorted(_ALLOWED_DROP_TABLES)}"
+            )
+
     try:
-        print("🗑️  Dropping agent schema...")
-        
         engine = create_engine(database_url, poolclass=NullPool)
-        
+
         with engine.connect() as conn:
-            # Drop in reverse order due to foreign keys
-            tables = ['documents', 'agent_decisions',
-                     'agent_tasks', 'agent_memory', 'agent_state']
-            
+
             for table in tables:
-                print(f"  Dropping table: {table}")
-                conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
-            
+                safe_name = quoted_name(table, quote=True)
+                print(f"  Dropping table: {safe_name}")
+                conn.execute(text(f"DROP TABLE IF EXISTS {safe_name} CASCADE"))
+
             conn.commit()
-        
+
         engine.dispose()
         print("✅ Agent schema dropped")
         return True
-    
+
     except Exception as e:
         print(f"❌ Failed to drop schema: {e}")
         return False
