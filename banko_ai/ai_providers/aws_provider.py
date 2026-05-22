@@ -29,7 +29,7 @@ class AWSProvider(AIProvider):
         self.secret_access_key = config.get("secret_access_key") or os.getenv("AWS_SECRET_ACCESS_KEY")
         self.region = config.get("region") or os.getenv("AWS_REGION", "us-east-1")
         self.profile_name = config.get("profile_name") or os.getenv("AWS_PROFILE")
-        self.model_id = config.get("model") or os.getenv("AWS_MODEL_ID", "us.anthropic.claude-3-5-sonnet-20241022-v2:0")
+        self.model_id = config.get("model") or os.getenv("AWS_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
         
         self.bedrock_client = None
         self.embedding_model = None
@@ -105,42 +105,73 @@ class AWSProvider(AIProvider):
             print()
     
     def get_default_model(self) -> str:
-        """Get the default AWS model."""
-        return "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+        """Get the default AWS model.
+
+        Returns Claude Haiku 4.5 — the current Anthropic Haiku on Bedrock.
+        Claude 3.x inference profiles are flagged Legacy after 30 days of
+        per-account inactivity (the call returns ResourceNotFoundException
+        with a Legacy-upgrade message), so we never seed defaults from that
+        generation. See get_available_models() for the dropdown filter that
+        also hides Claude 3.x from operators.
+        """
+        return "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     
     def get_available_models(self) -> list[str]:
-        """Get available AWS Bedrock models. Override with AWS_MODELS env var or auto-discover from API."""
+        """Discover Claude inference profiles for the current AWS account.
+
+        Filters out Claude 3.x because Bedrock marks those profiles Legacy
+        after 30 days of per-account inactivity and InvokeModel returns
+        ResourceNotFoundException("upgrade to an active model"). The list API
+        still returns them as lifecycle=ACTIVE, so we have to filter by ID
+        pattern. Operators who genuinely need a Claude 3.x profile can pin one
+        via the AWS_MODELS env var (comma-separated), which short-circuits
+        discovery entirely.
+        """
         extra = os.getenv("AWS_MODELS", "")
         if extra:
             return [m.strip() for m in extra.split(",") if m.strip()]
-        
-        models = set()
+
+        models: set[str] = set()
         try:
             bedrock_client = boto3.client('bedrock', region_name=self.region)
-            
+
             # Foundation models
             response = bedrock_client.list_foundation_models(byProvider='Anthropic')
             for m in response.get('modelSummaries', []):
+                mid = m.get('modelId', '')
                 status = m.get('modelLifecycle', {}).get('status', '')
-                if status == 'ACTIVE' and 'claude' in m['modelId'].lower():
-                    models.add(m['modelId'])
-            
+                if status == 'ACTIVE' and 'claude' in mid.lower() and not self._is_legacy_claude(mid):
+                    models.add(mid)
+
             # Inference profiles (required for on-demand invocation of newer models)
             response = bedrock_client.list_inference_profiles()
             for p in response.get('inferenceProfileSummaries', []):
-                if p.get('status') == 'ACTIVE' and 'claude' in p['inferenceProfileId'].lower():
-                    models.add(p['inferenceProfileId'])
-            
+                pid = p.get('inferenceProfileId', '')
+                if p.get('status') == 'ACTIVE' and 'claude' in pid.lower() and not self._is_legacy_claude(pid):
+                    models.add(pid)
+
             if models:
                 return sorted(models)
         except Exception as e:
             print(f"⚠️  Could not list Bedrock models: {e}")
-        
+
+        # Fallback: known-good current Claude 4.x inference profiles. Refreshed
+        # 2026-05-22 against a CRLRevenue Bedrock account; pick Haiku as the
+        # demo default to keep token cost low.
         return [
-            "us.anthropic.claude-3-5-haiku-20241022-v1:0",
-            "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
-            "us.anthropic.claude-3-haiku-20240307-v1:0",
+            "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+            "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "us.anthropic.claude-sonnet-4-6",
+            "us.anthropic.claude-opus-4-7",
         ]
+
+    @staticmethod
+    def _is_legacy_claude(model_id: str) -> bool:
+        """True for Claude 3.x inference profiles, which Bedrock denies after
+        30 days of per-account inactivity. Match on the canonical
+        '...claude-3-' substring so both foundation IDs and us./global.
+        inference-profile prefixes are covered."""
+        return "claude-3-" in model_id.lower()
     
     def _get_embedding_model(self) -> SentenceTransformer:
         """Get or create the embedding model."""
@@ -489,14 +520,14 @@ class AWSProvider(AIProvider):
                 language=language,
             )
             
-            # Define input parameters for Claude
+            # Claude on Bedrock rejects both `temperature` and `top_p` in the same
+            # request (ValidationException). Keep temperature; drop top_p.
             payload = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 1000,
                 "top_k": 250,
                 "stop_sequences": [],
                 "temperature": 1,
-                "top_p": 0.999,
                 "messages": [
                     {
                         "role": "user",
