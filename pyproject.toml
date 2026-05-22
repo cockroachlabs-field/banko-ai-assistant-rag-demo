@@ -48,9 +48,10 @@ dependencies = [
     "botocore>=1.35.0",
     
     # Google Integration
-    "google-cloud-aiplatform>=1.133.0,<2.0.0",
+    # vertexai SDK removed 2026-05-22 — deprecated 2025-06-24, hard removal
+    # 2026-06-24. google-genai replaces it for both Vertex AI and the public
+    # Generative AI API (switch via the vertexai=True client flag).
     "google-auth>=2.23.0,<3.0.0",
-    "vertexai>=1.43.0,<2.0.0",
     "google-genai>=1.0.0",
     
     # CockroachDB LangChain Integration (vectorstore, chat history, checkpointer)
