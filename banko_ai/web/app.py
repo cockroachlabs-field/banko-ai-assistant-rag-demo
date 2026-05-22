@@ -1548,6 +1548,42 @@ def create_app() -> Flask:
         if user_id:
             join_room(f"coach:{user_id}")
 
+    @app.route("/health/coach", methods=["GET"])
+    def health_coach():
+        from ..config.settings import get_config
+        from sqlalchemy import create_engine
+        cfg = get_config()
+        db_url = os.getenv("DATABASE_URL")
+        last_nudge_at = None
+        db_ok = False
+        if db_url:
+            try:
+                eng = create_engine(db_url)
+                with eng.connect() as conn:
+                    row = conn.execute(text(
+                        "SELECT max(created_at) FROM coach_nudges"
+                    )).fetchone()
+                    last_nudge_at = (row[0].isoformat()
+                                     if row and row[0] else None)
+                    db_ok = True
+                eng.dispose()
+            except Exception as e:
+                coach_log.warning("health DB check failed: %s", e)
+
+        components = {
+            "db_reachable": db_ok,
+            "webhook_secret_configured": bool(
+                os.getenv("CDC_WEBHOOK_HMAC_SECRET", "")
+            ),
+            "kafka_enabled": cfg.coach_kafka_enabled,
+            "active_provider": cfg.ai_service,
+            "last_nudge_at": last_nudge_at,
+        }
+        overall = ("green" if db_ok and
+                   components["webhook_secret_configured"]
+                   else "degraded")
+        return jsonify({"status": overall, "components": components}), 200
+
     # Data Generator Routes
     generation_state = {'running': False, 'should_stop': False}
     
