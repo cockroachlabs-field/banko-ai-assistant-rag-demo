@@ -17,6 +17,13 @@ from typing import Any
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
+from .insights import (
+    detect_subscriptions,
+    get_monthly_summary,
+    get_spending_velocity,
+    get_top_merchants,
+)
+
 
 _DEFAULT_BUDGETS_USD = {
     "dining": 400.0,
@@ -113,13 +120,24 @@ def get_recent_signals(user_id: str, database_url: str,
 
 
 def get_recent_transactions(user_id: str, database_url: str,
-                            limit: int = 10,
+                            limit: int | None = None,
                             category: str | None = None,
-                            days: int = 30) -> list[dict[str, Any]]:
+                            days: int | None = None) -> list[dict[str, Any]]:
     """Return the user's recent expense rows, newest first. Optional
     category filter and lookback window. Maps real expenses columns
     (`expense_id`, `expense_amount`, `shopping_type`) to the names the
-    agent and MCP layer expect (`id`, `amount`, `category`)."""
+    agent and MCP layer expect (`id`, `amount`, `category`).
+
+    Defaults for `limit` and `days` come from Config when not supplied,
+    so deployments can tune for their data volumes without code changes.
+    """
+    if limit is None or days is None:
+        from ..config.settings import get_config
+        cfg = get_config()
+        if limit is None:
+            limit = cfg.coach_tx_default_limit
+        if days is None:
+            days = cfg.coach_agg_lookback_days
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     eng = _engine(database_url)
     with eng.connect() as conn:
@@ -189,4 +207,8 @@ COACH_TOOLS = {
     "get_recent_signals": get_recent_signals,
     "get_recent_transactions": get_recent_transactions,
     "explain_nudge": explain_nudge,
+    "get_monthly_summary": get_monthly_summary,
+    "get_spending_velocity": get_spending_velocity,
+    "get_top_merchants": get_top_merchants,
+    "detect_subscriptions": detect_subscriptions,
 }

@@ -77,6 +77,11 @@ class Config:
     coach_socketio_room_prefix: str = "coach:"
     coach_default_user_id: str = "00000000-0000-0000-0000-000000000001"
     coach_kafka_enabled: bool = False
+    coach_tx_default_limit: int = 25
+    coach_agg_lookback_days: int = 30
+    coach_velocity_horizon_days: int = 90
+    coach_top_merchants_k: int = 5
+    coach_subscription_min_occurrences: int = 3
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -163,6 +168,11 @@ class Config:
                 "00000000-0000-0000-0000-000000000001",
             ),
             coach_kafka_enabled=os.getenv("COACH_KAFKA_ENABLED", "false").lower() == "true",
+            coach_tx_default_limit=int(os.getenv("COACH_TX_DEFAULT_LIMIT", "25")),
+            coach_agg_lookback_days=int(os.getenv("COACH_AGG_LOOKBACK_DAYS", "30")),
+            coach_velocity_horizon_days=int(os.getenv("COACH_VELOCITY_HORIZON_DAYS", "90")),
+            coach_top_merchants_k=int(os.getenv("COACH_TOP_MERCHANTS_K", "5")),
+            coach_subscription_min_occurrences=int(os.getenv("COACH_SUBSCRIPTION_MIN_OCCURRENCES", "3")),
         )
     
     def get_ai_config(self) -> dict[str, Any]:
