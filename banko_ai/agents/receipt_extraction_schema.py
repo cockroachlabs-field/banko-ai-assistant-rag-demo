@@ -52,6 +52,16 @@ class ReceiptExtraction(BaseModel):
     items: list[str] = Field(default_factory=list)
     payment_method: str = Field(min_length=1)
 
+    @field_validator("items", mode="before")
+    @classmethod
+    def normalize_null_items(cls, v: Any) -> Any:
+        # Some providers (Claude on Bedrock observed 2026-05-22) emit explicit
+        # JSON null when no line items were parsed instead of omitting the key
+        # or returning []. Treat null the same as an empty list.
+        if v is None:
+            return []
+        return v
+
     @field_validator("date", mode="before")
     @classmethod
     def reject_placeholder_date(cls, v: Any) -> Any:

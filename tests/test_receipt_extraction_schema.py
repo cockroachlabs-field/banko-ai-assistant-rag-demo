@@ -110,6 +110,24 @@ def test_items_field_defaults_to_empty_list_when_omitted():
     assert rx.items == []
 
 
+def test_items_null_coerced_to_empty_list():
+    """Claude on Bedrock (observed 2026-05-22 with Haiku 4.5) returns
+    explicit JSON null for items when no line items were parsed, instead of
+    omitting the key or returning []. The default_factory only fires on
+    omission, so we need a before-validator that coerces None -> []. Without
+    this, legitimate receipts with no parseable line items 422 on a
+    list_type ValidationError."""
+    rx = ReceiptExtraction(
+        merchant="FL-POINTE ORLANDO - PBR",
+        amount=96.82,
+        date=datetime.date(2025, 10, 6),
+        category="entertainment",
+        items=None,
+        payment_method="credit card",
+    )
+    assert rx.items == []
+
+
 def test_is_placeholder_payload_full_template_echo():
     """The exact payload pattern observed during the 2026-05-21 watsonx smoke
     with ibm/granite-8b-code-instruct."""
