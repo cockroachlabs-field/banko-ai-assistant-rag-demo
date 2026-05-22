@@ -1468,6 +1468,86 @@ def create_app() -> Flask:
                         "queued_signal_ids": queued_ids,
                         "replayed_signal_ids": replayed_ids}), 202
 
+    # --- Coach v1 UI + REST ----------------------------------------------
+    @app.route("/coach")
+    def coach_page():
+        from ..config.settings import get_config
+        cfg = get_config()
+        user_id = session.get("user_id") or cfg.coach_default_user_id
+        return render_template("coach.html", user_id=user_id)
+
+    @app.route("/api/coach/nudges", methods=["GET"])
+    def coach_list_nudges():
+        from sqlalchemy import create_engine
+        from ..config.settings import get_config
+        cfg = get_config()
+        user_id = (request.args.get("user_id") or session.get("user_id")
+                   or cfg.coach_default_user_id)
+        limit = min(int(request.args.get("limit", "20")), 100)
+        db_url = os.getenv("DATABASE_URL")
+        eng = create_engine(db_url)
+        try:
+            with eng.connect() as conn:
+                rows = conn.execute(text("""
+                    SELECT n.nudge_id, n.message, n.provider_used, n.created_at,
+                           s.signal_type, s.severity
+                    FROM coach_nudges n
+                    LEFT JOIN spending_signals s ON s.signal_id = n.signal_id
+                    WHERE n.user_id = :u
+                    ORDER BY n.created_at DESC
+                    LIMIT :l
+                """), {"u": user_id, "l": limit}).fetchall()
+        finally:
+            eng.dispose()
+        return jsonify({"nudges": [{
+            "nudge_id": str(r[0]), "message": r[1],
+            "provider_used": r[2],
+            "created_at": r[3].isoformat() if r[3] else None,
+            "signal_type": r[4], "severity": r[5],
+        } for r in rows]})
+
+    @app.route("/api/coach/nudges/<nudge_id>", methods=["GET"])
+    def coach_get_nudge(nudge_id: str):
+        from ..coach.tools import explain_nudge
+        result = explain_nudge(nudge_id=nudge_id,
+                               database_url=os.getenv("DATABASE_URL"))
+        if not result:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(result)
+
+    @app.route("/api/coach/chat", methods=["POST"])
+    def coach_chat():
+        from ..coach.agent import CoachAgent, default_llm_invoker
+        from ..config.settings import get_config
+        cfg = get_config()
+        body = request.get_json(silent=True) or {}
+        message = (body.get("message") or "").strip()
+        if not message:
+            return jsonify({"error": "message is required"}), 400
+        user_id = (body.get("user_id") or session.get("user_id")
+                   or cfg.coach_default_user_id)
+        thread_id = body.get("thread_id")
+        context = ({"nudge_id": body["nudge_id"]}
+                   if body.get("nudge_id") else None)
+
+        agent = CoachAgent(
+            database_url=os.getenv("DATABASE_URL"),
+            llm_invoker=default_llm_invoker,
+            provider_name=cfg.ai_service,
+            max_steps=cfg.coach_agent_max_steps,
+        )
+        reply = agent.converse(user_id=user_id, message=message,
+                               history=[], context=context,
+                               thread_id=thread_id)
+        return jsonify(reply)
+
+    @socketio.on("coach.join")
+    def coach_join(data):
+        from flask_socketio import join_room
+        user_id = data.get("user_id")
+        if user_id:
+            join_room(f"coach:{user_id}")
+
     # Data Generator Routes
     generation_state = {'running': False, 'should_stop': False}
     
