@@ -69,7 +69,15 @@ class Config:
     
     # Checkpointer Configuration
     checkpoint_ttl_days: int = 7  # Auto-expire LangGraph checkpoints after N days (0 = disabled)
-    
+
+    # Coach Configuration (added 2026-05-22)
+    cdc_webhook_hmac_secret: str = ""
+    coach_rate_limit_per_5min: int = 30
+    coach_agent_max_steps: int = 5
+    coach_socketio_room_prefix: str = "coach:"
+    coach_default_user_id: str = "00000000-0000-0000-0000-000000000001"
+    coach_kafka_enabled: bool = False
+
     @classmethod
     def from_env(cls) -> "Config":
         """Create configuration from environment variables."""
@@ -144,6 +152,17 @@ class Config:
             
             # Checkpointer
             checkpoint_ttl_days=int(os.getenv("CHECKPOINT_TTL_DAYS", "7")),
+
+            # Coach
+            cdc_webhook_hmac_secret=os.getenv("CDC_WEBHOOK_HMAC_SECRET", ""),
+            coach_rate_limit_per_5min=int(os.getenv("COACH_RATE_LIMIT_PER_5MIN", "30")),
+            coach_agent_max_steps=int(os.getenv("COACH_AGENT_MAX_STEPS", "5")),
+            coach_socketio_room_prefix=os.getenv("COACH_SOCKETIO_ROOM_PREFIX", "coach:"),
+            coach_default_user_id=os.getenv(
+                "COACH_DEFAULT_USER_ID",
+                "00000000-0000-0000-0000-000000000001",
+            ),
+            coach_kafka_enabled=os.getenv("COACH_KAFKA_ENABLED", "false").lower() == "true",
         )
     
     def get_ai_config(self) -> dict[str, Any]:
