@@ -214,6 +214,16 @@ class Config:
             raise ValueError("DATABASE_URL is required")
         
         if not self.secret_key:
+            flask_env = os.getenv("FLASK_ENV", "development").lower()
+            running_under_gunicorn = "gunicorn" in os.getenv("SERVER_SOFTWARE", "").lower()
+            if flask_env == "production" or running_under_gunicorn:
+                raise RuntimeError(
+                    "SECRET_KEY must be set in production. Multi-worker "
+                    "deployments require a stable secret so Flask session "
+                    "cookies validate across workers. Set SECRET_KEY in the "
+                    "environment (e.g., `export SECRET_KEY=$(python -c "
+                    "'import secrets; print(secrets.token_hex(32))')`)."
+                )
             self.secret_key = secrets.token_hex(32)
             print("Warning: SECRET_KEY not set. Generated a random key for this session.")
         
