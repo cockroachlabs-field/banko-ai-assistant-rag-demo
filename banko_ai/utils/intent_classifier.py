@@ -1,10 +1,21 @@
 """
 Intent classifier for Banko AI.
 
-Uses embedding similarity to determine whether a user query is related to
-personal finance / expense tracking. Non-financial queries are intercepted
-before the RAG pipeline so we skip the vector search and LLM call entirely.
+Two-stage gate. A cheap lexical/fuzzy pre-pass catches the common case where
+the query obviously names a financial concept ("delta expenses", "$42 at
+starbucks", "how much did I spend on groceries") — including typos like
+"delta exepnses" that MiniLM-anchor cosine similarity scores below threshold.
+Only queries that miss the lexical gate fall through to the embedding check.
+
+Why the lexical pre-pass exists: before the embedding gate was added
+(2026-03-17, commit f93782d), every query went straight to RAG and the LLM
+itself was robust to typos. The embedding gate intercepted before the LLM
+could see them; the pre-pass restores that tolerance for queries that name
+known financial signals.
 """
+
+import difflib
+import re
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -51,6 +62,67 @@ REDIRECT_MESSAGE = (
 
 SIMILARITY_THRESHOLD = 0.20
 
+# Core finance vocabulary the lexical/fuzzy pre-pass checks before the
+# embedding gate. Hits here short-circuit to True without loading MiniLM.
+# Keep this list small and high-signal — false positives let off-topic queries
+# through to the LLM, but that's a softer failure than blocking real ones.
+FINANCIAL_KEYWORDS = frozenset({
+    # core verbs
+    "spend", "spent", "spending", "paid", "pay", "bought", "buy", "charged",
+    "owe", "owed",
+    # core nouns
+    "expense", "expenses", "transaction", "transactions", "receipt", "receipts",
+    "budget", "budgets", "balance", "bill", "bills", "payment", "payments",
+    "refund", "refunds", "charge", "charges", "cost", "costs", "income",
+    "salary", "savings", "subscription", "subscriptions", "purchase",
+    "purchases", "invoice", "invoices", "deposit", "withdrawal", "fraud",
+    "duplicate",
+    # categories
+    "grocery", "groceries", "restaurant", "dining", "food", "gas", "fuel",
+    "rent", "mortgage", "utility", "utilities", "electricity", "internet",
+    "travel", "hotel", "flight", "flights", "uber", "lyft", "taxi",
+    # common merchants we know will show up in demo data
+    "amazon", "walmart", "target", "costco", "starbucks", "delta", "united",
+    "american", "southwest", "nike", "apple",
+    # currency words (the symbol is checked separately)
+    "dollar", "dollars", "usd",
+})
+
+# Words used in fuzzy matching only — they're the most-likely-typo'd core
+# financial terms plus distinctive-shape merchant names. Kept small so
+# difflib stays fast and unrelated tokens don't accidentally match (avoid
+# adding short or generic-shape words like "delta" or "apple" here).
+_FUZZY_CORE = frozenset({
+    "expense", "expenses", "spend", "spent", "spending", "transaction",
+    "receipt", "budget", "payment", "refund", "charge", "subscription",
+    "starbucks", "amazon", "walmart", "costco",
+})
+
+_FUZZY_CUTOFF = 0.80  # difflib SequenceMatcher ratio; 0.80 = one typo in
+                      # ~5 chars, tight enough to avoid runaway false hits
+
+_TOKEN_RE = re.compile(r"[a-zA-Z$]+")
+
+
+def _lexical_or_fuzzy_financial_hit(query: str) -> bool:
+    """Cheap pre-pass: True if the query mentions a financial concept by
+    exact substring, currency symbol, or close fuzzy match against the core
+    vocabulary. Catches typos the MiniLM gate can't recover from."""
+    lower = query.lower()
+    if "$" in lower:
+        return True
+    tokens = _TOKEN_RE.findall(lower)
+    for tok in tokens:
+        if tok in FINANCIAL_KEYWORDS:
+            return True
+    # Fuzzy second pass — only for tokens long enough to be meaningful
+    for tok in tokens:
+        if len(tok) < 4:
+            continue
+        if difflib.get_close_matches(tok, _FUZZY_CORE, n=1, cutoff=_FUZZY_CUTOFF):
+            return True
+    return False
+
 
 def _get_model() -> SentenceTransformer:
     global _model
@@ -82,10 +154,16 @@ def _get_non_financial_embeddings() -> np.ndarray:
 def is_financial_query(query: str) -> bool:
     """Return True if the query is related to personal finance.
 
-    Uses a two-sided check: the query must be closer to financial anchors
-    than to non-financial anchors, OR exceed the similarity threshold
-    against financial anchors.
+    Stage 1 (cheap): lexical + fuzzy match against FINANCIAL_KEYWORDS. Catches
+    obvious cases and typos like 'delta exepnses' that MiniLM scores below
+    threshold. Short-circuits before loading the embedding model.
+
+    Stage 2 (embedding fallback): two-sided cosine similarity vs financial
+    and non-financial anchor sets. Only runs when the lexical pass misses.
     """
+    if _lexical_or_fuzzy_financial_hit(query):
+        return True
+
     model = _get_model()
     query_embedding = model.encode([query], normalize_embeddings=True)[0]
 
