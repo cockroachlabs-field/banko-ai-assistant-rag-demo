@@ -16,6 +16,7 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 
 from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry, get_database_url
 from .base import AIAuthenticationError, AIConnectionError, AIProvider, RAGResponse, SearchResult
+from .rag_prompts import build_banko_rag_prompt
 
 
 class AWSProvider(AIProvider):
@@ -481,23 +482,12 @@ class AWSProvider(AIProvider):
             else:
                 search_results_text = "No specific expense records found for this query."
             
-            # Create enhanced prompt
-            lang_code = language if language else "en"
-            lang_instruction = ""
-            if lang_code not in ("en", "en-US"):
-                lang_names = {"es-ES": "Spanish", "fr-FR": "French", "de-DE": "German", "it-IT": "Italian", "pt-PT": "Portuguese", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese", "hi-IN": "Hindi"}
-                lang_name = lang_names.get(lang_code, lang_code)
-                lang_instruction = f" You MUST respond entirely in {lang_name}."
-            enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
-
-Q: {query}
-
-Data:
-{search_results_text}
-
-{budget_recommendations if budget_recommendations else ''}
-
-Provide helpful insights with numbers, markdown formatting, and actionable advice.{lang_instruction}"""
+            enhanced_prompt = build_banko_rag_prompt(
+                question=query,
+                expense_data=search_results_text,
+                budget_recommendations=budget_recommendations,
+                language=language,
+            )
             
             # Define input parameters for Claude
             payload = {

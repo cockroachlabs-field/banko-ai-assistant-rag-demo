@@ -76,16 +76,38 @@ def test_placeholder_merchant_rejected():
         )
 
 
-def test_empty_items_rejected():
-    with pytest.raises(ValidationError):
-        ReceiptExtraction(
-            merchant="Real Merchant",
-            amount=10.0,
-            date=datetime.date(2026, 5, 21),
-            category="food",
-            items=[],
-            payment_method="credit card",
-        )
+def test_empty_items_accepted_when_other_fields_real():
+    """A real receipt can legitimately have no parsed line items: tip slips,
+    single-line totals, and lower-res scans where the model only recovers the
+    grand total. Observed 2026-05-22 with OpenAI on a parking receipt
+    ('FL-POINTE ORLANDO - PBR', $96.82, real date, real payment_method) — the
+    extraction was correct, items was just []. Empty items alone is too weak a
+    signal to reject; the is_placeholder_payload heuristic still flags
+    template-echo cases via the _PLACEHOLDER_ITEMS set + the 2-hit threshold."""
+    rx = ReceiptExtraction(
+        merchant="FL-POINTE ORLANDO - PBR",
+        amount=96.82,
+        date=datetime.date(2025, 10, 6),
+        category="services",
+        items=[],
+        payment_method="credit card",
+    )
+    assert rx.items == []
+    assert rx.amount == 96.82
+
+
+def test_items_field_defaults_to_empty_list_when_omitted():
+    """Some provider response shapes omit the key entirely rather than
+    returning []. Default factory keeps the schema permissive without making
+    the field optional in the type sense."""
+    rx = ReceiptExtraction(
+        merchant="Quick Stop",
+        amount=5.00,
+        date=datetime.date(2026, 5, 22),
+        category="food",
+        payment_method="cash",
+    )
+    assert rx.items == []
 
 
 def test_is_placeholder_payload_full_template_echo():

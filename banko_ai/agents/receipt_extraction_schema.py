@@ -49,7 +49,7 @@ class ReceiptExtraction(BaseModel):
     amount: float = Field(gt=0)
     date: datetime.date
     category: str = Field(min_length=1)
-    items: list[str] = Field(min_length=1)
+    items: list[str] = Field(default_factory=list)
     payment_method: str = Field(min_length=1)
 
     @field_validator("date", mode="before")
