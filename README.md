@@ -5,9 +5,9 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/virag/banko-ai-assistant)](https://hub.docker.com/r/virag/banko-ai-assistant)
 [![Docker Image Size](https://img.shields.io/docker/image-size/virag/banko-ai-assistant/latest)](https://hub.docker.com/r/virag/banko-ai-assistant)
 
-# Banko AI Assistant - RAG and Agentic-AI Demo
+# Banko AI Assistant
 
-An AI-powered expense analysis application demonstrating Retrieval-Augmented Generation (RAG) and agentic-AI workflows with CockroachDB vector search and multiple AI provider support.
+Agentic banking AI on CockroachDB. A working demo of LangGraph multi-agent workflows, vector RAG, multi-provider LLM routing, and durable checkpointing — all backed by a single CockroachDB cluster.
 
 ![Banko AI Assistant](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant/main/banko_ai/static/banko-ai-assistant-watsonx.gif)
 
@@ -15,130 +15,67 @@ An AI-powered expense analysis application demonstrating Retrieval-Augmented Gen
 
 ![Banko AI Architecture](https://raw.githubusercontent.com/cockroachlabs-field/banko-ai-assistant/main/banko_ai/static/banko-ai-architecture.png)
 
-The application uses a five-layer architecture:
+Five layers, one database:
 
-### 1. Presentation Layer
+| Layer | What it does | Where |
+|-------|--------------|-------|
+| **Web** | Flask + SocketIO UI, REST API, real-time agent status | `banko_ai/web/` |
+| **Agents** | LangGraph pipeline (`Receipt → Fraud → Budget`) checkpointed by `CockroachDBSaver` for crash recovery and replay | `banko_ai/agents/` |
+| **AI providers** | One abstraction over watsonx, OpenAI, AWS Bedrock, Gemini — switchable at runtime, models discovered dynamically | `banko_ai/ai_providers/` |
+| **Vector search** | `CockroachDBVectorStore` with C-SPANN cosine indexes, 384-dim `all-MiniLM-L6-v2` embeddings (local, no API key) | `banko_ai/vector_search/` |
+| **Persistence** | CockroachDB stores SQL, vectors, and agent state in one cluster | `banko_ai/utils/` |
 
-- **Flask Routes**: API endpoints for search, RAG, receipt upload, data generation, and agent status
-- **Templates**: Responsive web UI with real-time chat
-- **WebSocket Events**: Real-time agent activity updates via Flask-SocketIO
-
-**Location**: `banko_ai/web/app.py`
-
-### 2. Agent Orchestration
-
-Multi-agent system with specialized agents:
-
-- **Receipt Agent**: OCR and data extraction from uploaded receipts (images and PDFs)
-- **Fraud Agent**: Duplicate detection, statistical anomaly analysis, and suspicious pattern recognition
-- **Budget Agent**: Spending categorization and budget impact analysis
-- **Orchestrator Agent**: Coordinates multi-agent workflows
-
-Receipt uploads trigger a LangGraph pipeline: `Receipt -> Fraud -> Budget -> Done`, checkpointed by `CockroachDBSaver` for crash recovery and replay.
-
-**Location**: `banko_ai/agents/`
-
-### 3. AI Provider Layer
-
-Abstraction layer with a standardized interface to multiple LLMs:
-
-- **IBM Watsonx** (GPT-OSS-120B, Llama 3/4, Granite, Mistral)
-- **OpenAI** (GPT-4o-mini, GPT-4o, GPT-4.1, GPT-5)
-- **AWS Bedrock** (Claude Sonnet 4, Claude 3.5 Haiku, Claude Opus 4 via inference profiles)
-- **Google Gemini** (Gemini 2.0 Flash, Gemini 1.5 Pro, Gemini 1.5 Flash)
-
-Models are **dynamically discovered** from each provider's API. Switch providers and models from the Settings page or via environment variables -- no restart required. Override with `WATSONX_MODELS`, `OPENAI_MODELS`, `AWS_MODELS`, or `GEMINI_MODELS` (comma-separated).
-
-**Location**: `banko_ai/ai_providers/`
-
-### 4. Vector Search Engine
-
-Semantic search using CockroachDB vector indexes:
-
-- **Embeddings**: `all-MiniLM-L6-v2` (384 dimensions) via sentence-transformers -- runs locally, no API key needed
-- **Cosine Similarity**: Industry-standard `<=>` operator with C-SPANN indexes
-- **[langchain-cockroachdb](https://github.com/cockroachdb/langchain-cockroachdb)**: `CockroachDBVectorStore` with automatic C-SPANN indexing
-- **Multi-Layer Caching**: Query cache, embedding cache, and vector search cache with configurable similarity thresholds
-
-**Location**: `banko_ai/vector_search/`
-
-### 5. Data Persistence
-
-CockroachDB as a unified store for three data types:
-
-- **SQL Data**: Structured financial data (expenses, accounts)
-- **Vector Data**: 384-dimensional embeddings for semantic search
-- **Agent State**: Memory, decisions, tasks, and workflow checkpoints
-
-**Key integrations via [langchain-cockroachdb](https://github.com/cockroachdb/langchain-cockroachdb)**:
+Core integrations via [`langchain-cockroachdb`](https://github.com/cockroachdb/langchain-cockroachdb):
 
 | Component | Purpose | Table |
 |-----------|---------|-------|
-| `CockroachDBEngine` | Shared async connection pool (psycopg3) | -- |
+| `CockroachDBEngine` | Shared async connection pool (psycopg3) | — |
 | `CockroachDBVectorStore` | Semantic search with C-SPANN cosine indexes | `expense_vectors` |
 | `CockroachDBChatMessageHistory` | Persistent chat per session/thread | `chat_message_store` |
 | `CockroachDBSaver` | LangGraph checkpointer for durable workflows | `checkpoint*` tables |
 
-**Location**: `banko_ai/utils/`
-
 ## Features
 
-- **RAG**: Retrieval-Augmented Generation with AI-powered financial insights
-- **Vector Search**: Semantic expense search using CockroachDB C-SPANN vector indexes
-- **Multi-Agent System**: Receipt processing, fraud detection, and budget analysis agents
-- **LangGraph Workflows**: Multi-agent receipt pipeline with crash-resistant checkpointing
-- **Duplicate Detection**: Fraud agent flags duplicate receipts (same merchant + amount)
-- **Persistent Chat History**: Conversations stored in CockroachDB, survive restarts
-- **Multi-AI Provider**: OpenAI, AWS Bedrock, IBM Watsonx, Google Gemini -- switch without restart
-- **Dynamic Model Switching**: Change models from the Settings page
-- **Data Generator**: Built-in UI to generate and seed sample expense data with embeddings
-- **Multi-Layer Caching**: Query, embedding, and result caching with configurable thresholds
-- **Agent Dashboard**: Real-time view of agent status, regions, and activity
-- **Security**: Auto-generated Flask secret keys, no hardcoded credentials
-- **PyPI Package**: `pip install banko-ai-assistant`
-- **Docker**: `docker-compose up -d`
+- **Multi-agent receipt pipeline** — Receipt OCR → fraud screen → budget impact, with durable checkpoints
+- **Multi-provider LLM** — watsonx (default), OpenAI, AWS Bedrock, Google Gemini; swap from Settings or env without restart
+- **Dynamic model discovery** — model lists come from the provider API, not a hardcoded enum
+- **Vector RAG** — C-SPANN cosine indexes over expenses, embeddings generated locally
+- **Persistent chat** — conversations survive restarts via `CockroachDBChatMessageHistory`
+- **Three-layer cache** — query / embedding / vector-search caches with semantic similarity thresholds
+- **Agent dashboard** — real-time view of agent status and activity (no canned demo data)
+- **Packaged** — `pip install banko-ai-assistant` or `docker-compose up -d`
 
 ## Quick Start
 
 ### Prerequisites
 
-- **Python 3.10+**
-- **CockroachDB v25.4.0+** (with vector index support)
-- **AI Provider API Key** (at least one: OpenAI, AWS, IBM Watsonx, or Google Gemini)
+- Python 3.10+ (3.12 recommended)
+- CockroachDB v25.4.0+ (vector indexes are GA)
+- At least one AI provider API key (watsonx, OpenAI, AWS, or Gemini)
 
-### Installation
+### Install
 
-**PyPI**
 ```bash
+# PyPI
 pip install banko-ai-assistant
-```
 
-**Docker**
-```bash
+# Or with uv (faster)
+uv pip install banko-ai-assistant
+
+# Or Docker
 docker-compose up -d
-```
 
-**Development**
-```bash
+# Or develop locally
 git clone https://github.com/cockroachlabs-field/banko-ai-assistant
 cd banko-ai-assistant
-pip install -e ".[dev]"
-```
-
-**With uv (faster)**
-```bash
-uv pip install banko-ai-assistant
-# Or for development:
 uv pip install -e ".[dev]"
 ```
 
-### CockroachDB Setup
+### Start CockroachDB
 
 ```bash
-# Install
-brew install cockroachdb/tap/cockroach  # macOS
+brew install cockroachdb/tap/cockroach   # macOS
 
-# Start single node
 cockroach start-single-node \
   --insecure \
   --store=./cockroach-data \
@@ -146,147 +83,94 @@ cockroach start-single-node \
   --http-addr=localhost:8080 \
   --background
 
-# Verify
 cockroach sql --insecure --execute "SELECT version();"
 ```
 
 ### Run
 
 ```bash
-# Set provider credentials (example: Watsonx)
-export AI_SERVICE="watsonx"
-export WATSONX_API_KEY="your_api_key"
-export WATSONX_PROJECT_ID="your_project_id"
+export AI_SERVICE="watsonx"                    # or openai, aws, gemini
+export WATSONX_API_KEY="..."
+export WATSONX_PROJECT_ID="..."
 export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
 
-# Start (generates 5000 sample records on first run)
-banko-ai run
+banko-ai run                          # default: port 5000, generates 5000 sample records
+banko-ai run --port 5001              # custom port (macOS AirPlay grabs 5000)
+banko-ai run --generate-data 10000    # more sample data
+banko-ai run --no-data                # skip data generation
+banko-ai run --debug                  # debug mode
 ```
 
-Open http://localhost:5000
+Open http://localhost:5000.
+
+On first start the app connects to CockroachDB, creates its schema (expense, agent, cache, and checkpoint tables), generates sample data with embeddings, initializes the selected AI provider, and starts the Flask server.
 
 ## Configuration
 
-### Core Settings
+### Core
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | CockroachDB connection string | `cockroachdb://root@localhost:26257/defaultdb?sslmode=disable` |
-| `AI_SERVICE` | AI provider | `watsonx` |
-| `SECRET_KEY` | Flask session key (auto-generated if not set) | Random |
+| `AI_SERVICE` | AI provider (`watsonx`, `openai`, `aws`, `gemini`) | `watsonx` |
+| `SECRET_KEY` | Flask session key (auto-generated if not set) | random |
 
-**Note**: `postgresql://` and `postgres://` URLs are automatically normalized to `cockroachdb://` for proper dialect handling.
+`postgresql://` and `postgres://` URLs are auto-normalized to `cockroachdb://`.
 
-### AI Provider Configuration
+### AI providers
 
-#### IBM Watsonx
 ```bash
-export WATSONX_API_KEY="your_api_key"
-export WATSONX_PROJECT_ID="your_project_id"
-export WATSONX_MODEL_ID="openai/gpt-oss-120b"  # Default
-```
+# IBM watsonx
+export WATSONX_API_KEY="..."
+export WATSONX_PROJECT_ID="..."
+export WATSONX_MODEL_ID="openai/gpt-oss-120b"          # default
+# Optional: WATSONX_API_URL, WATSONX_TOKEN_URL, WATSONX_TIMEOUT
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `WATSONX_API_URL` | API endpoint URL | US South region |
-| `WATSONX_TOKEN_URL` | IAM endpoint | IBM Cloud IAM |
-| `WATSONX_TIMEOUT` | Timeout (sec) | `30` |
+# OpenAI
+export OPENAI_API_KEY="..."
+export OPENAI_MODEL="gpt-4o-mini"                       # default
 
-#### OpenAI
-```bash
-export OPENAI_API_KEY="your_key"
-export OPENAI_MODEL="gpt-4o-mini"  # Default
-```
-
-#### AWS Bedrock
-```bash
-export AWS_ACCESS_KEY_ID="your_access_key"
-export AWS_SECRET_ACCESS_KEY="your_secret_key"
+# AWS Bedrock (note: AI_SERVICE=aws, not bedrock)
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
 export AWS_REGION="us-east-1"
 export AWS_MODEL_ID="us.anthropic.claude-3-5-haiku-20241022-v1:0"
-```
 
-#### Google Gemini
-```bash
+# Google Gemini (Vertex AI)
 export GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account.json"
-export GOOGLE_PROJECT_ID="your-project-id"
-export GOOGLE_MODEL="gemini-2.0-flash-001"  # Default
+export GOOGLE_PROJECT_ID="..."
+export GOOGLE_MODEL="gemini-2.0-flash-001"              # default
 export GOOGLE_LOCATION="us-central1"
+# Or the Generative AI API:
+export GOOGLE_API_KEY="..."
 ```
 
-Or use the Generative AI API:
+Override model lists with `WATSONX_MODELS`, `OPENAI_MODELS`, `AWS_MODELS`, `GEMINI_MODELS` (comma-separated).
+
+### Cache, fraud, and pool
+
 ```bash
-export GOOGLE_API_KEY="your-gemini-api-key"
+# Semantic cache
+export CACHE_SIMILARITY_THRESHOLD="0.75"   # 0.0-1.0
+export CACHE_TTL_HOURS="24"
+export CACHE_STRICT_MODE="true"            # require data match for hits
+
+# Fraud detection
+export FRAUD_DUPLICATE_WINDOW_DAYS="60"
+
+# DB connection pool
+export DB_POOL_SIZE="100"
+export DB_MAX_OVERFLOW="100"
+export DB_POOL_TIMEOUT="30"
+export DB_POOL_RECYCLE="3600"
+export DB_POOL_PRE_PING="true"
 ```
 
-### Response Caching
-
-```bash
-export CACHE_SIMILARITY_THRESHOLD="0.75"  # Default (0.0-1.0)
-export CACHE_TTL_HOURS="24"               # Default
-export CACHE_STRICT_MODE="true"           # Default (requires data match)
-```
-
-| Preset | Threshold | Strict Mode | Hit Rate |
-|--------|-----------|-------------|----------|
+| Cache preset | Threshold | Strict | Typical hit rate |
+|--------------|-----------|--------|------------------|
 | Demo | 0.75 | false | 80-90% |
 | Balanced (recommended) | 0.75 | true | 60-70% |
 | Conservative | 0.85 | true | 50-60% |
-
-### Fraud Detection
-
-```bash
-export FRAUD_DUPLICATE_WINDOW_DAYS="60"   # Days to look back for duplicates (default: 60)
-```
-
-### Database Connection Pool
-
-```bash
-export DB_POOL_SIZE="100"          # Base pool size (default)
-export DB_MAX_OVERFLOW="100"       # Max overflow connections
-export DB_POOL_TIMEOUT="30"        # Connection timeout (sec)
-export DB_POOL_RECYCLE="3600"      # Recycle after (sec)
-export DB_POOL_PRE_PING="true"     # Test before use
-```
-
-### Regional Configuration
-
-```bash
-# Watsonx EU
-export WATSONX_API_URL="https://eu-de.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29"
-
-# AWS Europe
-export AWS_REGION="eu-west-1"
-
-# Google Europe
-export GOOGLE_LOCATION="europe-west1"
-```
-
-## Running the Application
-
-```bash
-# Start with default settings (5000 sample records)
-banko-ai run
-
-# Custom port
-banko-ai run --port 5001
-
-# Custom data amount
-banko-ai run --generate-data 10000
-
-# Without generating data
-banko-ai run --no-data
-
-# Debug mode
-banko-ai run --debug
-```
-
-### What Happens on Startup
-
-1. Connects to CockroachDB and creates tables (expenses, agent tables, cache tables)
-2. Generates sample expense records with embeddings (if needed)
-3. Initializes selected AI provider
-4. Starts Flask web server
 
 ## API Endpoints
 
@@ -305,12 +189,10 @@ banko-ai run --debug
 | `/api/generate-data` | POST | Generate sample expense data |
 | `/data-generator` | GET | Data generator UI |
 | `/cache-stats` | GET | Cache performance statistics |
-| `/diagnostics/watsonx` | GET | Watsonx connection diagnostics |
-
-### Examples
+| `/diagnostics/watsonx` | GET | watsonx connection diagnostics |
 
 ```bash
-# Health check
+# Health
 curl http://localhost:5000/api/health
 
 # Vector search
@@ -318,152 +200,99 @@ curl -X POST http://localhost:5000/api/search \
   -H "Content-Type: application/json" \
   -d '{"query": "coffee shop expenses", "limit": 5}'
 
-# RAG query
+# RAG
 curl -X POST http://localhost:5000/api/rag \
   -H "Content-Type: application/json" \
   -d '{"query": "What are my biggest expenses this month?"}'
 
-# Upload receipt
-curl -X POST http://localhost:5000/api/upload-receipt \
-  -F "receipt=@receipt.png"
-
-# Agent status
-curl http://localhost:5000/api/agents/status
+# Receipt upload
+curl -X POST http://localhost:5000/api/upload-receipt -F "receipt=@receipt.png"
 ```
 
 ## Database Schema
 
-### Core Tables
+| Group | Tables |
+|-------|--------|
+| Core | `expenses` (with 384-dim embedding), `expense_vectors` (LangChain VectorStore), `chat_message_store`, `checkpoint*` (LangGraph state) |
+| Agents | `agent_state`, `agent_memory`, `agent_tasks`, `agent_decisions`, `documents` |
+| Cache | `query_cache`, `embedding_cache`, `vector_search_cache`, `cache_stats` |
 
-| Table | Purpose |
-|-------|---------|
-| `expenses` | Expense records with 384-dim vector embeddings |
-| `expense_vectors` | LangChain VectorStore (C-SPANN cosine index) |
-| `chat_message_store` | Persistent chat history per session |
-| `checkpoint*` | LangGraph workflow state (CockroachDBSaver) |
-
-### Agent Tables
-
-| Table | Purpose |
-|-------|---------|
-| `agent_state` | Agent registration and heartbeats |
-| `agent_memory` | Agent memory with vector embeddings |
-| `agent_tasks` | Inter-agent task queue |
-| `agent_decisions` | Fraud/budget decisions with feedback loop |
-| `documents` | Uploaded receipt/document metadata |
-
-### Cache Tables
-
-| Table | Purpose |
-|-------|---------|
-| `query_cache` | Cached RAG responses with semantic similarity |
-| `embedding_cache` | Cached vector embeddings |
-| `vector_search_cache` | Cached search results |
-| `cache_stats` | Cache hit/miss statistics |
-
-### Vector Indexes
+Vector indexes use C-SPANN cosine ops:
 
 ```sql
--- C-SPANN cosine indexes for semantic search
 CREATE INDEX idx_expenses_embedding ON expenses USING cspann (embedding vector_cosine_ops);
 CREATE INDEX idx_cspann_expense_vectors_embedding ON expense_vectors USING cspann (embedding vector_cosine_ops);
 ```
 
-## CLI Commands
+## CLI
 
 ```bash
-banko-ai run [OPTIONS]           # Run application
-banko-ai generate-data --count N # Generate sample data
-banko-ai clear-data              # Clear all data
-banko-ai status                  # Check status
-banko-ai search "query"          # Search expenses
-banko-ai help                    # Help
+banko-ai run [OPTIONS]            # run the app
+banko-ai generate-data --count N  # generate sample data
+banko-ai clear-data               # clear all data
+banko-ai status                   # check status
+banko-ai search "query"           # vector search from the shell
+banko-ai help
 ```
 
 ## Project Structure
 
 ```
 banko_ai/
-├── agents/
-│   ├── base_agent.py            # Base agent with memory, tasks, decisions
-│   ├── receipt_agent.py         # OCR and data extraction
-│   ├── fraud_agent.py           # Duplicate and anomaly detection
-│   ├── budget_agent.py          # Budget impact analysis
-│   ├── orchestrator_agent.py    # Multi-agent coordination
-│   ├── receipt_workflow.py      # LangGraph pipeline + CockroachDBSaver
-│   ├── llm_factory.py           # Provider-agnostic LLM creation
-│   └── tools/                   # LangChain tools (search, analysis, document)
-├── ai_providers/
-│   ├── base.py                  # Provider interface
-│   ├── factory.py               # Provider factory
-│   ├── openai_provider.py
-│   ├── aws_provider.py
-│   ├── gemini_provider.py
-│   └── watsonx_provider.py
-├── config/
-│   └── settings.py              # Centralized env-based configuration
-├── utils/
-│   ├── db_retry.py              # DB retry logic, URL normalization, connection pooling
-│   ├── cache_manager.py         # Multi-layer semantic caching
-│   ├── database.py              # Schema creation
-│   ├── agent_schema.py          # Agent table schema
-│   ├── crdb_engine.py           # Singleton CockroachDBEngine
-│   └── crdb_chat_history.py     # CockroachDBChatMessageHistory wrapper
-├── vector_search/
-│   ├── search.py                # Vector search engine
-│   ├── enrichment.py            # Data enrichment for embeddings
-│   ├── generator.py             # Sample data generator with batch embeddings
-│   └── crdb_vectorstore.py      # CockroachDBVectorStore wrapper
-├── web/
-│   ├── app.py                   # Flask app with all routes
-│   ├── agent_dashboard.py       # Agent status API
-│   └── auth.py                  # Authentication
-├── cli.py                       # CLI entry point
-└── __main__.py                  # Module entry point
+├── agents/          # LangGraph specialist agents + workflows (CockroachDBSaver)
+├── ai_providers/    # Provider abstraction — all LLM calls go through here
+├── config/          # Env-driven settings
+├── pipeline/        # CDC config (webhook + Kafka modes)
+├── utils/           # DB engine, cache, schema, retry/pooling, chat history
+├── vector_search/   # Search engine, enrichment, data generator, VectorStore wrapper
+├── web/             # Flask app, agent dashboard, auth
+└── cli.py
 ```
 
 ## Testing
 
 ```bash
-# Run all tests
-python -m pytest tests/ -v
-
-# Individual test suites
-python tests/test_vector_index.py        # Vector search verification
-python tests/test_cache_after_cleanup.py # Cache system tests
-python tests/test_all_providers.py       # Multi-provider tests
-python tests/test_env_config.py          # Environment config tests
-
-# Lint
-ruff check banko_ai/
+python -m pytest tests/ -v               # all tests
+python tests/test_vector_index.py        # vector search verification
+python tests/test_cache_after_cleanup.py # cache system
+python tests/test_all_providers.py       # multi-provider
+python tests/test_env_config.py          # env config
+ruff check banko_ai/                     # lint
 ```
+
+Integration tests need a populated CockroachDB; they're skipped automatically in CI when the DB isn't available.
+
+## Deployment Modes
+
+| Mode | LLM | Embeddings | Data plane |
+|------|-----|------------|-----------|
+| **Cloud** | watsonx / OpenAI / Bedrock / Gemini | local | CockroachDB |
+| **Hybrid** | cloud LLM | local | on-prem CockroachDB + CDC pipeline |
+| **Airgap** *(roadmap)* | Ollama | local | on-prem everything |
+
+## Roadmap
+
+Currently in design (`docs/superpowers/specs/`):
+
+- **Proactive Spending Coach** — streaming CDC signals (budget thresholds, anomalies, recurring-charge drift) trigger an LLM-powered nudge through the agent pipeline, with optional conversational follow-up.
+- **OpenTelemetry observability** — spans across web → agent → LLM → DB, viewable in Jaeger.
+- **Multi-agent supervisor** — LLM-routed dispatch across Receipt / Fraud / Budget / Coach.
+- **MCP server** — expose agent capabilities over the Model Context Protocol.
+- **Ollama airgap mode** — full functionality with no outbound network calls (granite3.3 default).
+- **Eval harness** — LLM-as-judge fixtures gated on pass-rate ≥ 0.85.
+
+The companion streaming pipeline (Debezium → Kafka → Iceberg on watsonx.data) lives in [`cockroachlabs-field/cockroachdb-watsonx-data-pipeline`](https://github.com/cockroachlabs-field/cockroachdb-watsonx-data-pipeline).
 
 ## Troubleshooting
 
-### CockroachDB Version
-Must be v25.4.0+ for vector index support:
-```bash
-cockroach version
-```
+**CockroachDB version** — must be v25.4.0+ for vector indexes. Check with `cockroach version`.
 
-### Database Connection Error
-```bash
-cockroach start-single-node --insecure --store=./cockroach-data \
-  --listen-addr=localhost:26257 --http-addr=localhost:8080 --background
-cockroach sql --insecure --execute "SHOW TABLES;"
-```
+**DB connection error** — verify the single-node command above is running, then `cockroach sql --insecure --execute "SHOW TABLES;"`.
 
-### AI Provider Issues
-- Verify API keys are correct and exported
-- Check `/api/health` for connection status
-- Use `/diagnostics/watsonx` for Watsonx-specific debugging
+**AI provider issues** — confirm keys are exported, then hit `/api/health`. For watsonx specifically, `/diagnostics/watsonx` has connection details.
 
-### Port 5000 in Use (macOS)
-macOS AirPlay Receiver uses port 5000. Either disable it in System Settings > AirDrop & Handoff, or use a different port:
-```bash
-banko-ai run --port 5001
-```
+**Port 5000 in use (macOS)** — AirPlay Receiver claims port 5000. Either disable it in System Settings → AirDrop & Handoff, or run `banko-ai run --port 5001`.
 
 ## License
 
-MIT License
+MIT
