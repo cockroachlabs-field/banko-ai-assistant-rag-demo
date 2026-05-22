@@ -4,6 +4,10 @@ Main Flask application for Banko AI Assistant.
 This module creates and configures the Flask application with all routes and functionality.
 """
 
+import hashlib
+import hmac
+import json
+import logging as _coach_log
 import os
 import uuid
 from datetime import datetime
@@ -13,6 +17,8 @@ from flask_socketio import SocketIO
 from sqlalchemy import text
 
 from ..ai_providers.factory import AIProviderFactory
+from ..coach.handler import SignalHandler
+from ..coach.signals import SignalParseError, parse_changefeed_envelope
 from ..config.settings import get_config
 from ..utils.cache_manager import BankoCacheManager
 from ..utils.db_retry import create_resilient_engine
@@ -122,6 +128,11 @@ def auto_setup_data_if_needed(database_url: str):
     Automatically set up data if the database is empty or has very few records.
     This integrates seamlessly into the app startup - matches original app.py.
     """
+    # Skip the heavy data-gen path under pytest — fixtures build create_app()
+    # on every test and a 5000-row insert + embeddings on each call makes the
+    # suite unusable. Tests that need data seed it explicitly.
+    if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("BANKO_SKIP_AUTOSETUP"):
+        return True
     try:
         db_connected, db_message, table_exists, record_count = check_database_connection(database_url)
         
@@ -1320,7 +1331,143 @@ def create_app() -> Flask:
     # Use threading mode for Flask dev server, eventlet mode for Gunicorn production
     socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
     app.socketio = socketio
-    
+
+    # --- Coach v1 webhook receiver ---------------------------------------
+    coach_log = _coach_log.getLogger("banko.coach.webhook")
+
+    def _verify_signature(body: bytes, header_sig: str | None) -> bool:
+        secret = os.getenv("CDC_WEBHOOK_HMAC_SECRET", "")
+        if not secret:
+            coach_log.warning("CDC_WEBHOOK_HMAC_SECRET not set; rejecting all "
+                              "incoming webhooks")
+            return False
+        if not header_sig:
+            return False
+        expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, header_sig)
+
+    def _socketio_emitter(event: str, payload: dict, room: str | None = None):
+        if room:
+            app.socketio.emit(event, payload, to=room)
+        else:
+            app.socketio.emit(event, payload)
+
+    def _get_coach_handler() -> SignalHandler:
+        handler = getattr(app, "_coach_handler", None)
+        if handler is not None:
+            return handler
+        from ..coach.agent import CoachAgent, default_llm_invoker
+        cfg = get_config()
+        db_url = os.getenv("DATABASE_URL")
+        agent = CoachAgent(
+            database_url=db_url,
+            llm_invoker=default_llm_invoker,
+            provider_name=cfg.ai_service,
+            max_steps=cfg.coach_agent_max_steps,
+        )
+        handler = SignalHandler(
+            coach=agent,
+            emitter=type("E", (), {"emit": staticmethod(_socketio_emitter)})(),
+            database_url=db_url,
+            socketio_room_prefix=cfg.coach_socketio_room_prefix,
+        )
+        app._coach_handler = handler
+        return handler
+
+    def _claim_signal(sig) -> bool:
+        """Atomically claim a signal for processing by inserting its row
+        into spending_signals. Returns True if this call claimed it
+        (i.e. this is the first time we're seeing this idempotency_key),
+        False if a previous call already claimed it (replay).
+
+        This makes the webhook safely re-postable: the pipeline can fire
+        the same envelope twice without producing duplicate nudges."""
+        from sqlalchemy import create_engine
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.pool import NullPool
+        eng = create_engine(os.getenv("DATABASE_URL"), poolclass=NullPool)
+        try:
+            try:
+                with eng.begin() as conn:
+                    row = conn.execute(text("""
+                        INSERT INTO spending_signals
+                          (signal_id, user_id, signal_type, severity, payload,
+                           idempotency_key)
+                        VALUES (:sid, :uid, :stype, :sev, CAST(:pl AS JSONB), :ik)
+                        ON CONFLICT (idempotency_key) DO NOTHING
+                        RETURNING signal_id
+                    """), {
+                        "sid": sig.signal_id,
+                        "uid": sig.user_id,
+                        "stype": sig.signal_type.value,
+                        "sev": sig.severity,
+                        "pl": json.dumps(sig.payload),
+                        "ik": sig.idempotency_key,
+                    }).fetchone()
+                return row is not None
+            except IntegrityError:
+                # PK collision on signal_id (or any other unique constraint) —
+                # the signal already exists, so this is a replay.
+                return False
+        finally:
+            eng.dispose()
+
+    def _process_in_background(handler, sig):
+        try:
+            handler.handle(sig)
+        except Exception:
+            coach_log.exception("background handler failed",
+                                extra={"signal_id": sig.signal_id})
+
+    @app.route("/api/cdc/signals", methods=["POST"])
+    def cdc_signals_webhook():
+        body = request.get_data() or b""
+        sig_header = request.headers.get("X-Banko-Signature")
+        if not _verify_signature(body, sig_header):
+            return jsonify({"error": "invalid signature"}), 401
+
+        try:
+            envelope = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            return jsonify({"error": "malformed payload", "detail": str(e)}), 400
+
+        try:
+            signals = parse_changefeed_envelope(envelope)
+        except SignalParseError as e:
+            return jsonify({"error": "invalid signal", "detail": str(e)}), 400
+
+        if not signals:
+            return jsonify({"status": "no_op",
+                            "reason": "envelope contained no inserts"}), 200
+
+        handler = _get_coach_handler()
+        queued_ids = []
+        replayed_ids = []
+        for sig in signals:
+            try:
+                claimed = _claim_signal(sig)
+            except Exception:
+                coach_log.exception("signal claim failed; queuing anyway",
+                                    extra={"signal_id": sig.signal_id})
+                claimed = True
+            if not claimed:
+                replayed_ids.append(sig.signal_id)
+                continue
+            app.socketio.start_background_task(
+                _process_in_background, handler, sig)
+            queued_ids.append(sig.signal_id)
+
+        if not queued_ids and replayed_ids:
+            payload = {"status": "replayed", "replayed": True,
+                       "replayed_signal_ids": replayed_ids}
+            if len(replayed_ids) == 1:
+                payload["signal_id"] = replayed_ids[0]
+            return jsonify(payload), 200
+
+        return jsonify({"status": "queued",
+                        "queued_signal_ids": queued_ids,
+                        "replayed_signal_ids": replayed_ids}), 202
+
     # Data Generator Routes
     generation_state = {'running': False, 'should_stop': False}
     
