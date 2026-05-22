@@ -124,11 +124,13 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 
 ### Open bugs flagged but not yet fixed
 
-- One unsafe SQL identifier interpolation at `banko_ai/utils/agent_schema.py:266` (`DROP TABLE IF EXISTS {table} CASCADE` — table comes from a hardcoded list, so not currently exploitable, but should be parameterized with a whitelist).
-- Multi-worker `SECRET_KEY` drift: when `SECRET_KEY` env is unset and gunicorn forks multiple workers, each worker calls `secrets.token_hex(32)` independently, so Flask sessions break across workers. Single-process dev is fine. Fix: warn-and-fail at startup in prod mode if `SECRET_KEY` is unset.
+- **Hardcoded model lists** in `banko_ai/config/settings.py:155-209` for every provider. IBM watsonx in particular drops models from environments without warning (e.g., `ibm/granite-3-8b-instruct` disappeared 2026-05-21), so the UI dropdown offers models that fail with `WMLClientError: not supported for this environment`. Replace with dynamic discovery per the provider abstraction rule (see `memory/project_provider_abstraction_invariant.md`). Plan: `docs/superpowers/plans/2026-05-21-followup-receipt-validation-and-dynamic-models.md`.
+- **Receipt OCR output is INSERTed unvalidated** in `banko_ai/web/app.py` around line 715. If the LLM returns prompt-template placeholders (`"date": "YYYY-MM-DD"`, `"amount": 0.0`, `"merchant": "store name"` — happens with code-tuned models like `ibm/granite-8b-code-instruct`), psycopg2 throws `InvalidDatetimeFormat` and the request 500s. Add a Pydantic `ReceiptExtraction` model with `date: datetime.date`, `amount > 0`, and a placeholder denylist. Same plan file.
 - `agent_memory.access_count` never incremented on read (defer to memory-system v2).
 - `SentenceTransformer` re-instantiated per call in `base_agent.py` (perf bug; fixing risks regression — defer).
 - `documents` table schema drift between `database.py` and `agent_schema.py` (both create it; reconcile when next touching either).
+- `.gitignore:45` has unanchored `test_*.py` (intended for local utility scripts), which blocks new `tests/test_*.py` from being tracked — every new pytest module needs `git add -f`. Change to `/test_*.py` (root-anchored) or remove.
+- `tests/test_env_config.py` is a print-script with module-level `sys.exit(0)`, not a pytest module — crashes collection. CI already ignores it. Rename to `scripts/check_env_config.py` or delete.
 
 ## Deployment modes (all three must keep working)
 
