@@ -59,6 +59,10 @@ class WatsonxProvider(AIProvider):
         self.timeout = int(config.get('timeout', os.getenv('WATSONX_TIMEOUT', '30')))
         self.embedding_model_name = config.get('embedding_model') or os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
         
+        # Discovery cache: get_available_models() can call IBM on every UI page
+        # load; cache for the life of the process. App restart picks up changes.
+        self._available_models_cache: list[str] | None = None
+
         # Make API key and project ID optional for demo purposes
         if not self.api_key:
             print("⚠️ WATSONX_API_KEY not found - running in demo mode")
@@ -241,11 +245,23 @@ class WatsonxProvider(AIProvider):
             raise AIConnectionError(f"Search failed: {str(e)}")
     
     def get_available_models(self) -> list[str]:
-        """Get list of available Watsonx models. Override with WATSONX_MODELS env var or auto-discover from API."""
+        """Get list of available Watsonx models.
+
+        Order of preference:
+        1. `WATSONX_MODELS` env var (comma-separated) — for airgap/pinned
+           environments; read fresh each call so env changes take effect.
+        2. Cached result from a prior IBM `foundation_model_specs` discovery.
+        3. A fresh discovery call, cached on success.
+        4. A static fallback stub of known-good chat models, so the dropdown
+           still has multiple recoverable options when discovery fails.
+        """
         extra = os.getenv("WATSONX_MODELS", "")
         if extra:
             return [m.strip() for m in extra.split(",") if m.strip()]
-        
+
+        if self._available_models_cache is not None:
+            return self._available_models_cache
+
         try:
             access_token = self._get_access_token()
             api_url = os.getenv("WATSONX_API_URL", "https://us-south.ml.cloud.ibm.com")
@@ -253,7 +269,7 @@ class WatsonxProvider(AIProvider):
                 from urllib.parse import urlparse
                 parsed = urlparse(api_url)
                 api_url = f"{parsed.scheme}://{parsed.netloc}"
-            
+
             resp = requests.get(
                 f"{api_url}/ml/v1/foundation_model_specs?version=2023-05-29&limit=200",
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -266,11 +282,22 @@ class WatsonxProvider(AIProvider):
                     if 'generation' in tasks or 'chat' in tasks:
                         models.append(m['model_id'])
                 if models:
-                    return sorted(models)
+                    self._available_models_cache = sorted(models)
+                    return self._available_models_cache
         except Exception as e:
             print(f"⚠️  Could not list Watsonx models: {e}")
-        
-        return ['openai/gpt-oss-120b']
+
+        # Fallback: a small set of known-good instruction-tuned models. Code-
+        # tuned models are deliberately excluded — they echo prompt templates
+        # back on JSON extraction tasks (caught by ReceiptExtraction validation
+        # but bad UX). Not cached so transient IBM outages let discovery
+        # recover on the next call.
+        return [
+            "meta-llama/llama-3-3-70b-instruct",
+            "mistralai/mistral-large",
+            "ibm/granite-3-8b-instruct",
+            "openai/gpt-oss-120b",
+        ]
     
     def set_model(self, model_id: str) -> bool:
         """Set the current model."""

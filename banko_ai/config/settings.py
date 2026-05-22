@@ -174,40 +174,13 @@ class Config:
         }
         return config
     
-    def get_available_models(self) -> dict[str, list[str]]:
-        """Get available models for each AI provider."""
-        return {
-            "openai": [
-                "gpt-3.5-turbo",
-                "gpt-3.5-turbo-16k", 
-                "gpt-4",
-                "gpt-4-turbo",
-                "gpt-4o",
-                "gpt-4o-mini"
-            ],
-            "aws": [
-                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-                "us.anthropic.claude-3-5-haiku-20241022-v1:0",
-                "us.anthropic.claude-3-opus-20240229-v1:0",
-                "us.anthropic.claude-3-sonnet-20240229-v1:0",
-                "us.anthropic.claude-3-haiku-20240307-v1:0"
-            ],
-            "watsonx": [
-                "openai/gpt-oss-120b",
-                "ibm/granite-13b-chat-v2",
-                "ibm/granite-13b-instruct-v2",
-                "ibm/granite-8b-chat-v2",
-                "ibm/granite-8b-instruct-v2",
-                "meta-llama/llama-2-70b-chat",
-                "meta-llama/llama-2-13b-chat"
-            ],
-            "gemini": [
-                "gemini-1.5-pro",
-                "gemini-1.5-flash",
-                "gemini-1.0-pro"
-            ]
-        }
-    
+    # NOTE: The hardcoded `get_available_models()` dict that used to live here
+    # was removed in May 2026. Source of truth is `ai_provider.get_available_models()`
+    # on each concrete provider — they discover from the live SDK/API and fall
+    # back to a known-good stub. The Flask route at `/api/models` already reads
+    # from the provider; nothing in-tree consumed the Config version.
+
+
     def validate(self) -> None:
         """Validate configuration and raise errors for missing required values."""
         if not self.database_url:
