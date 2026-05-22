@@ -88,14 +88,14 @@ class DatabaseMigration:
             with self.engine.connect() as conn:
                 # Check if created_at column exists
                 result = conn.execute(text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
+                    SELECT column_name
+                    FROM information_schema.columns
                     WHERE table_name = 'expenses' AND column_name = 'created_at'
                 """))
-                
+
                 if not result.fetchone():
                     conn.execute(text("""
-                        ALTER TABLE expenses 
+                        ALTER TABLE expenses
                         ADD COLUMN created_at TIMESTAMP DEFAULT now()
                     """))
                     print("Added created_at column to expenses table")
@@ -104,22 +104,67 @@ class DatabaseMigration:
                 else:
                     print("created_at column already exists")
                     return True
-                    
+
         except Exception as e:
             print(f"Failed to add created_at column: {e}")
             return False
-    
+
+    def migrate_to_coach_v1(self) -> bool:
+        """Create spending_signals and coach_nudges tables for the Coach v1
+        feature. Both tables use row-level TTL matching the LangGraph
+        checkpoint pattern."""
+        try:
+            from sqlalchemy import text
+            with self.engine.connect() as conn:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS spending_signals (
+                      signal_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      user_id         UUID NOT NULL,
+                      signal_type     STRING NOT NULL,
+                      severity        STRING NOT NULL,
+                      payload         JSONB NOT NULL,
+                      produced_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+                      consumed_at     TIMESTAMPTZ,
+                      idempotency_key STRING NOT NULL UNIQUE,
+                      INDEX (user_id, produced_at DESC)
+                    ) WITH (ttl_expire_after = '30 days')
+                """))
+                print("Created spending_signals table")
+
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS coach_nudges (
+                      nudge_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      signal_id      UUID REFERENCES spending_signals(signal_id),
+                      user_id        UUID NOT NULL,
+                      message        STRING NOT NULL,
+                      tool_trace     JSONB,
+                      provider_used  STRING,
+                      trace_id       STRING,
+                      created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+                      INDEX (user_id, created_at DESC)
+                    ) WITH (ttl_expire_after = '90 days')
+                """))
+                print("Created coach_nudges table")
+
+                conn.commit()
+                return True
+
+        except Exception as e:
+            print(f"Coach v1 migration failed: {e}")
+            return False
+
     def run_all_migrations(self) -> bool:
         """Run all pending migrations."""
         print("Running database migrations...")
-        
+
         success = True
         success &= self.add_created_at_column()
         success &= self.migrate_to_user_specific_indexing()
-        
+        success &= self.migrate_to_coach_v1()
+
         if success:
             print("All migrations completed successfully")
         else:
             print("Some migrations failed")
-        
+
         return success
