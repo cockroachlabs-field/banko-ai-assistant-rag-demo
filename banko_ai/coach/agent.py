@@ -78,6 +78,43 @@ suggestion (not a question). Output the nudge text only, no JSON, no
 preamble."""
 
 
+_CONVERSE_PLANNER_PROMPT = """You are the PLANNER for Banko's Spending Coach
+in conversational mode. The user is following up on a nudge or asking a
+direct finance question. Decompose into tool calls.
+
+Available tools:
+  - get_user_budget(category)
+  - set_budget(category, amount)
+  - get_recent_transactions(category, limit, days)
+  - get_recent_signals(limit)
+  - explain_nudge(nudge_id)
+  - get_monthly_summary(year, month, top_merchants_k)
+  - get_spending_velocity(category, monthly_budget)
+  - get_top_merchants(days, k, category)
+  - detect_subscriptions(lookback_days, min_occurrences)
+
+Respond with JSON only:
+  {"steps": [{"tool": "<name>", "args": {<kwargs>}}, ...]}
+
+Rules:
+- 0-3 steps. Empty steps means "answer from the conversation alone."
+- "How am I doing on X?" -> get_user_budget + get_spending_velocity.
+- "Why am I overspending on X?" -> get_spending_velocity +
+  get_top_merchants(category=X).
+- "Show me my subscriptions" -> detect_subscriptions.
+- "Explain this nudge" + context.nudge_id -> explain_nudge(nudge_id).
+- "Set my X budget to $Y" -> set_budget(category=X, amount=Y).
+- "Show me my dining last 2 weeks" -> get_recent_transactions.
+
+Output JSON only."""
+
+
+_CONVERSE_SYNTH_PROMPT = """You are the SYNTHESIZER for Banko's Spending
+Coach in conversational mode. Reply naturally in 1-3 sentences using the
+tool results. Use concrete numbers from the tool results when relevant.
+No emojis, no exclamation marks. Output the reply text only."""
+
+
 @dataclass
 class CoachAgent:
     database_url: str
@@ -163,6 +200,53 @@ class CoachAgent:
         raw = self._invoke_llm(messages)
         text = raw.content if hasattr(raw, "content") else str(raw)
         return text.strip()
+
+    def converse(self, user_id: str, message: str,
+                 history: list[dict[str, str]] | None = None,
+                 context: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Conversational mode: user message in, reply text out.
+
+        `history` is a list of {role, content} dicts (oldest first).
+        `context` lets the caller inject structured hints (e.g. a
+        nudge_id the user is following up on)."""
+        history = history or []
+        history_text = "\n".join(
+            f"{h.get('role', 'user')}: {h.get('content', '')}"
+            for h in history
+        )
+        user_block = (
+            (f"Conversation so far:\n{history_text}\n\n" if history_text else "")
+            + (f"Context: {json.dumps(context)}\n\n" if context else "")
+            + f"User just said: {message}"
+        )
+        planner_msgs = [
+            SystemMessage(content=_CONVERSE_PLANNER_PROMPT),
+            HumanMessage(content=user_block),
+        ]
+        raw = self._invoke_llm(planner_msgs)
+        steps = self._parse_plan(raw)
+        tool_trace = self._execute_plan(steps, user_id)
+
+        synth_context: dict[str, Any] = {
+            "user_message": message,
+            "history": history,
+            "tool_results": [{"tool": t.get("tool"), "result": t.get("result")}
+                             for t in tool_trace if "result" in t],
+        }
+        if context:
+            synth_context["context"] = context
+
+        synth_msgs = [
+            SystemMessage(content=_CONVERSE_SYNTH_PROMPT),
+            HumanMessage(content=json.dumps(synth_context)),
+        ]
+        raw = self._invoke_llm(synth_msgs)
+        text = raw.content if hasattr(raw, "content") else str(raw)
+        return {
+            "message": text.strip(),
+            "tool_trace": tool_trace,
+            "provider_used": self.provider_name,
+        }
 
     def _invoke_llm(self, messages: list) -> Any:
         return self.llm_invoker(messages)
