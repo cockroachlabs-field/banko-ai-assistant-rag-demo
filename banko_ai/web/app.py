@@ -239,6 +239,17 @@ def create_app() -> Flask:
     # Auto-setup data if needed (matching original app.py)
     print("🔍 Checking database setup...")
     auto_setup_data_if_needed(config.database_url)
+
+    # The coach webhook accepts signals as soon as the app is up, so its
+    # tables have to exist before the first one arrives. CREATE IF NOT
+    # EXISTS, safe on every boot. Deliberately not run_all_migrations():
+    # the legacy indexing migration still carries pgvector ivfflat syntax
+    # that CockroachDB rejects.
+    try:
+        from banko_ai.utils.migration import DatabaseMigration
+        DatabaseMigration(config.database_url).migrate_to_coach_v1()
+    except Exception as e:
+        print(f"Warning: coach migration failed at startup: {e}")
     
     @app.route('/')
     def index():

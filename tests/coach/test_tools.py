@@ -36,9 +36,13 @@ def db_url() -> str:
               expense_date DATE NOT NULL,
               expense_amount DECIMAL(10,2) NOT NULL,
               shopping_type STRING NOT NULL,
-              description STRING
+              description STRING,
+              merchant STRING,
+              payment_method STRING NOT NULL DEFAULT 'Credit Card'
             )
         """))
+        conn.execute(text(
+            "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method STRING NOT NULL DEFAULT 'Credit Card'"))
     eng.dispose()
     return url
 

@@ -40,11 +40,14 @@ def db_url() -> str:
               expense_amount DECIMAL(10,2) NOT NULL,
               shopping_type STRING NOT NULL,
               description STRING,
-              merchant STRING
+              merchant STRING,
+              payment_method STRING NOT NULL DEFAULT 'Credit Card'
             )
         """))
         try:
             conn.execute(text("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS merchant STRING"))
+            conn.execute(text(
+                "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method STRING NOT NULL DEFAULT 'Credit Card'"))
         except Exception:
             pass
     eng.dispose()
