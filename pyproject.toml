@@ -48,8 +48,8 @@ dependencies = [
     "botocore>=1.35.0",
     
     # Google Integration
-    # vertexai SDK removed 2026-05-22 — deprecated 2025-06-24, hard removal
-    # 2026-06-24. google-genai replaces it for both Vertex AI and the public
+    # vertexai SDK removed 2026-05-22 (deprecated 2025-06-24, hard removal
+    # 2026-06-24). google-genai replaces it for both Vertex AI and the public
     # Generative AI API (switch via the vertexai=True client flag).
     "google-auth>=2.23.0,<3.0.0",
     "google-genai>=1.0.0",
