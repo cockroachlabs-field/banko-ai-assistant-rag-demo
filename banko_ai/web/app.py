@@ -4,6 +4,10 @@ Main Flask application for Banko AI Assistant.
 This module creates and configures the Flask application with all routes and functionality.
 """
 
+import hashlib
+import hmac
+import json
+import logging as _coach_log
 import os
 import uuid
 from datetime import datetime
@@ -13,6 +17,8 @@ from flask_socketio import SocketIO
 from sqlalchemy import text
 
 from ..ai_providers.factory import AIProviderFactory
+from ..coach.handler import SignalHandler
+from ..coach.signals import SignalParseError, parse_changefeed_envelope
 from ..config.settings import get_config
 from ..utils.cache_manager import BankoCacheManager
 from ..utils.db_retry import create_resilient_engine
@@ -122,6 +128,11 @@ def auto_setup_data_if_needed(database_url: str):
     Automatically set up data if the database is empty or has very few records.
     This integrates seamlessly into the app startup - matches original app.py.
     """
+    # Skip the heavy data-gen path under pytest — fixtures build create_app()
+    # on every test and a 5000-row insert + embeddings on each call makes the
+    # suite unusable. Tests that need data seed it explicitly.
+    if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("BANKO_SKIP_AUTOSETUP"):
+        return True
     try:
         db_connected, db_message, table_exists, record_count = check_database_connection(database_url)
         
@@ -228,6 +239,17 @@ def create_app() -> Flask:
     # Auto-setup data if needed (matching original app.py)
     print("🔍 Checking database setup...")
     auto_setup_data_if_needed(config.database_url)
+
+    # The coach webhook accepts signals as soon as the app is up, so its
+    # tables have to exist before the first one arrives. CREATE IF NOT
+    # EXISTS, safe on every boot. Deliberately not run_all_migrations():
+    # the legacy indexing migration still carries pgvector ivfflat syntax
+    # that CockroachDB rejects.
+    try:
+        from banko_ai.utils.migration import DatabaseMigration
+        DatabaseMigration(config.database_url).migrate_to_coach_v1()
+    except Exception as e:
+        print(f"Warning: coach migration failed at startup: {e}")
     
     @app.route('/')
     def index():
@@ -1320,7 +1342,261 @@ def create_app() -> Flask:
     # Use threading mode for Flask dev server, eventlet mode for Gunicorn production
     socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
     app.socketio = socketio
-    
+
+    # --- Coach v1 webhook receiver ---------------------------------------
+    coach_log = _coach_log.getLogger("banko.coach.webhook")
+
+    def _verify_signature(body: bytes, header_sig: str | None) -> bool:
+        secret = os.getenv("CDC_WEBHOOK_HMAC_SECRET", "")
+        if not secret:
+            coach_log.warning("CDC_WEBHOOK_HMAC_SECRET not set; rejecting all "
+                              "incoming webhooks")
+            return False
+        if not header_sig:
+            return False
+        expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, header_sig)
+
+    def _socketio_emitter(event: str, payload: dict, room: str | None = None):
+        if room:
+            app.socketio.emit(event, payload, to=room)
+        else:
+            app.socketio.emit(event, payload)
+
+    def _get_coach_handler() -> SignalHandler:
+        handler = getattr(app, "_coach_handler", None)
+        if handler is not None:
+            return handler
+        from ..coach.agent import CoachAgent, default_llm_invoker
+        cfg = get_config()
+        db_url = os.getenv("DATABASE_URL")
+        agent = CoachAgent(
+            database_url=db_url,
+            llm_invoker=default_llm_invoker,
+            provider_name=cfg.ai_service,
+            max_steps=cfg.coach_agent_max_steps,
+        )
+        handler = SignalHandler(
+            coach=agent,
+            emitter=type("E", (), {"emit": staticmethod(_socketio_emitter)})(),
+            database_url=db_url,
+            socketio_room_prefix=cfg.coach_socketio_room_prefix,
+        )
+        app._coach_handler = handler
+        return handler
+
+    def _claim_signal(sig) -> bool:
+        """Atomically claim a signal for processing by inserting its row
+        into spending_signals. Returns True if this call claimed it
+        (i.e. this is the first time we're seeing this idempotency_key),
+        False if a previous call already claimed it (replay).
+
+        This makes the webhook safely re-postable: the pipeline can fire
+        the same envelope twice without producing duplicate nudges."""
+        from sqlalchemy import create_engine
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.pool import NullPool
+        eng = create_engine(os.getenv("DATABASE_URL"), poolclass=NullPool)
+        try:
+            try:
+                with eng.begin() as conn:
+                    row = conn.execute(text("""
+                        INSERT INTO spending_signals
+                          (signal_id, user_id, signal_type, severity, payload,
+                           idempotency_key)
+                        VALUES (:sid, :uid, :stype, :sev, CAST(:pl AS JSONB), :ik)
+                        ON CONFLICT (idempotency_key) DO NOTHING
+                        RETURNING signal_id
+                    """), {
+                        "sid": sig.signal_id,
+                        "uid": sig.user_id,
+                        "stype": sig.signal_type.value,
+                        "sev": sig.severity,
+                        "pl": json.dumps(sig.payload),
+                        "ik": sig.idempotency_key,
+                    }).fetchone()
+                return row is not None
+            except IntegrityError:
+                # PK collision on signal_id (or any other unique constraint) —
+                # the signal already exists, so this is a replay.
+                return False
+        finally:
+            eng.dispose()
+
+    def _process_in_background(handler, sig):
+        try:
+            handler.handle(sig)
+        except Exception:
+            coach_log.exception("background handler failed",
+                                extra={"signal_id": sig.signal_id})
+
+    @app.route("/api/cdc/signals", methods=["POST"])
+    def cdc_signals_webhook():
+        body = request.get_data() or b""
+        sig_header = request.headers.get("X-Banko-Signature")
+        if not _verify_signature(body, sig_header):
+            return jsonify({"error": "invalid signature"}), 401
+
+        try:
+            envelope = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            return jsonify({"error": "malformed payload", "detail": str(e)}), 400
+
+        try:
+            signals = parse_changefeed_envelope(envelope)
+        except SignalParseError as e:
+            return jsonify({"error": "invalid signal", "detail": str(e)}), 400
+
+        if not signals:
+            return jsonify({"status": "no_op",
+                            "reason": "envelope contained no inserts"}), 200
+
+        handler = _get_coach_handler()
+        queued_ids = []
+        replayed_ids = []
+        for sig in signals:
+            try:
+                claimed = _claim_signal(sig)
+            except Exception:
+                coach_log.exception("signal claim failed; queuing anyway",
+                                    extra={"signal_id": sig.signal_id})
+                claimed = True
+            if not claimed:
+                replayed_ids.append(sig.signal_id)
+                continue
+            app.socketio.start_background_task(
+                _process_in_background, handler, sig)
+            queued_ids.append(sig.signal_id)
+
+        if not queued_ids and replayed_ids:
+            payload = {"status": "replayed", "replayed": True,
+                       "replayed_signal_ids": replayed_ids}
+            if len(replayed_ids) == 1:
+                payload["signal_id"] = replayed_ids[0]
+            return jsonify(payload), 200
+
+        return jsonify({"status": "queued",
+                        "queued_signal_ids": queued_ids,
+                        "replayed_signal_ids": replayed_ids}), 202
+
+    # --- Coach v1 UI + REST ----------------------------------------------
+    @app.route("/coach")
+    def coach_page():
+        from ..config.settings import get_config
+        cfg = get_config()
+        user_id = session.get("user_id") or cfg.coach_default_user_id
+        return render_template("coach.html", user_id=user_id)
+
+    @app.route("/api/coach/nudges", methods=["GET"])
+    def coach_list_nudges():
+        from sqlalchemy import create_engine
+
+        from ..config.settings import get_config
+        cfg = get_config()
+        user_id = (request.args.get("user_id") or session.get("user_id")
+                   or cfg.coach_default_user_id)
+        limit = min(int(request.args.get("limit", "20")), 100)
+        db_url = os.getenv("DATABASE_URL")
+        eng = create_engine(db_url)
+        try:
+            with eng.connect() as conn:
+                rows = conn.execute(text("""
+                    SELECT n.nudge_id, n.message, n.provider_used, n.created_at,
+                           s.signal_type, s.severity
+                    FROM coach_nudges n
+                    LEFT JOIN spending_signals s ON s.signal_id = n.signal_id
+                    WHERE n.user_id = :u
+                    ORDER BY n.created_at DESC
+                    LIMIT :l
+                """), {"u": user_id, "l": limit}).fetchall()
+        finally:
+            eng.dispose()
+        return jsonify({"nudges": [{
+            "nudge_id": str(r[0]), "message": r[1],
+            "provider_used": r[2],
+            "created_at": r[3].isoformat() if r[3] else None,
+            "signal_type": r[4], "severity": r[5],
+        } for r in rows]})
+
+    @app.route("/api/coach/nudges/<nudge_id>", methods=["GET"])
+    def coach_get_nudge(nudge_id: str):
+        from ..coach.tools import explain_nudge
+        result = explain_nudge(nudge_id=nudge_id,
+                               database_url=os.getenv("DATABASE_URL"))
+        if not result:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(result)
+
+    @app.route("/api/coach/chat", methods=["POST"])
+    def coach_chat():
+        from ..coach.agent import CoachAgent, default_llm_invoker
+        from ..config.settings import get_config
+        cfg = get_config()
+        body = request.get_json(silent=True) or {}
+        message = (body.get("message") or "").strip()
+        if not message:
+            return jsonify({"error": "message is required"}), 400
+        user_id = (body.get("user_id") or session.get("user_id")
+                   or cfg.coach_default_user_id)
+        thread_id = body.get("thread_id")
+        context = ({"nudge_id": body["nudge_id"]}
+                   if body.get("nudge_id") else None)
+
+        agent = CoachAgent(
+            database_url=os.getenv("DATABASE_URL"),
+            llm_invoker=default_llm_invoker,
+            provider_name=cfg.ai_service,
+            max_steps=cfg.coach_agent_max_steps,
+        )
+        reply = agent.converse(user_id=user_id, message=message,
+                               history=[], context=context,
+                               thread_id=thread_id)
+        return jsonify(reply)
+
+    @socketio.on("coach.join")
+    def coach_join(data):
+        from flask_socketio import join_room
+        user_id = data.get("user_id")
+        if user_id:
+            join_room(f"coach:{user_id}")
+
+    @app.route("/health/coach", methods=["GET"])
+    def health_coach():
+        from sqlalchemy import create_engine
+
+        from ..config.settings import get_config
+        cfg = get_config()
+        db_url = os.getenv("DATABASE_URL")
+        last_nudge_at = None
+        db_ok = False
+        if db_url:
+            try:
+                eng = create_engine(db_url)
+                with eng.connect() as conn:
+                    row = conn.execute(text(
+                        "SELECT max(created_at) FROM coach_nudges"
+                    )).fetchone()
+                    last_nudge_at = (row[0].isoformat()
+                                     if row and row[0] else None)
+                    db_ok = True
+                eng.dispose()
+            except Exception as e:
+                coach_log.warning("health DB check failed: %s", e)
+
+        components = {
+            "db_reachable": db_ok,
+            "webhook_secret_configured": bool(
+                os.getenv("CDC_WEBHOOK_HMAC_SECRET", "")
+            ),
+            "kafka_enabled": cfg.coach_kafka_enabled,
+            "active_provider": cfg.ai_service,
+            "last_nudge_at": last_nudge_at,
+        }
+        overall = ("green" if db_ok and
+                   components["webhook_secret_configured"]
+                   else "degraded")
+        return jsonify({"status": overall, "components": components}), 200
+
     # Data Generator Routes
     generation_state = {'running': False, 'should_stop': False}
     

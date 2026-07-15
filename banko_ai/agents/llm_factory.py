@@ -63,37 +63,33 @@ def get_llm_for_agent(temperature: float = 0.7, model_override: str | None = Non
     
     elif config.ai_service == 'watsonx':
         try:
-            from langchain_ibm import WatsonxLLM
-            
+            # ChatWatsonx talks to the chat endpoint. The old WatsonxLLM used
+            # the deprecated /ml/v1/text/generation completion endpoint, which
+            # made chat-tuned models leak raw scaffolding into agent replies.
+            from langchain_ibm import ChatWatsonx
+
             # Get Watsonx base URL (not the full endpoint path)
             # langchain_ibm expects base URL like: https://us-south.ml.cloud.ibm.com
             watsonx_url = os.getenv('WATSONX_API_URL') or os.getenv('WATSONX_URL')
-            
+
             # If not set, use default base URL (US South region)
             if not watsonx_url:
                 watsonx_url = 'https://us-south.ml.cloud.ibm.com'
-            
+
             # Strip off any path/query parameters if present (langchain_ibm adds them)
             if '/ml/v1' in watsonx_url or '?' in watsonx_url:
                 # Extract just the base URL
                 from urllib.parse import urlparse
                 parsed = urlparse(watsonx_url)
                 watsonx_url = f"{parsed.scheme}://{parsed.netloc}"
-            
-            return WatsonxLLM(
+
+            return ChatWatsonx(
                 model_id=model_override or config.watsonx_model,
                 url=watsonx_url,
-                apikey=config.watsonx_api_key or os.getenv('WATSONX_API_KEY'),
+                api_key=config.watsonx_api_key or os.getenv('WATSONX_API_KEY'),
                 project_id=config.watsonx_project_id or os.getenv('WATSONX_PROJECT_ID'),
-                params={
-                    'temperature': temperature,
-                    'max_new_tokens': 2000,
-                    'min_new_tokens': 10,
-                    'decoding_method': 'sample',  # Changed from 'greedy' for better JSON generation
-                    'repetition_penalty': 1.0,
-                    'top_k': 50,
-                    'top_p': 0.95
-                }
+                temperature=temperature,
+                max_tokens=2000,
             )
         except ImportError:
             raise ImportError(
