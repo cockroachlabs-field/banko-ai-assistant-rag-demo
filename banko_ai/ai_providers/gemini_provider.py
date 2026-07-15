@@ -14,18 +14,16 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError, OperationalError
 
 try:
-    import vertexai
     from google import genai
-    from google.cloud import aiplatform
     from google.genai import types as genai_types
     from google.oauth2 import service_account
-    from vertexai.generative_models import GenerativeModel
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
 
 from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry, get_database_url
 from .base import AIAuthenticationError, AIConnectionError, AIProvider, RAGResponse, SearchResult
+from .rag_prompts import build_banko_rag_prompt
 
 
 class GeminiProvider(AIProvider):
@@ -34,7 +32,9 @@ class GeminiProvider(AIProvider):
     def __init__(self, config: dict[str, Any], cache_manager=None):
         """Initialize Gemini provider."""
         if not GEMINI_AVAILABLE:
-            raise AIConnectionError("Google Cloud AI Platform not available. Install with: pip install google-cloud-aiplatform vertexai")
+            raise AIConnectionError(
+                "Google GenAI SDK not available. Install with: pip install google-genai"
+            )
 
         self.cache_manager = cache_manager
 
@@ -43,68 +43,62 @@ class GeminiProvider(AIProvider):
         self.model_name = config.get("model") or os.getenv("GOOGLE_MODEL", "gemini-2.0-flash-001")
         self.embedding_model = None
         self.db_engine = None
-        self.vertex_client = None
         self.genai_client = None
         self.credentials = None
-        self.use_vertex_ai = True  # Try Vertex AI first, fallback to Generative AI
         super().__init__(config)
 
     def _validate_config(self) -> None:
-        """Validate Gemini configuration."""
+        """Validate Gemini configuration and initialize the google-genai client.
+
+        Prefers Vertex AI auth (service account via GOOGLE_APPLICATION_CREDENTIALS)
+        and falls back to the public Generative AI API if only GOOGLE_API_KEY is
+        set. The google-genai SDK is a single client class for both backends —
+        the `vertexai=True` flag switches it from public API to Vertex AI.
+
+        Migrated 2026-05-22 off the vertexai SDK (deprecated 2025-06-24,
+        removed 2026-06-24) per the upstream notice — same models, new SDK.
+        """
         if not self.project_id:
             raise AIAuthenticationError("Google project ID is required")
 
-        # Set up authentication from service account key file
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        api_key = os.getenv("GOOGLE_API_KEY")
+
         try:
-            credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
             if credentials_path and os.path.exists(credentials_path):
-                self.credentials = service_account.Credentials.from_service_account_file(credentials_path)
+                # Vertex AI requires the cloud-platform OAuth scope explicitly.
+                # Without it, genai.Client(vertexai=True,...) issues a token
+                # the Vertex endpoint rejects as `invalid_scope`. The legacy
+                # vertexai.init() path inferred this scope internally; the
+                # google-genai client does not.
+                self.credentials = service_account.Credentials.from_service_account_file(
+                    credentials_path,
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                )
                 print(f"✅ Loaded Google credentials from: {credentials_path}")
-
-                # Try Vertex AI first
-                try:
-                    vertexai.init(
-                        project=self.project_id,
-                        location=self.location,
-                        credentials=self.credentials
-                    )
-
-                    # Create the generative model using the correct model name
-                    model_name = self.model_name
-                    if model_name == "gemini-1.5-pro":
-                        model_name = "gemini-1.5-pro-001"
-                    elif model_name == "gemini-1.5-flash":
-                        model_name = "gemini-1.5-flash-001"
-                    elif model_name == "gemini-1.0-pro":
-                        model_name = "gemini-1.0-pro-001"
-
-                    self.vertex_client = GenerativeModel(model_name)
-                    self.use_vertex_ai = True
-                    print(f"✅ Initialized Vertex AI with project: {self.project_id}, location: {self.location}, model: {self.model_name}")
-
-                except Exception as vertex_error:
-                    print(f"⚠️  Vertex AI initialization failed: {vertex_error}")
-                    print("🔄 Falling back to Generative AI API...")
-
-                    # Fallback to Generative AI API (google-genai SDK)
-                    try:
-                        api_key = os.getenv("GOOGLE_API_KEY")
-                        if api_key:
-                            self.genai_client = genai.Client(api_key=api_key)
-                            self.use_vertex_ai = False
-                            print(f"✅ Initialized Google GenAI SDK with model: {self.model_name}")
-                        else:
-                            print("❌ No GOOGLE_API_KEY found for Generative AI API fallback")
-                            raise AIConnectionError("Both Vertex AI and Generative AI API initialization failed - no API key")
-
-                    except Exception as genai_error:
-                        print(f"❌ Generative AI API initialization failed: {genai_error}")
-                        raise AIConnectionError(f"Failed to initialize both Vertex AI and Generative AI: {vertex_error}")
-
+                self.genai_client = genai.Client(
+                    vertexai=True,
+                    project=self.project_id,
+                    location=self.location,
+                    credentials=self.credentials,
+                )
+                print(
+                    f"✅ Initialized google-genai (Vertex AI backend) with "
+                    f"project: {self.project_id}, location: {self.location}, "
+                    f"model: {self.model_name}"
+                )
+            elif api_key:
+                self.genai_client = genai.Client(api_key=api_key)
+                print(
+                    f"✅ Initialized google-genai (Generative AI API) with "
+                    f"model: {self.model_name}"
+                )
             else:
-                print("❌ No GOOGLE_APPLICATION_CREDENTIALS found")
-                raise AIAuthenticationError("Google credentials are required")
-
+                raise AIAuthenticationError(
+                    "Google credentials are required: set "
+                    "GOOGLE_APPLICATION_CREDENTIALS (service account JSON for "
+                    "Vertex AI) or GOOGLE_API_KEY (Generative AI API)"
+                )
         except Exception as e:
             if isinstance(e, AIConnectionError | AIAuthenticationError):
                 raise
@@ -511,68 +505,33 @@ class GeminiProvider(AIProvider):
             else:
                 search_results_text = "No specific expense records found for this query."
 
-            # Create optimized prompt
-            lang_code = language if language else "en"
-            lang_instruction = ""
-            if lang_code not in ("en", "en-US"):
-                lang_names = {"es-ES": "Spanish", "fr-FR": "French", "de-DE": "German", "it-IT": "Italian", "pt-PT": "Portuguese", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese", "hi-IN": "Hindi"}
-                lang_name = lang_names.get(lang_code, lang_code)
-                lang_instruction = f" You MUST respond entirely in {lang_name}."
-            enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
+            enhanced_prompt = build_banko_rag_prompt(
+                question=query,
+                expense_data=search_results_text,
+                budget_recommendations=budget_recommendations,
+                language=language,
+            )
 
-Q: {query}
-
-Data:
-{search_results_text}
-
-{budget_recommendations if budget_recommendations else ''}
-
-Provide helpful insights with numbers, markdown formatting, and actionable advice.{lang_instruction}"""
-
-            # Generate response using either Vertex AI or Generative AI client
             ai_response = ""
             try:
-                if self.use_vertex_ai and self.vertex_client:
-                    from vertexai.generative_models import GenerationConfig
+                if not self.genai_client:
+                    raise AIConnectionError("Gemini client not initialized")
 
-                    generation_config = GenerationConfig(
+                response = self.genai_client.models.generate_content(
+                    model=self.model_name,
+                    contents=enhanced_prompt,
+                    config=genai_types.GenerateContentConfig(
                         temperature=0.7,
                         max_output_tokens=1000,
                         top_p=0.9,
-                        top_k=40
-                    )
+                        top_k=40,
+                    ),
+                )
 
-                    # Make the request with Vertex AI
-                    response = self.vertex_client.generate_content(
-                        enhanced_prompt,
-                        generation_config=generation_config
-                    )
-
-                    # Extract response text
-                    if response and response.text:
-                        ai_response = response.text
-                    else:
-                        ai_response = "I apologize, but I couldn't generate a response at this time."
-
-                elif self.genai_client:
-                    # Use Google GenAI SDK
-                    response = self.genai_client.models.generate_content(
-                        model=self.model_name,
-                        contents=enhanced_prompt,
-                        config=genai_types.GenerateContentConfig(
-                            temperature=0.7,
-                            max_output_tokens=1000,
-                            top_p=0.9,
-                            top_k=40,
-                        ),
-                    )
-
-                    if response and response.text:
-                        ai_response = response.text
-                    else:
-                        ai_response = "I apologize, but I couldn't generate a response at this time."
+                if response and response.text:
+                    ai_response = response.text
                 else:
-                    ai_response = "No Gemini client available."
+                    ai_response = "I apologize, but I couldn't generate a response at this time."
 
             except Exception as e:
                 # Fallback to structured response if API call fails (following WatsonX pattern)
@@ -698,8 +657,6 @@ Based on your expense data, I found {len(context)} relevant records. Here's a co
             if GEMINI_AVAILABLE and self.genai_client:
                 models = list(self.genai_client.models.list())
                 return len(models) > 0
-            elif GEMINI_AVAILABLE and self.use_vertex_ai and self.vertex_client:
-                return True
             return False
         except Exception:
             return False

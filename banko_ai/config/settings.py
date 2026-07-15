@@ -37,7 +37,7 @@ class Config:
     fraud_duplicate_window_days: int = 60  # Days to look back for duplicates (60 for demo)
     aws_profile: str | None = None
     aws_region: str = "us-east-1"
-    aws_model: str = "us.anthropic.claude-3-5-haiku-20241022-v1:0"  # Claude inference profile
+    aws_model: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"  # Claude inference profile (Haiku 4.5; Claude 3.x is Legacy on Bedrock after 30 days idle)
     watsonx_api_key: str | None = None
     watsonx_project_id: str | None = None
     watsonx_model: str = "openai/gpt-oss-120b"  # IBM models
@@ -109,7 +109,7 @@ class Config:
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
             aws_profile=os.getenv("AWS_PROFILE"),
             aws_region=os.getenv("AWS_REGION", "us-east-1"),
-            aws_model=os.getenv("AWS_MODEL", "us.anthropic.claude-3-5-haiku-20241022-v1:0"),
+            aws_model=os.getenv("AWS_MODEL", "us.anthropic.claude-haiku-4-5-20251001-v1:0"),
             watsonx_api_key=watsonx_api_key,
             watsonx_project_id=watsonx_project_id,
             watsonx_model=watsonx_model,
@@ -174,46 +174,29 @@ class Config:
         }
         return config
     
-    def get_available_models(self) -> dict[str, list[str]]:
-        """Get available models for each AI provider."""
-        return {
-            "openai": [
-                "gpt-3.5-turbo",
-                "gpt-3.5-turbo-16k", 
-                "gpt-4",
-                "gpt-4-turbo",
-                "gpt-4o",
-                "gpt-4o-mini"
-            ],
-            "aws": [
-                "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-                "us.anthropic.claude-3-5-haiku-20241022-v1:0",
-                "us.anthropic.claude-3-opus-20240229-v1:0",
-                "us.anthropic.claude-3-sonnet-20240229-v1:0",
-                "us.anthropic.claude-3-haiku-20240307-v1:0"
-            ],
-            "watsonx": [
-                "openai/gpt-oss-120b",
-                "ibm/granite-13b-chat-v2",
-                "ibm/granite-13b-instruct-v2",
-                "ibm/granite-8b-chat-v2",
-                "ibm/granite-8b-instruct-v2",
-                "meta-llama/llama-2-70b-chat",
-                "meta-llama/llama-2-13b-chat"
-            ],
-            "gemini": [
-                "gemini-1.5-pro",
-                "gemini-1.5-flash",
-                "gemini-1.0-pro"
-            ]
-        }
-    
+    # NOTE: The hardcoded `get_available_models()` dict that used to live here
+    # was removed in May 2026. Source of truth is `ai_provider.get_available_models()`
+    # on each concrete provider — they discover from the live SDK/API and fall
+    # back to a known-good stub. The Flask route at `/api/models` already reads
+    # from the provider; nothing in-tree consumed the Config version.
+
+
     def validate(self) -> None:
         """Validate configuration and raise errors for missing required values."""
         if not self.database_url:
             raise ValueError("DATABASE_URL is required")
         
         if not self.secret_key:
+            flask_env = os.getenv("FLASK_ENV", "development").lower()
+            running_under_gunicorn = "gunicorn" in os.getenv("SERVER_SOFTWARE", "").lower()
+            if flask_env == "production" or running_under_gunicorn:
+                raise RuntimeError(
+                    "SECRET_KEY must be set in production. Multi-worker "
+                    "deployments require a stable secret so Flask session "
+                    "cookies validate across workers. Set SECRET_KEY in the "
+                    "environment (e.g., `export SECRET_KEY=$(python -c "
+                    "'import secrets; print(secrets.token_hex(32))')`)."
+                )
             self.secret_key = secrets.token_hex(32)
             print("Warning: SECRET_KEY not set. Generated a random key for this session.")
         

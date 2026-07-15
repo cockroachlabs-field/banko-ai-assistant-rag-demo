@@ -587,8 +587,14 @@ def create_app() -> Flask:
             
             # Initialize Receipt Agent
             try:
+                from pydantic import ValidationError
+
                 from banko_ai.agents.llm_factory import get_embedding_model, get_llm_for_agent
                 from banko_ai.agents.receipt_agent import ReceiptAgent
+                from banko_ai.agents.receipt_extraction_schema import (
+                    ReceiptExtraction,
+                    is_placeholder_payload,
+                )
                 
                 # Use centralized LLM factory with the currently selected model
                 current_model = getattr(ai_provider, 'current_model', None)
@@ -626,9 +632,39 @@ def create_app() -> Flask:
                 
                 # Extract data for response (Receipt Agent returns 'extracted_fields')
                 extracted = result.get('extracted_fields', {})
-                
+
                 print(f"📊 Extracted fields: {extracted}")
-                
+
+                # Some models (notably code-tuned ones like ibm/granite-8b-code-instruct)
+                # echo the prompt scaffold instead of extracting values, which would land
+                # in the DB as opaque psycopg2 errors.
+                if is_placeholder_payload(extracted):
+                    print(f"❌ Extraction returned prompt-template placeholders: {extracted}")
+                    return jsonify({
+                        'success': False,
+                        'error': (
+                            "The selected model returned the prompt template instead of "
+                            "real receipt values. Switch to a chat/instruct model (not a "
+                            "code model) and re-upload."
+                        ),
+                        'extracted_fields': extracted,
+                    }), 422
+
+                try:
+                    validated = ReceiptExtraction(**extracted)
+                except ValidationError as ve:
+                    print(f"❌ Extraction failed schema validation: {ve}")
+                    return jsonify({
+                        'success': False,
+                        'error': 'Extracted receipt fields failed validation.',
+                        'validation_errors': ve.errors(),
+                        'extracted_fields': extracted,
+                    }), 422
+
+                # Downstream code reads from `extracted`; replace with the validated
+                # payload so the INSERT sees clean types and non-empty strings.
+                extracted = validated.model_dump()
+
                 # Emit real-time update: Receipt Agent completed
                 try:
                     socketio.emit('agent_activity', {

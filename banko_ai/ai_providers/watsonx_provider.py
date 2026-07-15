@@ -28,6 +28,7 @@ import requests
 from sqlalchemy.exc import DBAPIError, OperationalError
 
 from ..ai_providers.base import AIConnectionError, AIProvider, RAGResponse, SearchResult
+from ..ai_providers.rag_prompts import build_banko_rag_prompt
 from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry, get_database_url
 
 
@@ -59,6 +60,10 @@ class WatsonxProvider(AIProvider):
         self.timeout = int(config.get('timeout', os.getenv('WATSONX_TIMEOUT', '30')))
         self.embedding_model_name = config.get('embedding_model') or os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
         
+        # Discovery cache: get_available_models() can call IBM on every UI page
+        # load; cache for the life of the process. App restart picks up changes.
+        self._available_models_cache: list[str] | None = None
+
         # Make API key and project ID optional for demo purposes
         if not self.api_key:
             print("⚠️ WATSONX_API_KEY not found - running in demo mode")
@@ -241,11 +246,23 @@ class WatsonxProvider(AIProvider):
             raise AIConnectionError(f"Search failed: {str(e)}")
     
     def get_available_models(self) -> list[str]:
-        """Get list of available Watsonx models. Override with WATSONX_MODELS env var or auto-discover from API."""
+        """Get list of available Watsonx models.
+
+        Order of preference:
+        1. `WATSONX_MODELS` env var (comma-separated) — for airgap/pinned
+           environments; read fresh each call so env changes take effect.
+        2. Cached result from a prior IBM `foundation_model_specs` discovery.
+        3. A fresh discovery call, cached on success.
+        4. A static fallback stub of known-good chat models, so the dropdown
+           still has multiple recoverable options when discovery fails.
+        """
         extra = os.getenv("WATSONX_MODELS", "")
         if extra:
             return [m.strip() for m in extra.split(",") if m.strip()]
-        
+
+        if self._available_models_cache is not None:
+            return self._available_models_cache
+
         try:
             access_token = self._get_access_token()
             api_url = os.getenv("WATSONX_API_URL", "https://us-south.ml.cloud.ibm.com")
@@ -253,7 +270,7 @@ class WatsonxProvider(AIProvider):
                 from urllib.parse import urlparse
                 parsed = urlparse(api_url)
                 api_url = f"{parsed.scheme}://{parsed.netloc}"
-            
+
             resp = requests.get(
                 f"{api_url}/ml/v1/foundation_model_specs?version=2023-05-29&limit=200",
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -266,11 +283,22 @@ class WatsonxProvider(AIProvider):
                     if 'generation' in tasks or 'chat' in tasks:
                         models.append(m['model_id'])
                 if models:
-                    return sorted(models)
+                    self._available_models_cache = sorted(models)
+                    return self._available_models_cache
         except Exception as e:
             print(f"⚠️  Could not list Watsonx models: {e}")
-        
-        return ['openai/gpt-oss-120b']
+
+        # Fallback: a small set of known-good instruction-tuned models. Code-
+        # tuned models are deliberately excluded — they echo prompt templates
+        # back on JSON extraction tasks (caught by ReceiptExtraction validation
+        # but bad UX). Not cached so transient IBM outages let discovery
+        # recover on the next call.
+        return [
+            "meta-llama/llama-3-3-70b-instruct",
+            "mistralai/mistral-large",
+            "ibm/granite-3-8b-instruct",
+            "openai/gpt-oss-120b",
+        ]
     
     def set_model(self, model_id: str) -> bool:
         """Set the current model."""
@@ -466,18 +494,12 @@ class WatsonxProvider(AIProvider):
             else:
                 search_results_text = "No specific expense records found for this query."
             
-            # Create optimized prompt
-            language_instruction = f" You MUST respond entirely in {language}." if language != "English" else ""
-            enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
-
-Q: {prompt}
-
-Data:
-{search_results_text}
-
-{budget_recommendations if budget_recommendations else ''}
-
-Provide helpful insights with numbers, markdown formatting, and actionable advice.{language_instruction}"""
+            enhanced_prompt = build_banko_rag_prompt(
+                question=prompt,
+                expense_data=search_results_text,
+                budget_recommendations=budget_recommendations,
+                language=language,
+            )
             
             # Prepare messages for chat format (matching original)
             messages = [
@@ -641,31 +663,20 @@ I couldn't find any relevant expense records for your query. Please try:
                     else:
                         search_results_text = "No specific expense records found for this query."
                     
-                    # Create optimized prompt
-                    lang_code = language if language else "en"
-                    lang_instruction = ""
-                    if lang_code not in ("en", "en-US"):
-                        lang_names = {"es-ES": "Spanish", "fr-FR": "French", "de-DE": "German", "it-IT": "Italian", "pt-PT": "Portuguese", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese", "hi-IN": "Hindi"}
-                        lang_name = lang_names.get(lang_code, lang_code)
-                        lang_instruction = f" You MUST respond entirely in {lang_name}."
-                    enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
+                    enhanced_prompt = build_banko_rag_prompt(
+                        question=query,
+                        expense_data=search_results_text,
+                        budget_recommendations=budget_recommendations,
+                        language=language,
+                    )
 
-Q: {query}
-
-Data:
-{search_results_text}
-
-{budget_recommendations if budget_recommendations else ''}
-
-Provide helpful insights with numbers, markdown formatting, and actionable advice.{lang_instruction}"""
-                    
                     messages = [
                         {
                             "role": "user",
                             "content": enhanced_prompt
                         }
                     ]
-                    
+
                     # Call Watsonx API
                     response_text = self._call_watsonx_api(messages)
                     
@@ -803,22 +814,12 @@ Provide helpful insights with numbers, markdown formatting, and actionable advic
                     else:
                         search_results_text = "No specific expense records found for this query."
 
-                    lang_code = language if language else "en"
-                    lang_instruction = ""
-                    if lang_code not in ("en", "en-US"):
-                        lang_names = {"es-ES": "Spanish", "fr-FR": "French", "de-DE": "German", "it-IT": "Italian", "pt-PT": "Portuguese", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese", "hi-IN": "Hindi"}
-                        lang_name = lang_names.get(lang_code, lang_code)
-                        lang_instruction = f" You MUST respond entirely in {lang_name}."
-                    enhanced_prompt = f"""You are Banko, a financial assistant. Answer based on this expense data:
-
-Q: {query}
-
-Data:
-{search_results_text}
-
-{budget_recommendations if budget_recommendations else ''}
-
-Provide helpful insights with numbers, markdown formatting, and actionable advice.{lang_instruction}"""
+                    enhanced_prompt = build_banko_rag_prompt(
+                        question=query,
+                        expense_data=search_results_text,
+                        budget_recommendations=budget_recommendations,
+                        language=language,
+                    )
 
                     messages = [{"role": "user", "content": enhanced_prompt}]
                     ai_response = self._call_watsonx_api(messages)

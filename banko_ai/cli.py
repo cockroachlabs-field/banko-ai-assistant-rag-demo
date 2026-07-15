@@ -271,9 +271,6 @@ def status():
         
         if ai_provider.test_connection():
             click.echo(f"✅ AI provider ({config.ai_service}) connected")
-            if hasattr(ai_provider, 'use_vertex_ai'):
-                api_type = "Vertex AI" if ai_provider.use_vertex_ai else "Generative AI API"
-                click.echo(f"   Using: {api_type}")
         else:
             click.echo(f"❌ AI provider ({config.ai_service}) disconnected")
     except Exception as e:

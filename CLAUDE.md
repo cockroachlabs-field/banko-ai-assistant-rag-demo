@@ -124,11 +124,13 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 
 ### Open bugs flagged but not yet fixed
 
-- One unsafe SQL identifier interpolation at `banko_ai/utils/agent_schema.py:266` (`DROP TABLE IF EXISTS {table} CASCADE` — table comes from a hardcoded list, so not currently exploitable, but should be parameterized with a whitelist).
-- Multi-worker `SECRET_KEY` drift: when `SECRET_KEY` env is unset and gunicorn forks multiple workers, each worker calls `secrets.token_hex(32)` independently, so Flask sessions break across workers. Single-process dev is fine. Fix: warn-and-fail at startup in prod mode if `SECRET_KEY` is unset.
+- **Watsonx API surface drift**: `banko_ai/agents/llm_factory.py` uses `WatsonxLLM` (the deprecated `/ml/v1/text/generation` endpoint) with `decoding_method: "sample"` (also deprecated). Each request logs three `WatsonxAPIWarning`s. Migrate to `ChatWatsonx` and drop `decoding_method` before IBM removes the old endpoint.
+- The watsonx model dropdown lists every chat-capable model IBM returns, including code-tuned ones (`ibm/granite-8b-code-instruct`) that echo prompt templates on JSON extraction tasks. The `ReceiptExtraction` Pydantic gate now catches the bad payloads (422 instead of 500), but the dropdown still presents the foot-gun. Consider annotating models with a "suitable for structured extraction" hint, or filtering code-tuned models out of the JSON-extraction code paths.
 - `agent_memory.access_count` never incremented on read (defer to memory-system v2).
 - `SentenceTransformer` re-instantiated per call in `base_agent.py` (perf bug; fixing risks regression — defer).
 - `documents` table schema drift between `database.py` and `agent_schema.py` (both create it; reconcile when next touching either).
+- `.gitignore:45` has unanchored `test_*.py` (intended for local utility scripts), which blocks new `tests/test_*.py` from being tracked — every new pytest module needs `git add -f`. Change to `/test_*.py` (root-anchored) or remove.
+- `tests/test_env_config.py` is a print-script with module-level `sys.exit(0)`, not a pytest module — crashes collection. CI already ignores it. Rename to `scripts/check_env_config.py` or delete.
 
 ## Deployment modes (all three must keep working)
 
