@@ -262,7 +262,7 @@ wheels = [
 
 [[package]]
 name = "banko-ai-assistant"
-version = "1.0.37"
+version = "1.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },

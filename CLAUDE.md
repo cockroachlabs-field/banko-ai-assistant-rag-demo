@@ -18,8 +18,8 @@ Flask + SocketIO web app
   │     ├── Receipt agent (OCR via tesseract + pdf2image)
   │     ├── Fraud agent
   │     ├── Budget agent
-  │     ├── Coach agent (planned — see spec)
-  │     └── Supervisor (planned — LLM-routed dispatch)
+  │     ├── Coach agent (v1a shipped July 2026 — reactive nudges + chat)
+  │     └── Supervisor (planned — LLM-routed dispatch, coach v1b)
   ├── AI provider abstraction (banko_ai/ai_providers/)
   │     ├── watsonx.ai (DEFAULT, also default classifier model)
   │     ├── OpenAI
@@ -48,13 +48,13 @@ Full architecture diagram in `docs/superpowers/specs/2026-05-21-proactive-spendi
 | `banko_ai/utils/` | DatabaseManager, cache manager, migration runner, retry/pooling, chat history |
 | `banko_ai/web/` | Flask app (~1800 LOC in `app.py`), agent dashboard, auth stub |
 | `banko_ai/pipeline/` | CDC config (Kafka, webhook, COS) — consumer impls planned |
-| `banko_ai/coach/` | **Planned** — Spending Coach (see spec) |
+| `banko_ai/coach/` | Spending Coach v1a: agent, signal handler, insights, tools, Kafka consumer |
 | `banko_ai/agents/supervisor.py` | **Planned** — LLM-routed multi-agent supervisor |
 | `banko_ai/observability/` | **Planned** — OTel instrumentation |
 | `tests/` | 16+ test suites; integration tests need a populated DB (skipped in CI when DB is absent) |
 | `tests/eval/` | **Planned** — eval harness (LLM-as-judge on fixtures) |
 | `scripts/` | Dev/ops helpers (build-docker, demo_standalone_search, watch-queries) |
-| `scripts/coach/` | **Planned** — mock_signals.py + assert_nudges.py |
+| `scripts/coach/` | mock_signals.py (fires synthetic signals at the webhook); assert_nudges.py still planned |
 | `scripts/airgap/` | **Planned** — preload-models.sh |
 | `docs/` | API.md, DOCKER.md, superpowers/specs/ |
 | `PIPELINE_CONTRACT.md` | **Planned** (repo root) — contract for the sibling pipeline repo |
@@ -124,7 +124,7 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 
 ### Open bugs flagged but not yet fixed
 
-- **Watsonx API surface drift**: `banko_ai/agents/llm_factory.py` uses `WatsonxLLM` (the deprecated `/ml/v1/text/generation` endpoint) with `decoding_method: "sample"` (also deprecated). Each request logs three `WatsonxAPIWarning`s. Migrate to `ChatWatsonx` and drop `decoding_method` before IBM removes the old endpoint.
+- Coach on Gemini is code-complete but never smoke-tested: the GCP project (cockroach-harsh-432021) lost Vertex access mid-test on July 15 (billing). When the project recovers, run the coach smoke (mock_signals x3 plus /api/coach/chat) with AI_SERVICE=gemini before claiming four-provider coverage.
 - The watsonx model dropdown lists every chat-capable model IBM returns, including code-tuned ones (`ibm/granite-8b-code-instruct`) that echo prompt templates on JSON extraction tasks. The `ReceiptExtraction` Pydantic gate now catches the bad payloads (422 instead of 500), but the dropdown still presents the foot-gun. Consider annotating models with a "suitable for structured extraction" hint, or filtering code-tuned models out of the JSON-extraction code paths.
 - `agent_memory.access_count` never incremented on read (defer to memory-system v2).
 - `SentenceTransformer` re-instantiated per call in `base_agent.py` (perf bug; fixing risks regression — defer).
@@ -133,7 +133,7 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 - `tests/test_env_config.py` is a print-script with module-level `sys.exit(0)`, not a pytest module — crashes collection. Both CI and the Makefile ignore it now. Rename to `scripts/check_env_config.py` or delete.
 - mypy carries about 200 findings that predate the July 2026 dep landing (verified identical against the May lockfile, so not upgrade fallout). The `make types` target is advisory, same as CI. Someone needs to budget a real typing pass; until then do not treat mypy output as a regression signal.
 - `tests/test_all_providers.py` is droid-era and stale: it imports the retired `ibm_watson_machine_learning` SDK and hardcodes 2024 model names, so it fails even with valid credentials. The real provider smoke is booting the app per provider. Rewrite it against `banko_ai/ai_providers/` or delete it.
-- langchain-ibm 1.1 logs a DeprecationWarning ('apikey' parameter, use 'api_key') from our watsonx wiring. Cosmetic today, breaks whenever they remove the alias. Same neighborhood as the WatsonxLLM migration above, fix them together.
+- The ibm-watsonx-ai SDK prints a third-party-license WatsonxAPIWarning on every agent LLM call while the default model is non-IBM (openai/gpt-oss-120b). Informational, not an error; switching WATSONX_MODEL to an ibm/granite model silences it.
 
 ## Deployment modes (all three must keep working)
 
@@ -173,12 +173,8 @@ CI is **not enough**. CI gates on lint/unit/integration, but the multi-provider 
 
 ## Active design docs
 
-- `docs/superpowers/specs/2026-05-21-proactive-spending-coach-design.md` — current flagship enhancement (Coach + Supervisor + OTel + MCP + Eval + Ollama airgap + housekeeping). ~11 days of work. v1 in progress.
-- `docs/superpowers/specs/2026-07-15-dependency-upgrade-design.md` — landed July 2026: preflight housekeeping merged to main, lockfile refreshed (superseded 21 open dep PRs), coach branch rebased on top. Both files live on the coach branch.
-
-## Where Coach v1 lives
-
-`feat/coach-core-v1a` (pushed to origin) holds the Coach v1a implementation: `banko_ai/coach/` (agent, signal handler, insights, Kafka consumer, tools), the `/api/cdc/signals` webhook, a Live Coach UI tab, migrations, and 11 test suites, plus the v1b and v1c plans under `docs/superpowers/plans/`. Rebased onto main and green as of July 2026. Whether to finish, merge, or park it is an open decision.
+- `docs/superpowers/specs/2026-05-21-proactive-spending-coach-design.md` — flagship enhancement. Coach v1a (reactive nudges, conversational mode, webhook + Kafka transports, Live Coach UI) merged to main July 2026 as v1.1.0. Still open from the spec: v1b (Supervisor, MCP server, eval harness) and v1c (OTel, Ollama airgap, docs) — plans for both live in `docs/superpowers/plans/`.
+- `docs/superpowers/specs/2026-07-15-dependency-upgrade-design.md` — landed July 2026: preflight housekeeping merged to main, lockfile refreshed (superseded 21 open dep PRs).
 
 ## Where the auto-memory lives
 
