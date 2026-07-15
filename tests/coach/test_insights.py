@@ -72,10 +72,11 @@ def _seed_expense(db_url: str, *, amount: float, category: str,
         conn.execute(text("""
             INSERT INTO expenses
               (expense_id, user_id, expense_date, expense_amount,
-               shopping_type, description, merchant)
-            VALUES (:id, :u, :d, :a, :c, :desc, :m)
+               shopping_type, description, merchant, payment_method)
+            VALUES (:id, :u, :d, :a, :c, :desc, :m, :pm)
         """), {"id": str(uuid.uuid4()), "u": TEST_USER, "d": expense_date,
-               "a": amount, "c": category, "desc": description, "m": merchant})
+               "a": amount, "c": category, "desc": description, "m": merchant,
+               "pm": "Credit Card"})
     eng.dispose()
 
 

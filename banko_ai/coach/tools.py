@@ -24,7 +24,6 @@ from .insights import (
     get_top_merchants,
 )
 
-
 _DEFAULT_BUDGETS_USD = {
     "dining": 400.0,
     "groceries": 600.0,

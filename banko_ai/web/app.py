@@ -1479,6 +1479,7 @@ def create_app() -> Flask:
     @app.route("/api/coach/nudges", methods=["GET"])
     def coach_list_nudges():
         from sqlalchemy import create_engine
+
         from ..config.settings import get_config
         cfg = get_config()
         user_id = (request.args.get("user_id") or session.get("user_id")
@@ -1550,8 +1551,9 @@ def create_app() -> Flask:
 
     @app.route("/health/coach", methods=["GET"])
     def health_coach():
-        from ..config.settings import get_config
         from sqlalchemy import create_engine
+
+        from ..config.settings import get_config
         cfg = get_config()
         db_url = os.getenv("DATABASE_URL")
         last_nudge_at = None

@@ -46,7 +46,7 @@ class Signal:
     )
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Signal":
+    def from_dict(cls, d: dict[str, Any]) -> Signal:
         required = ("signal_id", "user_id", "signal_type", "severity",
                     "payload", "idempotency_key")
         missing = [k for k in required if k not in d]

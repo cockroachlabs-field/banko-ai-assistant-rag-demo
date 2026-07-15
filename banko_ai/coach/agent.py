@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from .signals import Signal
 from .tools import COACH_TOOLS
-
 
 log = logging.getLogger("banko.coach.agent")
 
@@ -122,7 +122,7 @@ class CoachAgent:
     provider_name: str = "unknown"
     tool_overrides: dict[str, Callable[..., Any]] = field(default_factory=dict)
     max_steps: int = 5
-    checkpointer: Optional[Any] = None
+    checkpointer: Any | None = None
 
     def react(self, signal: Signal) -> dict[str, Any]:
         """Reactive mode: signal in, nudge out."""

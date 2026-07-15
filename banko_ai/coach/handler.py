@@ -19,14 +19,14 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Protocol
+from typing import Any, Protocol
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
 from .signals import Signal, SignalType
-
 
 log = logging.getLogger("banko.coach.handler")
 

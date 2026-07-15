@@ -24,12 +24,12 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Optional
 
 from .handler import SignalHandler
 from .signals import Signal, SignalParseError
-
 
 log = logging.getLogger("banko.coach.kafka")
 
@@ -39,7 +39,7 @@ class SignalsKafkaConsumer:
     handler: SignalHandler
     kafka_consumer_factory: Callable[[], Iterable[Any]]
     commit_fn: Callable[[Any], None]
-    dlq_send_fn: Optional[Callable[[bytes, str], None]] = None
+    dlq_send_fn: Callable[[bytes, str], None] | None = None
     backoff_seconds: tuple[int, ...] = (1, 2, 5, 10, 30)
 
     def run_forever(self) -> None:
@@ -108,7 +108,7 @@ def build_production_consumer(handler: SignalHandler,
     dlq_topic = f"{topic}.dlq"
 
     def commit_fn(msg):
-        from kafka import TopicPartition, OffsetAndMetadata
+        from kafka import OffsetAndMetadata, TopicPartition
         tp = TopicPartition(msg.topic, msg.partition)
         kc.commit({tp: OffsetAndMetadata(msg.offset + 1, None)})
 
