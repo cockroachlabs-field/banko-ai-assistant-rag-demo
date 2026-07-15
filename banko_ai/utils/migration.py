@@ -146,6 +146,20 @@ class DatabaseMigration:
                 """))
                 print("Created coach_nudges table")
 
+                # set_budget creates this lazily, but get_user_budget can run
+                # first (the nudge planner reads budgets), so it has to exist
+                # from boot like the other coach tables.
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS user_budgets (
+                      user_id   UUID NOT NULL,
+                      category  STRING NOT NULL,
+                      amount    DECIMAL NOT NULL,
+                      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                      PRIMARY KEY (user_id, category)
+                    )
+                """))
+                print("Created user_budgets table")
+
                 conn.commit()
                 return True
 
