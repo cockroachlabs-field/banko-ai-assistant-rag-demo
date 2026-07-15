@@ -54,6 +54,12 @@ def test_spending_signals_idempotency_key_unique(db_url):
 
     user_id = "00000000-0000-0000-0000-000000000aaa"
     with migrator.engine.connect() as conn:
+        # Nudges reference signals, so they have to go first or the signal
+        # delete trips the FK when an earlier test left nudges behind.
+        conn.execute(text(
+            "DELETE FROM coach_nudges WHERE signal_id IN "
+            "(SELECT signal_id FROM spending_signals WHERE user_id = :u)"
+        ), {"u": user_id})
         conn.execute(text("DELETE FROM spending_signals WHERE user_id = :u"),
                      {"u": user_id})
         conn.execute(text(
