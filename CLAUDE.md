@@ -69,12 +69,12 @@ Schema for `expenses` table is **shared** between both repos — keep them in sy
 
 - **Python**: 3.10+ (3.12 recommended)
 - **CockroachDB**: 25.4.0+ (vector indexes are GA)
-- **Embeddings**: `all-MiniLM-L6-v2` via sentence-transformers (384-dim, local)
+- **Embeddings**: `all-MiniLM-L6-v2` via sentence-transformers 5.x (384-dim, local). The 3.x to 5.x jump landed July 2026 with embedding parity verified (identical vectors), so nothing stored in CRDB needed re-embedding.
 - **Agent framework**: LangGraph 1.x
 - **Vector store / chat history / checkpointer**: `langchain-cockroachdb` 0.2.x
 - **Web**: Flask 3.1.3 + Flask-SocketIO + eventlet (prod) / threading (dev)
-- **Dep manager**: `uv` (lockfile is `uv.lock`)
-- **Testing**: pytest, ruff, mypy
+- **Dep manager**: `uv` (lockfile is `uv.lock`, refreshed wholesale July 2026; the deprecated vertexai SDK is gone, google-genai 2.x covers both Vertex and the public API)
+- **Testing**: pytest, ruff, mypy (mypy is advisory, see Open bugs)
 - **Docker**: multi-arch (amd64/arm64), images on Docker Hub at `virag/banko-ai-assistant`
 
 ## Conventions and gotchas — do not relearn these the hard way
@@ -103,7 +103,7 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 ### Caching
 
 - 3-layer cache: `query_cache` (semantic, 0.75 similarity threshold), `embedding_cache` (per-provider — provider is part of the unique key, this was a bug), `vector_search_cache`.
-- Cache hits are reported via `/api/cache/stats`.
+- Cache hits are reported via `/cache-stats` (not `/api/cache/stats`, which does not exist).
 - TTL default 24h; configurable.
 
 ### Frontend
@@ -130,7 +130,10 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 - `SentenceTransformer` re-instantiated per call in `base_agent.py` (perf bug; fixing risks regression — defer).
 - `documents` table schema drift between `database.py` and `agent_schema.py` (both create it; reconcile when next touching either).
 - `.gitignore:45` has unanchored `test_*.py` (intended for local utility scripts), which blocks new `tests/test_*.py` from being tracked — every new pytest module needs `git add -f`. Change to `/test_*.py` (root-anchored) or remove.
-- `tests/test_env_config.py` is a print-script with module-level `sys.exit(0)`, not a pytest module — crashes collection. CI already ignores it. Rename to `scripts/check_env_config.py` or delete.
+- `tests/test_env_config.py` is a print-script with module-level `sys.exit(0)`, not a pytest module — crashes collection. Both CI and the Makefile ignore it now. Rename to `scripts/check_env_config.py` or delete.
+- mypy carries about 200 findings that predate the July 2026 dep landing (verified identical against the May lockfile, so not upgrade fallout). The `make types` target is advisory, same as CI. Someone needs to budget a real typing pass; until then do not treat mypy output as a regression signal.
+- `tests/test_all_providers.py` is droid-era and stale: it imports the retired `ibm_watson_machine_learning` SDK and hardcodes 2024 model names, so it fails even with valid credentials. The real provider smoke is booting the app per provider. Rewrite it against `banko_ai/ai_providers/` or delete it.
+- langchain-ibm 1.1 logs a DeprecationWarning ('apikey' parameter, use 'api_key') from our watsonx wiring. Cosmetic today, breaks whenever they remove the alias. Same neighborhood as the WatsonxLLM migration above, fix them together.
 
 ## Deployment modes (all three must keep working)
 
@@ -142,12 +145,16 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 
 See `memory/project_airgap_first_class.md` — airgap is not optional, it is a first-class deployment target. Any new code must work in all three modes.
 
+Airgap status as of July 2026: there is no Ollama provider in `banko_ai/ai_providers/` yet, so `AI_SERVICE=ollama` fails to initialize. The provider is coach v1c work (`docs/superpowers/plans/2026-05-22-coach-v1c-observability-airgap-docs.md` on the coach branch). granite3.3:8b runs fine standalone via Ollama, so the gap is only the provider class.
+
 ## Running locally
 
 ```bash
-docker compose up -d                            # CRDB + banko (cloud-ready)
+docker compose up -d                                # CRDB + banko (cloud-ready)
 # OR
-docker compose -f docker-compose.airgap.yml up  # CRDB + banko + Ollama + Jaeger
+docker compose -f docker-compose.standalone.yml up  # single container demo
+# (docker-compose.airgap.yml arrives with coach v1c, along with the
+#  Ollama provider)
 ```
 
 Then visit http://localhost:5000. App generates 5000 sample expense records on first run.
@@ -155,17 +162,23 @@ Then visit http://localhost:5000. App generates 5000 sample expense records on f
 ## Testing locally (the required path before any push)
 
 ```bash
-make test-local        # unit + integration + eval (mock judge) + lint + types
-# Then:
-docs/coach-smoke-checklist.md   # 14-item human-driven gate, ~5-10 min
-# Then run smoke against EVERY provider (watsonx, OpenAI, AWS, Gemini, Ollama)
+make test-local        # ruff + advisory mypy + pytest (same ignore list as CI)
+# Then boot the app and smoke every implemented provider:
+#   watsonx, openai, aws, gemini (ollama once the v1c provider exists)
 ```
 
-CI is **not enough**. CI gates on lint/types/unit/integration/eval (mock judge), but the multi-provider smoke is a human-driven, locally-run check.
+The pytest target skips the same script style test files CI skips; they need a running app or live creds. `docs/coach-smoke-checklist.md` does not exist yet (it ships with Coach v1); until then the manual pass list lives in `docs/superpowers/plans/2026-07-15-dependency-upgrade-landing.md` Task 4: grounded chat answer, correct provider logo, receipt upload extracts fields, real dashboard activity, cache stats climb on a repeat query, relevant vector search, clean server log.
+
+CI is **not enough**. CI gates on lint/unit/integration, but the multi-provider smoke is a human-driven, locally-run check.
 
 ## Active design docs
 
 - `docs/superpowers/specs/2026-05-21-proactive-spending-coach-design.md` — current flagship enhancement (Coach + Supervisor + OTel + MCP + Eval + Ollama airgap + housekeeping). ~11 days of work. v1 in progress.
+- `docs/superpowers/specs/2026-07-15-dependency-upgrade-design.md` — landed July 2026: preflight housekeeping merged to main, lockfile refreshed (superseded 21 open dep PRs), coach branch rebased on top. Both files live on the coach branch.
+
+## Where Coach v1 lives
+
+`feat/coach-core-v1a` (pushed to origin) holds the Coach v1a implementation: `banko_ai/coach/` (agent, signal handler, insights, Kafka consumer, tools), the `/api/cdc/signals` webhook, a Live Coach UI tab, migrations, and 11 test suites, plus the v1b and v1c plans under `docs/superpowers/plans/`. Rebased onto main and green as of July 2026. Whether to finish, merge, or park it is an open decision.
 
 ## Where the auto-memory lives
 
