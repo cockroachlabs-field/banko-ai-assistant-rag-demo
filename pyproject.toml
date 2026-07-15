@@ -122,7 +122,10 @@ select = ["E", "F", "I", "UP"]
 ignore = ["E501", "E402", "F401"]
 
 [tool.mypy]
-python_version = "3.10"
+# 3.12 to match the version CI lints with. numpy 2.5 stubs use PEP 695
+# type statements, which mypy refuses under a 3.10 target. Runtime support
+# for 3.10 is still covered by the import matrix in ci.yml.
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false

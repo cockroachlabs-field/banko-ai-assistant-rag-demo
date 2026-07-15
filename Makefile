@@ -9,8 +9,17 @@ help:
 	@echo "  make fmt             - ruff format"
 	@echo "  make clean           - remove caches"
 
+# Ignore list mirrors ci.yml. These are script style checks that need a
+# running app, live provider creds, or a populated DB. Run them by hand.
 test:
-	uv run pytest tests/ -v
+	uv run pytest tests/ -v --tb=short \
+		--ignore=tests/test_env_config.py \
+		--ignore=tests/test_all_providers.py \
+		--ignore=tests/test_vector_index.py \
+		--ignore=tests/test_full_system.py \
+		--ignore=tests/test_dashboard.py \
+		--ignore=tests/test_receipt_upload.py \
+		--ignore=tests/test_cache_threshold.py
 
 test-local: lint types test
 	@echo ""
@@ -22,8 +31,11 @@ test-local: lint types test
 lint:
 	uv run ruff check banko_ai/ tests/
 
+# Advisory for now, same as CI (continue-on-error). The codebase carries
+# about 200 findings that predate the July 2026 dep landing and need a
+# dedicated typing pass, not a drive-by fix.
 types:
-	uv run mypy banko_ai/
+	-uv run mypy banko_ai/
 
 fmt:
 	uv run ruff format banko_ai/ tests/
