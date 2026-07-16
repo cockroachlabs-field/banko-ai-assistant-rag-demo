@@ -445,10 +445,6 @@ LangGraph Checkpointer:
   CHECKPOINT_TTL_DAYS         Auto-expire checkpoints after N days (default: 7, 0 = disabled)
                               Uses CockroachDB row-level TTL for automatic background cleanup.
 
-  Quick start scripts:
-  - ./start_demo_mode.sh      # Aggressive caching for demos
-  - ./start_production_mode.sh  # Balanced for production
-
 QUICK START:
 -----------
 1. Set up required variables:

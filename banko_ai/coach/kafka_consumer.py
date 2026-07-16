@@ -110,7 +110,9 @@ def build_production_consumer(handler: SignalHandler,
     def commit_fn(msg):
         from kafka import OffsetAndMetadata, TopicPartition
         tp = TopicPartition(msg.topic, msg.partition)
-        kc.commit({tp: OffsetAndMetadata(msg.offset + 1, None)})
+        # kafka-python 2.3 added a required leader_epoch field; -1 means
+        # unknown, which the broker accepts for plain offset commits.
+        kc.commit({tp: OffsetAndMetadata(msg.offset + 1, None, -1)})
 
     def dlq_send_fn(raw_value: bytes, error: str):
         producer.send(dlq_topic, raw_value,

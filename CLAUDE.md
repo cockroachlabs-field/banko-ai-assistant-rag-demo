@@ -54,9 +54,9 @@ Full architecture diagram in `docs/superpowers/specs/2026-05-21-proactive-spendi
 | `tests/` | 16+ test suites; integration tests need a populated DB (skipped in CI when DB is absent) |
 | `tests/eval/` | **Planned** — eval harness (LLM-as-judge on fixtures) |
 | `scripts/` | Dev/ops helpers (build-docker, demo_standalone_search, watch-queries) |
-| `scripts/coach/` | mock_signals.py (fires synthetic signals at the webhook); assert_nudges.py still planned |
+| `scripts/coach/` | mock_signals.py (synthetic signals at the webhook), assert_nudges.py (automated e2e smoke), cdc-demo/ (Kafka + Debezium bootstrap) |
 | `scripts/airgap/` | **Planned** — preload-models.sh |
-| `docs/` | API.md, DOCKER.md, superpowers/specs/ |
+| `docs/` | API.md, DOCKER.md (public). `docs/superpowers/` (specs, plans, handoffs) is local-only and gitignored — internal working docs never go to the public repo |
 | `PIPELINE_CONTRACT.md` | **Planned** (repo root) — contract for the sibling pipeline repo |
 
 ## Sibling repo (you will touch its outputs, not its code)
@@ -130,9 +130,7 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 - `SentenceTransformer` re-instantiated per call in `base_agent.py` (perf bug; fixing risks regression — defer).
 - `documents` table schema drift between `database.py` and `agent_schema.py` (both create it; reconcile when next touching either).
 - `.gitignore:45` has unanchored `test_*.py` (intended for local utility scripts), which blocks new `tests/test_*.py` from being tracked — every new pytest module needs `git add -f`. Change to `/test_*.py` (root-anchored) or remove.
-- `tests/test_env_config.py` is a print-script with module-level `sys.exit(0)`, not a pytest module — crashes collection. Both CI and the Makefile ignore it now. Rename to `scripts/check_env_config.py` or delete.
 - mypy carries about 200 findings that predate the July 2026 dep landing (verified identical against the May lockfile, so not upgrade fallout). The `make types` target is advisory, same as CI. Someone needs to budget a real typing pass; until then do not treat mypy output as a regression signal.
-- `tests/test_all_providers.py` is droid-era and stale: it imports the retired `ibm_watson_machine_learning` SDK and hardcodes 2024 model names, so it fails even with valid credentials. The real provider smoke is booting the app per provider. Rewrite it against `banko_ai/ai_providers/` or delete it.
 - The ibm-watsonx-ai SDK prints a third-party-license WatsonxAPIWarning on every agent LLM call while the default model is non-IBM (openai/gpt-oss-120b). Informational, not an error; switching WATSONX_MODEL to an ibm/granite model silences it.
 
 ## Deployment modes (all three must keep working)
@@ -167,11 +165,11 @@ make test-local        # ruff + advisory mypy + pytest (same ignore list as CI)
 #   watsonx, openai, aws, gemini (ollama once the v1c provider exists)
 ```
 
-The pytest target skips the same script style test files CI skips; they need a running app or live creds. `docs/coach-smoke-checklist.md` does not exist yet (it ships with Coach v1); until then the manual pass list lives in `docs/superpowers/plans/2026-07-15-dependency-upgrade-landing.md` Task 4: grounded chat answer, correct provider logo, receipt upload extracts fields, real dashboard activity, cache stats climb on a repeat query, relevant vector search, clean server log.
+The pytest target skips the same script style test files CI skips; they need a running app or live creds. The coach end to end smoke is automated: boot the app, then `uv run python scripts/coach/assert_nudges.py` (webhook transport) or `--via sql` (exercises the real CDC path when the cdc-demo stack is up). The rest of the manual pass list: grounded chat answer, correct provider logo, receipt upload extracts fields, real dashboard activity, cache stats climb on a repeat query, relevant vector search, clean server log.
 
 CI is **not enough**. CI gates on lint/unit/integration, but the multi-provider smoke is a human-driven, locally-run check.
 
-## Active design docs
+## Active design docs (local-only, gitignored)
 
 - `docs/superpowers/specs/2026-05-21-proactive-spending-coach-design.md` — flagship enhancement. Coach v1a (reactive nudges, conversational mode, webhook + Kafka transports, Live Coach UI) merged to main July 2026 as v1.1.0. Still open from the spec: v1b (Supervisor, MCP server, eval harness) and v1c (OTel, Ollama airgap, docs) — plans for both live in `docs/superpowers/plans/`.
 - `docs/superpowers/specs/2026-07-15-dependency-upgrade-design.md` — landed July 2026: preflight housekeeping merged to main, lockfile refreshed (superseded 21 open dep PRs).

@@ -13,8 +13,6 @@ help:
 # running app, live provider creds, or a populated DB. Run them by hand.
 test:
 	uv run pytest tests/ -v --tb=short \
-		--ignore=tests/test_env_config.py \
-		--ignore=tests/test_all_providers.py \
 		--ignore=tests/test_vector_index.py \
 		--ignore=tests/test_full_system.py \
 		--ignore=tests/test_dashboard.py \

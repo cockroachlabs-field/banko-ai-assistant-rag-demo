@@ -67,3 +67,6 @@ README.old.md
 
 # Debezium connector jars fetched by scripts/coach/cdc-demo/run-cdc-demo.sh
 scripts/coach/cdc-demo/connect-plugins/
+
+# Internal working docs (specs, plans, handoffs) stay local, never public
+docs/superpowers/
