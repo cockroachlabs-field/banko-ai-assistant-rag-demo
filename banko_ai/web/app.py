@@ -1385,6 +1385,34 @@ def create_app() -> Flask:
         app._coach_handler = handler
         return handler
 
+    def _maybe_start_kafka_consumer() -> None:
+        """Start the flag-gated Kafka transport in a daemon thread. The
+        webhook stays active either way; both transports share the handler,
+        so idempotency dedups any event that arrives twice."""
+        cfg = get_config()
+        if not cfg.coach_kafka_enabled:
+            return
+        if getattr(app, "_coach_kafka_thread", None) is not None:
+            return
+        import threading
+
+        from ..coach.kafka_consumer import build_production_consumer
+        bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+        topic = os.getenv("COACH_KAFKA_TOPIC", "banko.spending_signals")
+        consumer = build_production_consumer(
+            handler=_get_coach_handler(),
+            bootstrap_servers=bootstrap,
+            topic=topic,
+        )
+        t = threading.Thread(target=consumer.run_forever,
+                             name="coach-kafka-consumer", daemon=True)
+        t.start()
+        app._coach_kafka_thread = t
+        print(f"📡 Coach Kafka consumer started (topic={topic}, "
+              f"brokers={bootstrap})")
+
+    _maybe_start_kafka_consumer()
+
     def _claim_signal(sig) -> bool:
         """Atomically claim a signal for processing by inserting its row
         into spending_signals. Returns True if this call claimed it

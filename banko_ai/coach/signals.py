@@ -56,12 +56,22 @@ class Signal:
             signal_type = SignalType(d["signal_type"])
         except ValueError as e:
             raise SignalParseError(f"unknown signal_type: {d['signal_type']}") from e
+        payload = d["payload"] or {}
+        # Debezium and some changefeed sinks serialize JSONB columns as JSON
+        # strings rather than nested objects.
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError as e:
+                raise SignalParseError(f"payload is not valid JSON: {e}") from e
+        if not isinstance(payload, dict):
+            raise SignalParseError("payload must be a JSON object")
         return cls(
             signal_id=str(d["signal_id"]),
             user_id=str(d["user_id"]),
             signal_type=signal_type,
             severity=d["severity"],
-            payload=d["payload"] or {},
+            payload=payload,
             idempotency_key=d["idempotency_key"],
         )
 

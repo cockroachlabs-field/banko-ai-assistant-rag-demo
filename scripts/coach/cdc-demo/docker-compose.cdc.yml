@@ -1,0 +1,61 @@
+# Kafka + Kafka Connect for the real-CDC Coach demo. CockroachDB is NOT in
+# here on purpose: the connector points at whatever CRDB the app already
+# uses (local node or the repo's docker compose). Service layout follows
+# github.com/viragtripathi/debezium-cockroachdb-examples (crdb-to-crdb).
+#
+# Bring it up with run-cdc-demo.sh, which also fetches the connector plugin
+# and registers the spending_signals source.
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:${CONFLUENT_VERSION:-7.4.0}
+    hostname: zookeeper
+    container_name: banko-cdc-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:${CONFLUENT_VERSION:-7.4.0}
+    hostname: kafka
+    container_name: banko-cdc-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,HOST://0.0.0.0:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+  connect:
+    image: quay.io/debezium/connect:${DEBEZIUM_VERSION:-3.6.0.Final}
+    hostname: connect
+    container_name: banko-cdc-connect
+    depends_on:
+      - kafka
+    ports:
+      - "${CONNECT_PORT:-8084}:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: banko-cdc-connect
+      CONFIG_STORAGE_TOPIC: banko-cdc-connect-configs
+      OFFSET_STORAGE_TOPIC: banko-cdc-connect-offsets
+      STATUS_STORAGE_TOPIC: banko-cdc-connect-status
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    volumes:
+      - ./connect-plugins:/kafka/connect/debezium-connector-cockroachdb
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

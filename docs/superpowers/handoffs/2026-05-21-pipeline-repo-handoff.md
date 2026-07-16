@@ -1,6 +1,13 @@
 # Handoff prompt — pipeline repo (cockroachdb-watsonx-data-pipeline)
 
-Drafted 2026-05-21. **Local artifact only — not committed.**
+Drafted 2026-05-21, refreshed 2026-07-15 after Coach v1a merged to main.
+The contract details below were superseded by `PIPELINE_CONTRACT.md` at the
+banko repo root, which is generated from the implemented consumer and is
+canonical. Where this prompt and that file disagree, the file wins. Known
+drift already corrected there: the endpoint is `/api/cdc/signals` (not
+`/api/coach/signals`), the signature header is `X-Banko-Signature` (not
+`X-Signature`), the webhook body is a CRDB changefeed wrapped envelope (not
+a bare row), and payload amounts are plain decimals (not cents).
 
 This is the prompt to paste into your separate Claude Code session that is working on `~/idea_workspace/cockroachdb-watsonx-data-pipeline` so it can build the producer side of the **Proactive Spending Coach** contract while the banko-ai-assistant session builds the consumer side.
 
@@ -17,10 +24,15 @@ cockroachlabs-field/banko-ai-assistant). That repo is in the middle of
 adding a "Proactive Spending Coach" agent that consumes streaming
 spending signals from this pipeline.
 
-The full design lives in the banko-ai-assistant repo at:
-docs/superpowers/specs/2026-05-21-proactive-spending-coach-design.md
-(local, uncommitted — read it from the filesystem). Sections 3 (Data Flow)
-and 11 (PIPELINE_CONTRACT outline) describe what banko expects from us.
+The consumer side (Coach v1a) is MERGED and LIVE on banko's main as of
+July 2026. The canonical contract is PIPELINE_CONTRACT.md at the banko
+repo root, derived from the implemented consumer code. Read that file
+first; it defines the table DDL, the signal row shape, both transports
+(HMAC webhook and Kafka topic banko.spending_signals), and the payload
+schemas. The design background is
+docs/superpowers/specs/2026-05-21-proactive-spending-coach-design.md.
+Where anything below disagrees with PIPELINE_CONTRACT.md, the contract
+file wins.
 
 ## What we need to produce
 

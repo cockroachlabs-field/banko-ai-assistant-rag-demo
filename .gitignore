@@ -64,3 +64,6 @@ README.old.md
 # - README.md
 # - docs/API.md  
 # - docs/DOCKER.md
+
+# Debezium connector jars fetched by scripts/coach/cdc-demo/run-cdc-demo.sh
+scripts/coach/cdc-demo/connect-plugins/
