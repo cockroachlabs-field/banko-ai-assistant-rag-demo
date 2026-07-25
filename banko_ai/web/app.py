@@ -21,7 +21,7 @@ from ..coach.handler import SignalHandler
 from ..coach.signals import SignalParseError, parse_changefeed_envelope
 from ..config.settings import get_config
 from ..utils.cache_manager import BankoCacheManager
-from ..utils.db_retry import create_resilient_engine
+from ..utils.db_retry import create_resilient_engine, get_database_url
 from ..vector_search.generator import EnhancedExpenseGenerator
 from ..vector_search.search import VectorSearchEngine
 from .auth import UserManager
@@ -1491,7 +1491,7 @@ def create_app() -> Flask:
             return handler
         from ..coach.agent import CoachAgent, default_llm_invoker
         cfg = get_config()
-        db_url = os.getenv("DATABASE_URL")
+        db_url = get_database_url()
         agent = CoachAgent(
             database_url=db_url,
             llm_invoker=default_llm_invoker,
@@ -1546,7 +1546,7 @@ def create_app() -> Flask:
         from sqlalchemy import create_engine
         from sqlalchemy.exc import IntegrityError
         from sqlalchemy.pool import NullPool
-        eng = create_engine(os.getenv("DATABASE_URL"), poolclass=NullPool)
+        eng = create_engine(get_database_url(), poolclass=NullPool)
         try:
             try:
                 with eng.begin() as conn:
@@ -1646,7 +1646,7 @@ def create_app() -> Flask:
         user_id = (request.args.get("user_id") or session.get("user_id")
                    or cfg.coach_default_user_id)
         limit = min(int(request.args.get("limit", "20")), 100)
-        db_url = os.getenv("DATABASE_URL")
+        db_url = get_database_url()
         eng = create_engine(db_url)
         try:
             with eng.connect() as conn:
@@ -1672,7 +1672,7 @@ def create_app() -> Flask:
     def coach_get_nudge(nudge_id: str):
         from ..coach.tools import explain_nudge
         result = explain_nudge(nudge_id=nudge_id,
-                               database_url=os.getenv("DATABASE_URL"))
+                               database_url=get_database_url())
         if not result:
             return jsonify({"error": "not found"}), 404
         return jsonify(result)
@@ -1693,7 +1693,7 @@ def create_app() -> Flask:
                    if body.get("nudge_id") else None)
 
         agent = CoachAgent(
-            database_url=os.getenv("DATABASE_URL"),
+            database_url=get_database_url(),
             llm_invoker=default_llm_invoker,
             provider_name=cfg.ai_service,
             max_steps=cfg.coach_agent_max_steps,
@@ -1716,7 +1716,7 @@ def create_app() -> Flask:
 
         from ..config.settings import get_config
         cfg = get_config()
-        db_url = os.getenv("DATABASE_URL")
+        db_url = get_database_url()
         last_nudge_at = None
         db_ok = False
         if db_url:
