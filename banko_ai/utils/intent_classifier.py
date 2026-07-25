@@ -16,6 +16,8 @@ known financial signals.
 
 import difflib
 import re
+from dataclasses import dataclass
+from datetime import date, timedelta
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -177,3 +179,110 @@ def is_financial_query(query: str) -> bool:
     if max_fin >= SIMILARITY_THRESHOLD and max_fin > max_non_fin:
         return True
     return False
+
+
+# ── Aggregation intent ────────────────────────────────────────────────────
+# Questions like "how much did I spend on restaurants in the past 60 days"
+# must be answered by SQL, not by the LLM summing retrieval hits. This
+# stays lexical on purpose: no extra model calls, identical behavior on
+# every provider, works airgapped.
+
+@dataclass(frozen=True)
+class AggregationIntent:
+    operation: str          # sum | count | average
+    subject: str | None     # raw category phrase, None means all categories
+    window_start: date      # inclusive
+    window_end: date        # exclusive
+
+
+_OP_PATTERNS = [
+    ("average", r"\baverage\b|\bavg\b|\bmean\b"),
+    ("count", r"\bhow many\b|\bnumber of\b|\bcount\b"),
+    ("sum", r"\bhow much\b|\btotal\b|\bspent\b|\bspend\b|\bsum\b"),
+]
+
+_SUBJECT_RE = re.compile(
+    r"\b(?:on|for|at)\s+([a-z][a-z '&-]{2,30}?)"
+    r"(?:\s+(?:in|during|over|the|this|last|past|since)\b|[?.!,]|$)")
+
+# "average grocery spend", "total restaurant expenses": subject sits between
+# the operation word and a spend noun, no preposition involved.
+_SUBJECT_INLINE_RE = re.compile(
+    r"\b(?:average|avg|mean|total)\s+([a-z][a-z '&-]{2,30}?)\s+"
+    r"(?:spend|spending|expenses?|purchases?|costs?)\b")
+
+_WINDOW_PATTERNS = [
+    (re.compile(r"(?:past|last)\s+(\d+)\s+days?"), "days"),
+    (re.compile(r"(?:past|last)\s+(\d+)\s+weeks?"), "weeks"),
+    (re.compile(r"(?:past|last)\s+(\d+)\s+months?"), "months"),
+    (re.compile(r"this\s+month"), "this_month"),
+    (re.compile(r"last\s+month"), "last_month"),
+    (re.compile(r"this\s+year"), "this_year"),
+    (re.compile(r"since\s+([a-z]+)"), "since_month"),
+]
+
+_MONTHS = {m: i for i, m in enumerate(
+    ["january", "february", "march", "april", "may", "june", "july",
+     "august", "september", "october", "november", "december"], start=1)}
+
+
+def _resolve_window(q: str, today: date) -> tuple[date, date] | None:
+    for rx, kind in _WINDOW_PATTERNS:
+        m = rx.search(q)
+        if not m:
+            continue
+        end = today + timedelta(days=1)
+        if kind == "days":
+            return end - timedelta(days=int(m.group(1)) + 1), end
+        if kind == "weeks":
+            return end - timedelta(weeks=int(m.group(1)), days=1), end
+        if kind == "months":
+            return end - timedelta(days=30 * int(m.group(1)) + 1), end
+        if kind == "this_month":
+            start = today.replace(day=1)
+            nxt = (start.replace(year=start.year + 1, month=1)
+                   if start.month == 12
+                   else start.replace(month=start.month + 1))
+            return start, nxt
+        if kind == "last_month":
+            first_this = today.replace(day=1)
+            last_start = (first_this.replace(year=first_this.year - 1, month=12)
+                          if first_this.month == 1
+                          else first_this.replace(month=first_this.month - 1))
+            return last_start, first_this
+        if kind == "this_year":
+            return today.replace(month=1, day=1), end
+        if kind == "since_month":
+            mon = _MONTHS.get(m.group(1))
+            if mon:
+                yr = today.year if mon <= today.month else today.year - 1
+                return date(yr, mon, 1), end
+    return None
+
+
+def extract_window(query: str,
+                   today: date | None = None) -> tuple[date, date] | None:
+    """Public helper: the date window named in a question, or None. Used by
+    the RAG path to push a date predicate even for non-aggregation asks."""
+    return _resolve_window(query.lower(), today or date.today())
+
+
+def classify_aggregation(query: str,
+                         today: date | None = None) -> AggregationIntent | None:
+    q = query.lower().strip()
+    today = today or date.today()
+    op = next((name for name, rx in _OP_PATTERNS if re.search(rx, q)), None)
+    if op is None:
+        return None
+    # "show / list / recent / why" questions are retrieval or coach asks,
+    # not aggregation, even when a spend word appears.
+    if re.search(r"\bshow\b|\blist\b|\brecent\b|\bwhy\b|\bwhich\b", q):
+        return None
+    window = _resolve_window(q, today)
+    if window is None:
+        end = today + timedelta(days=1)
+        window = (end - timedelta(days=90), end)
+    m = _SUBJECT_RE.search(q) or _SUBJECT_INLINE_RE.search(q)
+    subject = m.group(1).strip() if m else None
+    return AggregationIntent(operation=op, subject=subject,
+                             window_start=window[0], window_end=window[1])
