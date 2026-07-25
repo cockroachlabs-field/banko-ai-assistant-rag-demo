@@ -22,6 +22,24 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+echo "== 0/5 cockroachdb"
+# The connector must watch the SAME database the app uses, so this script
+# never creates its own CockroachDB. It does make sure one is running:
+# a stopped repo container gets started, and if nothing is listening at
+# all, the repo compose brings one up (data lives on a named volume).
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cockroachdb$'; then
+    echo "   banko-cockroachdb already running"
+elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cockroachdb$'; then
+    docker start banko-cockroachdb >/dev/null
+    echo "   started existing banko-cockroachdb container"
+elif (echo > /dev/tcp/localhost/26257) 2>/dev/null; then
+    echo "   found a CockroachDB listening on localhost:26257"
+else
+    (cd "$(git -C . rev-parse --show-toplevel 2>/dev/null || echo ../../..)" \
+        && docker compose up -d cockroachdb)
+    echo "   brought up the repo compose cockroachdb"
+fi
+
 # When CockroachDB runs as the repo's compose container, talk to it over
 # the container network; otherwise assume a host process.
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cockroachdb$'; then
@@ -42,7 +60,7 @@ CONNECTOR_VERSION="${CONNECTOR_VERSION:-3.6.0.Final}"
 CONNECT_PORT="${CONNECT_PORT:-8084}"
 EXAMPLES_REPO="${EXAMPLES_REPO:-$HOME/idea_workspace/debezium-cockroachdb-examples}"
 
-echo "== 1/4 connector plugin"
+echo "== 1/5 connector plugin"
 if ls connect-plugins/debezium-connector-cockroachdb/*.jar >/dev/null 2>&1; then
     echo "   already present"
 elif ls "$EXAMPLES_REPO"/crdb-to-crdb/connect-plugins/debezium-connector-cockroachdb/*.jar >/dev/null 2>&1; then
@@ -58,7 +76,7 @@ else
     echo "   downloaded ${CONNECTOR_VERSION} from Maven Central"
 fi
 
-echo "== 2/4 kafka + connect"
+echo "== 2/5 kafka + connect"
 if ! docker compose -f docker-compose.cdc.yml up -d; then
     cat <<'HINT'
 Compose failed. If the error says "proxy already running", podman's port
@@ -88,11 +106,26 @@ curl -fs http://localhost:${CONNECT_PORT}/connectors >/dev/null 2>&1 || {
     exit 1
 }
 
-echo "== 3/4 rangefeed on ${CRDB_HOST}:${CRDB_PORT}/${CRDB_DB}"
-echo "   (needs: SET CLUSTER SETTING kv.rangefeed.enabled = true;)"
-echo "   run it yourself if the connector reports rangefeed errors."
+echo "== 3/5 rangefeed on ${CRDB_HOST}:${CRDB_PORT}/${CRDB_DB}"
+if [ "$CRDB_IS_CONTAINER" = "1" ]; then
+    printf "   waiting for the node"
+    for _ in $(seq 1 30); do
+        if docker exec banko-cockroachdb cockroach sql --insecure \
+            -e "SELECT 1" >/dev/null 2>&1; then
+            break
+        fi
+        printf "."
+        sleep 2
+    done
+    echo ""
+    docker exec banko-cockroachdb cockroach sql --insecure \
+        -e "SET CLUSTER SETTING kv.rangefeed.enabled = true" >/dev/null
+    echo "   enabled"
+else
+    echo "   (host node: run SET CLUSTER SETTING kv.rangefeed.enabled = true;)"
+fi
 
-echo "== 4/4 register connector"
+echo "== 4/5 register connector"
 CONFIG=$(sed -e "s|\${CRDB_HOST}|$CRDB_HOST|" \
              -e "s|\${CRDB_PORT}|$CRDB_PORT|" \
              -e "s|\${CRDB_USER}|$CRDB_USER|" \
@@ -103,6 +136,7 @@ curl -fs -X DELETE http://localhost:${CONNECT_PORT}/connectors/banko-spending-si
 echo "$CONFIG" | curl -fs -X POST -H 'Content-Type: application/json' \
     --data @- http://localhost:${CONNECT_PORT}/connectors >/dev/null
 sleep 3
+echo "== 5/5 connector status"
 curl -fs http://localhost:${CONNECT_PORT}/connectors/banko-spending-signals-source/status | python3 -m json.tool
 
 cat <<'EOF'
