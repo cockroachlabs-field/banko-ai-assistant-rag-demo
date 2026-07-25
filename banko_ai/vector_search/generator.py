@@ -16,6 +16,18 @@ from sqlalchemy import text
 from ..utils.db_retry import create_resilient_engine, get_database_url
 from .enrichment import DataEnricher
 
+PERSONAS = [
+    {"user_id": "00000000-0000-0000-0000-0000000000a1",
+     "name": "Maya", "style": "diner",
+     "blurb": "Eats out a lot, wants to know where the money goes"},
+    {"user_id": "00000000-0000-0000-0000-0000000000a2",
+     "name": "Sam", "style": "subscriber",
+     "blurb": "Subscriptions everywhere, one of them just got pricier"},
+    {"user_id": "00000000-0000-0000-0000-0000000000a3",
+     "name": "Riley", "style": "saver",
+     "blurb": "Light spender, mostly groceries and transit"},
+]
+
 
 class EnhancedExpenseGenerator:
     """Enhanced expense generator with data enrichment for better vector search."""
@@ -520,7 +532,105 @@ class EnhancedExpenseGenerator:
             self.clear_expenses()
         
         expenses = self.generate_expenses(count, user_id)
-        return self.save_expenses_to_database(expenses)
+        saved = self.save_expenses_to_database(expenses)
+        self._seed_personas()
+        return saved
+
+    def _seed_personas(self) -> None:
+        """Seed the three demo personas with dense, recent, patterned data.
+        Idempotent: a persona that already has rows is left alone. The
+        patterns are deliberate demo material: Maya answers aggregation
+        questions with a known ground truth, Sam trips the recurring-drift
+        coach signal, Riley shows a light spender."""
+        from sqlalchemy import text
+        today = datetime.now().date()
+        for persona in PERSONAS:
+            with self.engine.connect() as conn:
+                existing = conn.execute(
+                    text("SELECT count(*) FROM expenses WHERE user_id = :u"),
+                    {"u": persona["user_id"]}).scalar()
+            if existing:
+                continue
+            rows = self._persona_rows(persona, today)
+            texts = [r["searchable_text"] for r in rows]
+            vectors = self.embedding_model.encode(texts)
+            for row, vec in zip(rows, vectors):
+                row["embedding"] = vec.tolist()
+            self.save_expenses_to_database(rows)
+            print(f"🎭 Seeded persona {persona['name']} "
+                  f"({len(rows)} expenses)")
+
+    def _persona_row(self, user_id: str, days_ago: int, amount: float,
+                     category: str, merchant: str,
+                     payment: str = "Credit Card",
+                     recurring: bool = False) -> dict[str, Any]:
+        desc = (f"Spent ${amount:.2f} on {category.lower()} at {merchant} "
+                f"using {payment}.")
+        return {
+            "expense_id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "expense_date": (datetime.now() - timedelta(days=days_ago)).date(),
+            "expense_amount": amount,
+            "shopping_type": category,
+            "description": desc,
+            "merchant": merchant,
+            "payment_method": payment,
+            "recurring": recurring,
+            "tags": [category.lower(), merchant.lower().replace(" ", "_")],
+            "embedding": None,  # filled in batch by _seed_personas
+            "searchable_text": desc,
+        }
+
+    def _persona_rows(self, persona: dict, today) -> list[dict[str, Any]]:
+        uid = persona["user_id"]
+        rng = random.Random(uid)  # deterministic per persona
+        rows: list[dict[str, Any]] = []
+        if persona["style"] == "diner":
+            for _ in range(36):
+                rows.append(self._persona_row(
+                    uid, rng.randint(0, 118),
+                    round(rng.uniform(18.0, 85.0), 2), "Restaurant",
+                    rng.choice(["Pizza Hut", "Italian Bistro", "Domino's",
+                                "Thai Garden"])))
+            for _ in range(40):
+                rows.append(self._persona_row(
+                    uid, rng.randint(0, 118),
+                    round(rng.uniform(8.0, 140.0), 2),
+                    rng.choice(["Groceries", "Coffee", "Transport"]),
+                    rng.choice(["Whole Foods", "Starbucks", "Uber",
+                                "Local Market"])))
+        elif persona["style"] == "subscriber":
+            for months_ago in range(4, 2, -1):
+                rows.append(self._persona_row(
+                    uid, months_ago * 30, 15.99, "Subscription",
+                    "Netflix", recurring=True))
+            for months_ago in range(2, 0, -1):
+                rows.append(self._persona_row(
+                    uid, months_ago * 30, 22.99, "Subscription",
+                    "Netflix", recurring=True))
+            for months_ago in range(4, 0, -1):
+                rows.append(self._persona_row(
+                    uid, months_ago * 30 + 3,
+                    round(rng.uniform(95.0, 110.0), 2), "Utilities",
+                    "Electric Company", recurring=True))
+                rows.append(self._persona_row(
+                    uid, months_ago * 30 + 7, 79.99, "Utilities",
+                    "Internet Provider", recurring=True))
+            for _ in range(40):
+                rows.append(self._persona_row(
+                    uid, rng.randint(0, 118),
+                    round(rng.uniform(10.0, 120.0), 2),
+                    rng.choice(["Groceries", "Restaurant", "Shopping"]),
+                    rng.choice(["Whole Foods", "Italian Bistro", "Amazon",
+                                "Target"])))
+        else:  # saver
+            for _ in range(22):
+                rows.append(self._persona_row(
+                    uid, rng.randint(0, 118),
+                    round(rng.uniform(5.0, 60.0), 2),
+                    rng.choice(["Groceries", "Transport"]),
+                    rng.choice(["Local Market", "Metro Transit"])))
+        return rows
     
     def create_user_specific_indexes(self) -> bool:
         """Create user-specific vector indexes for CockroachDB."""

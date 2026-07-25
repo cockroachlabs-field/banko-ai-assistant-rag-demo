@@ -1,0 +1,65 @@
+# Airgap demo: CockroachDB + Banko + Ollama, no external network needed at
+# demo time. Run scripts/airgap/preload-models.sh once while online to cache
+# the model, then this stack works with the wifi off.
+
+services:
+  cockroachdb:
+    image: cockroachdb/cockroach:${COCKROACHDB_VERSION:-v25.4.13}
+    container_name: banko-airgap-cockroachdb
+    hostname: cockroachdb
+    ports:
+      - "26257:26257"
+      - "8080:8080"
+    command: start-single-node --insecure
+    volumes:
+      - cockroach-data:/cockroach/cockroach-data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health?ready=1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - banko-airgap
+
+  ollama:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    container_name: banko-airgap-ollama
+    hostname: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    networks:
+      - banko-airgap
+
+  banko-ai:
+    image: virag/banko-ai-assistant:${BANKO_VERSION:-latest}
+    container_name: banko-airgap-app
+    ports:
+      - "5000:5000"
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      - DATABASE_URL=cockroachdb://root@cockroachdb:26257/defaultdb?sslmode=disable
+      # Demo default; set your own for anything beyond a local demo
+      - SECRET_KEY=${SECRET_KEY:-local-demo-secret-change-me}
+      - AI_SERVICE=ollama
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-granite3.3:8b}
+      - CDC_WEBHOOK_HMAC_SECRET=${CDC_WEBHOOK_HMAC_SECRET:-airgap-demo-secret}
+      - CACHE_SIMILARITY_THRESHOLD=${CACHE_SIMILARITY_THRESHOLD:-0.75}
+      - CACHE_TTL_HOURS=${CACHE_TTL_HOURS:-24}
+    networks:
+      - banko-airgap
+
+volumes:
+  cockroach-data:
+  ollama-models:
+
+networks:
+  banko-airgap:
+    driver: bridge

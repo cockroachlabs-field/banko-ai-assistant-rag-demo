@@ -87,5 +87,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Set entrypoint
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
-# Default command - use gunicorn for production
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "4", "--bind", "0.0.0.0:5000", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "banko_ai.web.app:create_app()"]
+# Default command - gunicorn with threaded workers. The app runs
+# Flask-SocketIO in threading mode (long-polling transport), and gunicorn
+# 26 removed the eventlet worker class the old command asked for.
+# One worker: SocketIO sessions and the in-process coach queue don't
+# share state across processes.
+CMD ["gunicorn", "--worker-class", "gthread", "-w", "1", "--threads", "16", "--bind", "0.0.0.0:5000", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "banko_ai.web.app:create_app()"]

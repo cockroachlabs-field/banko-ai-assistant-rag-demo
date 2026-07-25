@@ -56,7 +56,8 @@ All CockroachDB-specific pieces come from
 
 - Python 3.10+ (3.12 recommended)
 - CockroachDB v25.4.0+ (vector indexes are GA)
-- An API key for at least one provider (watsonx, OpenAI, AWS, or Gemini)
+- An API key for at least one provider (watsonx, OpenAI, AWS, or Gemini),
+  or a local model through Ollama (no key, no internet)
 
 ### Install
 
@@ -99,6 +100,22 @@ Open <http://localhost:5000>.
 `search`, etc.). The first run creates the schema (expense, agent, cache,
 checkpoint tables), generates sample data with embeddings, and initializes
 the selected provider.
+
+### Run it offline (airgap)
+
+The whole stack runs without internet: embeddings are computed locally,
+and the LLM can be a local model served by Ollama. Cache the model once
+while online, then start the stack with the network off:
+
+```bash
+scripts/airgap/preload-models.sh                    # once, while online
+docker compose -f docker-compose.airgap.yml up -d   # works offline
+```
+
+Default model is granite3.3:8b (override with `OLLAMA_MODEL`). For a
+non-Docker setup, `ollama serve` plus `AI_SERVICE=ollama banko-ai run`
+does the same thing. Any OpenAI-compatible endpoint also works via
+`OPENAI_BASE_URL` with `AI_SERVICE=openai`.
 
 ## Configuration
 

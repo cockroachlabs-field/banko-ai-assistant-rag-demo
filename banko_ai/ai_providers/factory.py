@@ -10,6 +10,7 @@ from typing import Any
 from .aws_provider import AWSProvider
 from .base import AIProvider, AIProviderError
 from .gemini_provider import GeminiProvider
+from .ollama_provider import OllamaProvider
 from .openai_provider import OpenAIProvider
 from .watsonx_provider import WatsonxProvider
 
@@ -22,6 +23,7 @@ class AIProviderFactory:
         "aws": AWSProvider,
         "watsonx": WatsonxProvider,
         "gemini": GeminiProvider,
+        "ollama": OllamaProvider,
     }
     
     @classmethod

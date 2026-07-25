@@ -52,6 +52,11 @@ def get_provider_display_info(ai_service, ai_provider=None, current_model=None, 
             'name': 'OpenAI',
             'icon_file': 'openai-icon.svg',  # Fallback to watsonx icon for now
             'icon_alt': 'OpenAI'
+        },
+        'ollama': {
+            'name': 'Ollama (local)',
+            'icon_file': 'roach-logo.svg',  # local-first badge until a dedicated icon lands
+            'icon_alt': 'Ollama local model'
         }
     }
     
@@ -254,10 +259,13 @@ def create_app() -> Flask:
     @app.route('/')
     def index():
         """Main application page."""
-        # Ensure user is logged in
-        user_manager.get_current_user()['id'] if user_manager.get_current_user() else None
-        current_user = user_manager.get_current_user()
-        
+        # First visit goes to the persona picker; everything downstream
+        # scopes to the chosen persona.
+        if not session.get('user_id'):
+            return redirect(url_for('login'))
+        current_user = {'id': session['user_id'],
+                        'username': session.get('username', 'Demo')}
+
         # Get AI provider info for display
         ai_provider_display = get_provider_display_info(config.ai_service, ai_provider)
         
@@ -267,21 +275,85 @@ def create_app() -> Flask:
     
     @app.route('/login', methods=['GET', 'POST'])
     def login():
-        """User login page."""
+        """Demo persona picker. Every downstream query scopes to the choice."""
+        from banko_ai.vector_search.generator import PERSONAS
         if request.method == 'POST':
-            username = request.form.get('username')
-            if username:
-                user_id = user_manager.create_user(username)
-                user_manager.login_user(user_id)
+            chosen = request.form.get('persona_id')
+            persona = next((p for p in PERSONAS if p["user_id"] == chosen), None)
+            if persona:
+                session['user_id'] = persona["user_id"]
+                session['username'] = persona["name"]
                 return redirect(url_for('index'))
-        
-        return render_template('login.html')
+        return render_template('login.html', personas=PERSONAS)
+
+    def current_demo_user() -> str:
+        """The session persona, falling back to the coach default so API
+        callers without a session still get scoped, sensible answers."""
+        return session.get('user_id') or config.coach_default_user_id
+
+    def _render_aggregation_markdown(agg) -> str:
+        """Deterministic answer card for aggregation questions. Numbers come
+        straight from SQL; nothing here passes through a model."""
+        window = f"{agg.window_start} to {agg.window_end}"
+        scope = agg.category or "all categories"
+        if agg.operation == "count":
+            headline = (f"You made **{agg.count} transactions** on {scope} "
+                        f"between {window}.")
+        elif agg.operation == "average":
+            headline = (f"Your average {scope} transaction was "
+                        f"**${agg.average:,.2f}** between {window} "
+                        f"({agg.count} transactions, ${agg.total:,.2f} total).")
+        else:
+            headline = (f"You spent **${agg.total:,.2f}** on {scope} "
+                        f"between {window} ({agg.count} transactions).")
+        if not agg.count:
+            return (f"No matching transactions on {scope} between {window}. "
+                    f"Try a wider window or a different category.")
+        lines = [headline, "", "| Date | Merchant | Amount |", "|---|---|---|"]
+        for row in agg.rows:
+            lines.append(f"| {row['date']} | {row['merchant']} "
+                         f"| ${row['amount']:,.2f} |")
+        return "\n".join(lines)
+
+    def _aggregation_insights(agg, question: str) -> str | None:
+        """One short LLM pass over the SQL result. The figures arrive
+        pre-computed and the prompt forbids new arithmetic, so the model
+        adds judgment, not math. Any failure just means no insights block."""
+        try:
+            from banko_ai.agents.llm_factory import get_llm_for_agent
+            merchants = {}
+            for row in agg.rows:
+                merchants[row["merchant"]] = (
+                    merchants.get(row["merchant"], 0) + row["amount"])
+            top = sorted(merchants.items(), key=lambda kv: -kv[1])[:3]
+            top_text = ", ".join(f"{m} (${v:,.2f})" for m, v in top)
+            prompt = (
+                "You are a personal finance coach. Exact figures, already "
+                f"computed from the user's expense database: total "
+                f"${agg.total:,.2f} across {agg.count} transactions on "
+                f"{agg.category or 'all categories'} between "
+                f"{agg.window_start} and {agg.window_end}. "
+                f"Top merchants: {top_text}. "
+                f"The user asked: \"{question}\". Write two or three short, "
+                "specific observations or suggestions as markdown bullets. "
+                "Use only the figures given; do not compute new totals or "
+                "restate the question. No headings, bullets only.")
+            llm = get_llm_for_agent(temperature=0.4)
+            raw = llm.invoke(prompt)
+            text = raw.content if hasattr(raw, "content") else str(raw)
+            text = text.strip()
+            return text or None
+        except Exception as e:
+            print(f"aggregation insights skipped: {e}")
+            return None
     
     @app.route('/logout')
     def logout():
-        """User logout."""
+        """Back to the persona picker."""
+        session.pop('user_id', None)
+        session.pop('username', None)
         user_manager.logout_user()
-        return redirect(url_for('index'))
+        return redirect(url_for('login'))
     
     @app.route('/api/search', methods=['POST'])
     def api_search():
@@ -294,7 +366,7 @@ def create_app() -> Flask:
             # Use original simple logic - no user filtering
             results = search_engine.search_expenses(
                 query=query,
-                user_id=None,  # No user filtering like original
+                user_id=current_demo_user(),
                 limit=limit,
                 threshold=threshold
             )
@@ -352,7 +424,7 @@ def create_app() -> Flask:
             # Use original simple logic - no user filtering
             search_results = search_engine.search_expenses(
                 query=query,
-                user_id=None,  # No user filtering like original
+                user_id=current_demo_user(),
                 limit=5,
                 threshold=0.7
             )
@@ -361,7 +433,7 @@ def create_app() -> Flask:
             rag_response = ai_provider.generate_rag_response(
                 query=query,
                 context=search_results,
-                user_id=None,  # No user filtering like original
+                user_id=current_demo_user(),
                 language=language
             )
             
@@ -1053,14 +1125,44 @@ def create_app() -> Flask:
                                          ai_provider=ai_provider_display,
                                          current_page='banko')
 
+                # Agentic routing: aggregation questions go to SQL so the
+                # number is exact and identical on every provider. The LLM
+                # never does the arithmetic.
+                from banko_ai.utils.intent_classifier import classify_aggregation, extract_window
+                agg_intent = classify_aggregation(user_message)
+                if agg_intent is not None:
+                    from banko_ai.utils.aggregations import run_aggregation
+                    agg = run_aggregation(agg_intent, current_demo_user(),
+                                          config.database_url)
+                    agg_text = _render_aggregation_markdown(agg)
+                    if agg.count:
+                        insights = _aggregation_insights(agg, user_message)
+                        if insights:
+                            agg_text += "\n\n**Insights**\n\n" + insights
+                    session['chat'].append({'text': agg_text,
+                                            'class': 'Assistant'})
+                    try:
+                        from langchain_core.messages import AIMessage
+                        crdb_history.add_message(AIMessage(content=agg_text))
+                    except Exception:
+                        pass
+                    return render_template('index.html',
+                                           chat=session['chat'],
+                                           ai_provider=ai_provider_display,
+                                           current_page='banko')
+
                 try:
-                    # Use simple search that matches original implementation
-                    if hasattr(ai_provider, 'search_expenses'):
-                        # Use the simple search method that returns dictionaries like original
-                        search_results = ai_provider.search_expenses(prompt, limit=10)
-                    else:
-                        # Fallback to search engine simple method
-                        search_results = search_engine.simple_search_expenses(prompt, limit=10)
+                    # Retrieval questions: vector RAG scoped to the session
+                    # persona, with a date predicate when the question names
+                    # a window. The cache layers live inside the engine.
+                    window = extract_window(user_message)
+                    search_results = search_engine.search_expenses(
+                        query=prompt,
+                        user_id=current_demo_user(),
+                        limit=10,
+                        date_start=window[0] if window else None,
+                        date_end=window[1] if window else None,
+                    )
                     
                     print(f"Using {config.ai_service} for response generation in {target_language}")
                     

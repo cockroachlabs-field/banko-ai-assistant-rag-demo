@@ -79,7 +79,9 @@ class VectorSearchEngine:
         user_id: str | None = None,
         limit: int = 10,
         threshold: float = 0.7,
-        use_user_index: bool = True
+        use_user_index: bool = True,
+        date_start=None,
+        date_end=None,
     ) -> list[SearchResult]:
         """
         Search for expenses using vector similarity.
@@ -137,10 +139,15 @@ class VectorSearchEngine:
         search_embedding = json.dumps(raw_embedding.flatten().tolist())
         
         # Build SQL query based on whether we're using user-specific search
+        date_clause = ""
+        if date_start is not None:
+            date_clause += " AND expense_date >= :date_start"
+        if date_end is not None:
+            date_clause += " AND expense_date < :date_end"
         if user_id and use_user_index:
-            sql = self._build_user_specific_query()
+            sql = self._build_user_specific_query(date_clause)
         else:
-            sql = self._build_general_query()
+            sql = self._build_general_query(date_clause)
         
         # Prepare parameters as a dictionary
         params = {
@@ -150,6 +157,10 @@ class VectorSearchEngine:
 
         if user_id:
             params['user_id'] = user_id
+        if date_start is not None:
+            params['date_start'] = date_start
+        if date_end is not None:
+            params['date_end'] = date_end
 
         # Execute query
         start_time = time.time()
@@ -203,7 +214,7 @@ class VectorSearchEngine:
             
             return results
     
-    def _build_user_specific_query(self) -> str:
+    def _build_user_specific_query(self, date_clause: str = "") -> str:
         """Build SQL query for user-specific vector search."""
         return """
         SELECT 
@@ -219,12 +230,12 @@ class VectorSearchEngine:
             recurring,
             tags
         FROM expenses
-        WHERE user_id = :user_id
+        WHERE user_id = :user_id""" + date_clause + """
         ORDER BY embedding <=> :search_embedding
         LIMIT :limit
         """
     
-    def _build_general_query(self) -> str:
+    def _build_general_query(self, date_clause: str = "") -> str:
         """Build SQL query for general vector search."""
         return """
         SELECT 
@@ -240,6 +251,8 @@ class VectorSearchEngine:
             recurring,
             tags
         FROM expenses
+        """ + (("WHERE " + date_clause.lstrip()[4:].lstrip())
+               if date_clause else "") + """
         ORDER BY embedding <=> :search_embedding
         LIMIT :limit
         """
@@ -259,7 +272,7 @@ class VectorSearchEngine:
             shopping_type,
             COUNT(*) as category_count
         FROM expenses
-        WHERE user_id = :user_id
+        WHERE user_id = :user_id{date_clause}
         AND expense_date >= CURRENT_DATE - INTERVAL ':days days'
         GROUP BY shopping_type
         ORDER BY total_amount DESC

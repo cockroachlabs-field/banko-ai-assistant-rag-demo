@@ -29,6 +29,9 @@ class Config:
     # AI Service Configuration
     ai_service: str = "watsonx"  # openai, aws, watsonx, gemini
     openai_api_key: str | None = None
+    openai_base_url: str = ""
+    ollama_host: str = "http://localhost:11434"
+    ollama_model: str = "granite3.3:8b"
     openai_model: str = "gpt-4o-mini"  # gpt-4o-mini (default), gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
@@ -75,7 +78,7 @@ class Config:
     coach_rate_limit_per_5min: int = 30
     coach_agent_max_steps: int = 5
     coach_socketio_room_prefix: str = "coach:"
-    coach_default_user_id: str = "00000000-0000-0000-0000-000000000001"
+    coach_default_user_id: str = "00000000-0000-0000-0000-0000000000a1"
     coach_kafka_enabled: bool = False
     coach_tx_default_limit: int = 25
     coach_agg_lookback_days: int = 30
@@ -117,6 +120,9 @@ class Config:
             # AI Services
             ai_service=ai_service,
             openai_api_key=os.getenv("OPENAI_API_KEY"),
+            openai_base_url=os.getenv("OPENAI_BASE_URL", ""),
+            ollama_host=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
+            ollama_model=os.getenv("OLLAMA_MODEL", "granite3.3:8b"),
             openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
@@ -165,7 +171,7 @@ class Config:
             coach_socketio_room_prefix=os.getenv("COACH_SOCKETIO_ROOM_PREFIX", "coach:"),
             coach_default_user_id=os.getenv(
                 "COACH_DEFAULT_USER_ID",
-                "00000000-0000-0000-0000-000000000001",
+                "00000000-0000-0000-0000-0000000000a1",
             ),
             coach_kafka_enabled=os.getenv("COACH_KAFKA_ENABLED", "false").lower() == "true",
             coach_tx_default_limit=int(os.getenv("COACH_TX_DEFAULT_LIMIT", "25")),
@@ -181,6 +187,7 @@ class Config:
             "service": self.ai_service,
             "openai": {
                 "api_key": self.openai_api_key,
+                "base_url": self.openai_base_url,
                 "model": self.openai_model,
             },
             "aws": {
@@ -189,6 +196,10 @@ class Config:
                 "profile_name": self.aws_profile,
                 "region": self.aws_region,
                 "model": self.aws_model,
+            },
+            "ollama": {
+                "host": self.ollama_host,
+                "model": self.ollama_model,
             },
             "watsonx": {
                 "api_key": self.watsonx_api_key,
