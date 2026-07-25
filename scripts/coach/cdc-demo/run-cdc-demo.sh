@@ -22,11 +22,22 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-CRDB_HOST="${CRDB_HOST:-host.docker.internal}"
+# When CockroachDB runs as the repo's compose container, talk to it over
+# the container network; otherwise assume a host process.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cockroachdb$'; then
+    CRDB_DEFAULT_HOST="banko-cockroachdb"
+    KAFKA_URI_DEFAULT="kafka://kafka:9092"
+    CRDB_IS_CONTAINER=1
+else
+    CRDB_DEFAULT_HOST="host.docker.internal"
+    KAFKA_URI_DEFAULT="kafka://localhost:29092"
+    CRDB_IS_CONTAINER=0
+fi
+CRDB_HOST="${CRDB_HOST:-$CRDB_DEFAULT_HOST}"
 CRDB_PORT="${CRDB_PORT:-26257}"
 CRDB_USER="${CRDB_USER:-root}"
 CRDB_DB="${CRDB_DB:-defaultdb}"
-CHANGEFEED_KAFKA_URI="${CHANGEFEED_KAFKA_URI:-kafka://localhost:29092}"
+CHANGEFEED_KAFKA_URI="${CHANGEFEED_KAFKA_URI:-$KAFKA_URI_DEFAULT}"
 CONNECTOR_VERSION="${CONNECTOR_VERSION:-3.6.0.Final}"
 CONNECT_PORT="${CONNECT_PORT:-8084}"
 EXAMPLES_REPO="${EXAMPLES_REPO:-$HOME/idea_workspace/debezium-cockroachdb-examples}"
@@ -48,7 +59,21 @@ else
 fi
 
 echo "== 2/4 kafka + connect"
-docker compose -f docker-compose.cdc.yml up -d
+if ! docker compose -f docker-compose.cdc.yml up -d; then
+    cat <<'HINT'
+Compose failed. If the error says "proxy already running", podman's port
+forwarder is stuck (it happens after sleep or reboot). Recover with:
+    podman machine stop && podman machine start
+    docker compose -f docker-compose.cdc.yml down
+    ./run-cdc-demo.sh
+Databases live on named volumes; nothing is lost by the restart.
+HINT
+    exit 1
+fi
+if [ "$CRDB_IS_CONTAINER" = "1" ]; then
+    docker network connect cdc-demo_default banko-cockroachdb 2>/dev/null || true
+    echo "   banko-cockroachdb joined the cdc network"
+fi
 printf "   waiting for connect"
 for _ in $(seq 1 60); do
     if curl -fs http://localhost:${CONNECT_PORT}/connectors >/dev/null 2>&1; then
