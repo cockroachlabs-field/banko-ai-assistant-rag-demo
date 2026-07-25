@@ -25,7 +25,7 @@ Flask + SocketIO web app
   │     ├── OpenAI
   │     ├── AWS Bedrock (internally identified as "aws", not "bedrock")
   │     ├── Google Gemini
-  │     └── Ollama (planned — for airgap)
+  │     └── Ollama (local models; airgap default granite3.3:8b)
   ├── Vector RAG (langchain-cockroachdb 0.2.x, C-SPANN cosine indexes,
   │     384-dim all-MiniLM-L6-v2 embeddings — local, no API key)
   ├── Cache layer (3 tiers: query, embedding, vector_search, all in CRDB)
@@ -55,7 +55,7 @@ A fuller architecture diagram lives in the internal design docs (local-only, see
 | `tests/eval/` | **Planned** — eval harness (LLM-as-judge on fixtures) |
 | `scripts/` | Dev/ops helpers (build-docker, demo_standalone_search, watch-queries) |
 | `scripts/coach/` | mock_signals.py (synthetic signals at the webhook), assert_nudges.py (automated e2e smoke), cdc-demo/ (Kafka + Debezium bootstrap) |
-| `scripts/airgap/` | **Planned** — preload-models.sh |
+| `scripts/airgap/` | preload-models.sh (cache the Ollama model for offline runs) |
 | `docs/` | API.md, DOCKER.md (public). `docs/superpowers/` (specs, plans, handoffs) is local-only and gitignored — internal working docs never go to the public repo |
 | `PIPELINE_CONTRACT.md` | **Planned** (repo root) — contract for the sibling pipeline repo |
 
@@ -83,7 +83,7 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 
 ### LLM and AI
 
-- **Default provider is watsonx**. Override via `AI_SERVICE=openai|aws|gemini|ollama` env var. The UI provider switcher must key on `AI_SERVICE`, not model name — there was a real bug where the watsonx logo kept showing even when OpenAI was active because display logic keyed on model.
+- **Default provider is watsonx**. Override via `AI_SERVICE=openai|aws|gemini|ollama` env var. Aggregation questions (how much, how many, average) never reach the LLM for math: the intent classifier routes them to SQL and the model only narrates the pre-computed figures. The UI provider switcher must key on `AI_SERVICE`, not model name — there was a real bug where the watsonx logo kept showing even when OpenAI was active because display logic keyed on model.
 - AWS Bedrock is identified internally as `"aws"`, NOT `"bedrock"` — docstring is inconsistent in places but the env value is `aws`.
 - **All LLM calls go through `banko_ai/ai_providers/`** — never import `openai`, `anthropic`, `boto3.client('bedrock-runtime')`, etc. directly anywhere else. This is what makes airgap mode (Ollama) and provider switching work cleanly.
 - Dynamic model discovery is the pattern for every provider — never hardcode model lists.
@@ -143,7 +143,7 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 
 See `memory/project_airgap_first_class.md` — airgap is not optional, it is a first-class deployment target. Any new code must work in all three modes.
 
-Airgap status as of July 2026: there is no Ollama provider in `banko_ai/ai_providers/` yet, so `AI_SERVICE=ollama` fails to initialize. The provider is planned work (design lives in the local-only internal docs). granite3.3:8b runs fine standalone via Ollama, so the gap is only the provider class.
+Airgap status as of late July 2026: fully working. `AI_SERVICE=ollama` is a first-class provider (dynamic model discovery from the daemon, granite3.3:8b default), `OPENAI_BASE_URL` points the OpenAI provider at any compatible endpoint, and `docker-compose.airgap.yml` plus `scripts/airgap/preload-models.sh` run the whole stack offline.
 
 ## Running locally
 
@@ -151,8 +151,9 @@ Airgap status as of July 2026: there is no Ollama provider in `banko_ai/ai_provi
 docker compose up -d                                # CRDB + banko (cloud-ready)
 # OR
 docker compose -f docker-compose.standalone.yml up  # single container demo
-# (docker-compose.airgap.yml arrives with coach v1c, along with the
-#  Ollama provider)
+# OR
+scripts/airgap/preload-models.sh                    # once, while online
+docker compose -f docker-compose.airgap.yml up -d   # offline demo (Ollama)
 ```
 
 Then visit http://localhost:5000. App generates 5000 sample expense records on first run.
@@ -162,7 +163,7 @@ Then visit http://localhost:5000. App generates 5000 sample expense records on f
 ```bash
 make test-local        # ruff + advisory mypy + pytest (same ignore list as CI)
 # Then boot the app and smoke every implemented provider:
-#   watsonx, openai, aws, gemini (ollama once the v1c provider exists)
+#   watsonx, openai, aws, gemini, ollama
 ```
 
 The pytest target skips the same script style test files CI skips; they need a running app or live creds. The coach end to end smoke is automated: boot the app, then `uv run python scripts/coach/assert_nudges.py` (webhook transport) or `--via sql` (exercises the real CDC path when the cdc-demo stack is up). The rest of the manual pass list: grounded chat answer, correct provider logo, receipt upload extracts fields, real dashboard activity, cache stats climb on a repeat query, relevant vector search, clean server log.

@@ -259,10 +259,13 @@ def create_app() -> Flask:
     @app.route('/')
     def index():
         """Main application page."""
-        # Ensure user is logged in
-        user_manager.get_current_user()['id'] if user_manager.get_current_user() else None
-        current_user = user_manager.get_current_user()
-        
+        # First visit goes to the persona picker; everything downstream
+        # scopes to the chosen persona.
+        if not session.get('user_id'):
+            return redirect(url_for('login'))
+        current_user = {'id': session['user_id'],
+                        'username': session.get('username', 'Demo')}
+
         # Get AI provider info for display
         ai_provider_display = get_provider_display_info(config.ai_service, ai_provider)
         
@@ -346,9 +349,11 @@ def create_app() -> Flask:
     
     @app.route('/logout')
     def logout():
-        """User logout."""
+        """Back to the persona picker."""
+        session.pop('user_id', None)
+        session.pop('username', None)
         user_manager.logout_user()
-        return redirect(url_for('index'))
+        return redirect(url_for('login'))
     
     @app.route('/api/search', methods=['POST'])
     def api_search():
