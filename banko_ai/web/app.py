@@ -282,6 +282,33 @@ def create_app() -> Flask:
         """The session persona, falling back to the coach default so API
         callers without a session still get scoped, sensible answers."""
         return session.get('user_id') or config.coach_default_user_id
+
+    def _render_aggregation_markdown(agg) -> str:
+        """Deterministic answer card for aggregation questions. Numbers come
+        straight from SQL; nothing here passes through a model."""
+        window = f"{agg.window_start} to {agg.window_end}"
+        scope = agg.category or "all categories"
+        if agg.operation == "count":
+            headline = (f"You made **{agg.count} transactions** on {scope} "
+                        f"between {window}.")
+        elif agg.operation == "average":
+            headline = (f"Your average {scope} transaction was "
+                        f"**${agg.average:,.2f}** between {window} "
+                        f"({agg.count} transactions, ${agg.total:,.2f} total).")
+        else:
+            headline = (f"You spent **${agg.total:,.2f}** on {scope} "
+                        f"between {window} ({agg.count} transactions).")
+        if not agg.count:
+            return (f"No matching transactions on {scope} between {window}. "
+                    f"Try a wider window or a different category.")
+        lines = [headline, "", "| Date | Merchant | Amount |", "|---|---|---|"]
+        for row in agg.rows:
+            lines.append(f"| {row['date']} | {row['merchant']} "
+                         f"| ${row['amount']:,.2f} |")
+        lines.append("")
+        lines.append("_Computed by SQL on CockroachDB. Same answer on every "
+                     "AI provider._")
+        return "\n".join(lines)
     
     @app.route('/logout')
     def logout():
@@ -300,7 +327,7 @@ def create_app() -> Flask:
             # Use original simple logic - no user filtering
             results = search_engine.search_expenses(
                 query=query,
-                user_id=None,  # No user filtering like original
+                user_id=current_demo_user(),
                 limit=limit,
                 threshold=threshold
             )
@@ -358,7 +385,7 @@ def create_app() -> Flask:
             # Use original simple logic - no user filtering
             search_results = search_engine.search_expenses(
                 query=query,
-                user_id=None,  # No user filtering like original
+                user_id=current_demo_user(),
                 limit=5,
                 threshold=0.7
             )
@@ -367,7 +394,7 @@ def create_app() -> Flask:
             rag_response = ai_provider.generate_rag_response(
                 query=query,
                 context=search_results,
-                user_id=None,  # No user filtering like original
+                user_id=current_demo_user(),
                 language=language
             )
             
@@ -1059,14 +1086,40 @@ def create_app() -> Flask:
                                          ai_provider=ai_provider_display,
                                          current_page='banko')
 
+                # Agentic routing: aggregation questions go to SQL so the
+                # number is exact and identical on every provider. The LLM
+                # never does the arithmetic.
+                from banko_ai.utils.intent_classifier import classify_aggregation, extract_window
+                agg_intent = classify_aggregation(user_message)
+                if agg_intent is not None:
+                    from banko_ai.utils.aggregations import run_aggregation
+                    agg = run_aggregation(agg_intent, current_demo_user(),
+                                          config.database_url)
+                    agg_text = _render_aggregation_markdown(agg)
+                    session['chat'].append({'text': agg_text,
+                                            'class': 'Assistant'})
+                    try:
+                        from langchain_core.messages import AIMessage
+                        crdb_history.add_message(AIMessage(content=agg_text))
+                    except Exception:
+                        pass
+                    return render_template('index.html',
+                                           chat=session['chat'],
+                                           ai_provider=ai_provider_display,
+                                           current_page='banko')
+
                 try:
-                    # Use simple search that matches original implementation
-                    if hasattr(ai_provider, 'search_expenses'):
-                        # Use the simple search method that returns dictionaries like original
-                        search_results = ai_provider.search_expenses(prompt, limit=10)
-                    else:
-                        # Fallback to search engine simple method
-                        search_results = search_engine.simple_search_expenses(prompt, limit=10)
+                    # Retrieval questions: vector RAG scoped to the session
+                    # persona, with a date predicate when the question names
+                    # a window. The cache layers live inside the engine.
+                    window = extract_window(user_message)
+                    search_results = search_engine.search_expenses(
+                        query=prompt,
+                        user_id=current_demo_user(),
+                        limit=10,
+                        date_start=window[0] if window else None,
+                        date_end=window[1] if window else None,
+                    )
                     
                     print(f"Using {config.ai_service} for response generation in {target_language}")
                     

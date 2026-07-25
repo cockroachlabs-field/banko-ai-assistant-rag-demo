@@ -16,7 +16,6 @@ from sqlalchemy import text
 from ..utils.db_retry import create_resilient_engine, get_database_url
 from .enrichment import DataEnricher
 
-
 PERSONAS = [
     {"user_id": "00000000-0000-0000-0000-0000000000a1",
      "name": "Maya", "style": "diner",
