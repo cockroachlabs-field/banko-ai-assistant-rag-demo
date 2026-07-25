@@ -7,7 +7,7 @@ py-modules = []
 
 [project]
 name = "banko-ai-assistant"
-version = "1.2.1"
+version = "1.2.2"
 description = "Agentic AI banking assistant with LangGraph multi-agent workflows, CockroachDB vector search (langchain-cockroachdb), durable checkpointing, receipt OCR, fraud detection, and multi-provider support (OpenAI, AWS Bedrock, IBM watsonx, Google Gemini)"
 authors = [
     { name="Virag Tripathi", email="virag.tripathi@gmail.com" }
