@@ -116,8 +116,9 @@ the selected provider.
 ### Run it offline (airgap)
 
 The whole stack runs without internet: embeddings are computed locally,
-and the LLM can be a local model served by Ollama. Cache the model once
-while online, then start the stack with the network off:
+and the LLM is a local model served by Ollama. Run the preload script
+once while online (it caches both the Ollama model and the embedding
+model into named volumes), then start the stack with the network off:
 
 ```bash
 scripts/airgap/preload-models.sh                    # once, while online

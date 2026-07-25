@@ -57,12 +57,17 @@ services:
       - HF_HUB_OFFLINE=1
       - TRANSFORMERS_OFFLINE=1
       - TOKENIZERS_PARALLELISM=false
+    volumes:
+      # Persistent embedding-model cache: preload-models.sh warms it while
+      # online, so even an app image without the baked model works offline
+      - hf-cache:/root/.cache/huggingface
     networks:
       - banko-airgap
 
 volumes:
   cockroach-data:
   ollama-models:
+  hf-cache:
 
 networks:
   banko-airgap:
