@@ -96,6 +96,18 @@ banko-ai run --no-data                    # skip the sample-data generator
 
 Open <http://localhost:5000>.
 
+### Demo personas
+
+The first visit asks you to pick a persona (Maya, Sam, or Riley), each
+seeded with their own spending patterns. Everything on screen is scoped
+to that choice: SQL aggregations filter by the persona's user id, vector
+search runs through the per-user vector index, and the Spending Coach
+nudges the same identity. Log out to switch personas. Questions that ask
+for totals or counts ("how much did I spend on restaurants in the past
+60 days?") are answered by SQL directly, so the figures are exact and
+identical no matter which AI provider is active; the model adds the
+narrative and suggestions around them.
+
 `banko-ai --help` lists the rest (`generate-data`, `clear-data`, `status`,
 `search`, etc.). The first run creates the schema (expense, agent, cache,
 checkpoint tables), generates sample data with embeddings, and initializes

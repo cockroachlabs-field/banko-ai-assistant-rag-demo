@@ -291,6 +291,26 @@ def create_app() -> Flask:
         callers without a session still get scoped, sensible answers."""
         return session.get('user_id') or config.coach_default_user_id
 
+    # UI pages require a persona so it is always clear whose data is on
+    # screen. APIs, the CDC webhook, and health endpoints keep the default
+    # persona fallback so curl demos and the pipeline never need a session.
+    _SESSION_EXEMPT_PREFIXES = (
+        '/login', '/logout', '/static/', '/api/', '/health', '/cache-stats',
+        '/cache-cleanup', '/socket.io', '/diagnostics', '/test-ai-connection',
+        '/ai-status', '/favicon',
+    )
+
+    @app.before_request
+    def _require_persona_for_pages():
+        if request.method != 'GET':
+            return None
+        path = request.path
+        if any(path.startswith(p) for p in _SESSION_EXEMPT_PREFIXES):
+            return None
+        if session.get('user_id'):
+            return None
+        return redirect(url_for('login'))
+
     def _render_aggregation_markdown(agg) -> str:
         """Deterministic answer card for aggregation questions. Numbers come
         straight from SQL; nothing here passes through a model."""
