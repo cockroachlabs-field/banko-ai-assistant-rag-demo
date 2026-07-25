@@ -75,7 +75,7 @@ class Config:
     coach_rate_limit_per_5min: int = 30
     coach_agent_max_steps: int = 5
     coach_socketio_room_prefix: str = "coach:"
-    coach_default_user_id: str = "00000000-0000-0000-0000-000000000001"
+    coach_default_user_id: str = "00000000-0000-0000-0000-0000000000a1"
     coach_kafka_enabled: bool = False
     coach_tx_default_limit: int = 25
     coach_agg_lookback_days: int = 30
@@ -165,7 +165,7 @@ class Config:
             coach_socketio_room_prefix=os.getenv("COACH_SOCKETIO_ROOM_PREFIX", "coach:"),
             coach_default_user_id=os.getenv(
                 "COACH_DEFAULT_USER_ID",
-                "00000000-0000-0000-0000-000000000001",
+                "00000000-0000-0000-0000-0000000000a1",
             ),
             coach_kafka_enabled=os.getenv("COACH_KAFKA_ENABLED", "false").lower() == "true",
             coach_tx_default_limit=int(os.getenv("COACH_TX_DEFAULT_LIMIT", "25")),

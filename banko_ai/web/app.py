@@ -267,15 +267,21 @@ def create_app() -> Flask:
     
     @app.route('/login', methods=['GET', 'POST'])
     def login():
-        """User login page."""
+        """Demo persona picker. Every downstream query scopes to the choice."""
+        from banko_ai.vector_search.generator import PERSONAS
         if request.method == 'POST':
-            username = request.form.get('username')
-            if username:
-                user_id = user_manager.create_user(username)
-                user_manager.login_user(user_id)
+            chosen = request.form.get('persona_id')
+            persona = next((p for p in PERSONAS if p["user_id"] == chosen), None)
+            if persona:
+                session['user_id'] = persona["user_id"]
+                session['username'] = persona["name"]
                 return redirect(url_for('index'))
-        
-        return render_template('login.html')
+        return render_template('login.html', personas=PERSONAS)
+
+    def current_demo_user() -> str:
+        """The session persona, falling back to the coach default so API
+        callers without a session still get scoped, sensible answers."""
+        return session.get('user_id') or config.coach_default_user_id
     
     @app.route('/logout')
     def logout():
