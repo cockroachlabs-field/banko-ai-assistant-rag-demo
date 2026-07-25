@@ -30,6 +30,8 @@ class Config:
     ai_service: str = "watsonx"  # openai, aws, watsonx, gemini
     openai_api_key: str | None = None
     openai_base_url: str = ""
+    ollama_host: str = "http://localhost:11434"
+    ollama_model: str = "granite3.3:8b"
     openai_model: str = "gpt-4o-mini"  # gpt-4o-mini (default), gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
@@ -119,6 +121,8 @@ class Config:
             ai_service=ai_service,
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             openai_base_url=os.getenv("OPENAI_BASE_URL", ""),
+            ollama_host=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
+            ollama_model=os.getenv("OLLAMA_MODEL", "granite3.3:8b"),
             openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
@@ -192,6 +196,10 @@ class Config:
                 "profile_name": self.aws_profile,
                 "region": self.aws_region,
                 "model": self.aws_model,
+            },
+            "ollama": {
+                "host": self.ollama_host,
+                "model": self.ollama_model,
             },
             "watsonx": {
                 "api_key": self.watsonx_api_key,

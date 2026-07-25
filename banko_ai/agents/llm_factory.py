@@ -98,6 +98,18 @@ def get_llm_for_agent(temperature: float = 0.7, model_override: str | None = Non
                 "Install with: pip install langchain-ibm"
             )
     
+    elif config.ai_service == 'ollama':
+        from langchain_openai import ChatOpenAI
+        host = os.getenv('OLLAMA_HOST', 'http://localhost:11434').rstrip('/')
+        # Ollama serves an OpenAI-compatible endpoint at /v1; the key is a
+        # required-but-ignored placeholder.
+        return ChatOpenAI(
+            model=model_override or config.ollama_model,
+            api_key='ollama',
+            base_url=f"{host}/v1",
+            temperature=temperature,
+        )
+
     elif config.ai_service == 'gemini':
         # Try Vertex AI first (service account), then fall back to Generative AI API (API key)
         google_api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
@@ -149,7 +161,7 @@ def get_llm_for_agent(temperature: float = 0.7, model_override: str | None = Non
     else:
         raise ValueError(
             f"Unsupported AI service: {config.ai_service}. "
-            f"Supported: openai, aws, watsonx, gemini"
+            f"Supported: openai, aws, watsonx, gemini, ollama"
         )
 
 

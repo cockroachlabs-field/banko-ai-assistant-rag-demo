@@ -52,6 +52,11 @@ def get_provider_display_info(ai_service, ai_provider=None, current_model=None, 
             'name': 'OpenAI',
             'icon_file': 'openai-icon.svg',  # Fallback to watsonx icon for now
             'icon_alt': 'OpenAI'
+        },
+        'ollama': {
+            'name': 'Ollama (local)',
+            'icon_file': 'roach-logo.svg',  # local-first badge until a dedicated icon lands
+            'icon_alt': 'Ollama local model'
         }
     }
     
@@ -305,9 +310,6 @@ def create_app() -> Flask:
         for row in agg.rows:
             lines.append(f"| {row['date']} | {row['merchant']} "
                          f"| ${row['amount']:,.2f} |")
-        lines.append("")
-        lines.append("_Computed by SQL on CockroachDB. Same answer on every "
-                     "AI provider._")
         return "\n".join(lines)
     
     @app.route('/logout')
