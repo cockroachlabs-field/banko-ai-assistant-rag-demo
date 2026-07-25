@@ -35,7 +35,7 @@ Flask + SocketIO web app
         checkpoints and signal/nudge tables)
 ```
 
-Full architecture diagram in `docs/superpowers/specs/2026-05-21-proactive-spending-coach-design.md` §3.1.
+A fuller architecture diagram lives in the internal design docs (local-only, see Repo layout).
 
 ## Repo layout
 
@@ -143,7 +143,7 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 
 See `memory/project_airgap_first_class.md` — airgap is not optional, it is a first-class deployment target. Any new code must work in all three modes.
 
-Airgap status as of July 2026: there is no Ollama provider in `banko_ai/ai_providers/` yet, so `AI_SERVICE=ollama` fails to initialize. The provider is coach v1c work (`docs/superpowers/plans/2026-05-22-coach-v1c-observability-airgap-docs.md` on the coach branch). granite3.3:8b runs fine standalone via Ollama, so the gap is only the provider class.
+Airgap status as of July 2026: there is no Ollama provider in `banko_ai/ai_providers/` yet, so `AI_SERVICE=ollama` fails to initialize. The provider is planned work (design lives in the local-only internal docs). granite3.3:8b runs fine standalone via Ollama, so the gap is only the provider class.
 
 ## Running locally
 
@@ -171,8 +171,7 @@ CI is **not enough**. CI gates on lint/unit/integration, but the multi-provider 
 
 ## Active design docs (local-only, gitignored)
 
-- `docs/superpowers/specs/2026-05-21-proactive-spending-coach-design.md` — flagship enhancement. Coach v1a (reactive nudges, conversational mode, webhook + Kafka transports, Live Coach UI) merged to main July 2026 as v1.1.0. Still open from the spec: v1b (Supervisor, MCP server, eval harness) and v1c (OTel, Ollama airgap, docs) — plans for both live in `docs/superpowers/plans/`.
-- `docs/superpowers/specs/2026-07-15-dependency-upgrade-design.md` — landed July 2026: preflight housekeeping merged to main, lockfile refreshed (superseded 21 open dep PRs).
+Internal specs and plans live under `docs/superpowers/` on Virag's machine and are never committed or referenced in public artifacts (README, blog posts, PR bodies). Current state in brief: Coach v1a (reactive nudges, conversational mode, webhook + Kafka transports, Live Coach UI) merged to main July 2026 as v1.1.0; still open are v1b (Supervisor, MCP server, eval harness) and v1c (OTel, airgap packaging, docs), plus the July 2026 demo accuracy and local models round. Read the local specs directory for the details.
 
 ## Where the auto-memory lives
 
