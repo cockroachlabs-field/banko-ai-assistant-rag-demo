@@ -56,7 +56,11 @@ class OpenAIProvider(AIProvider):
         
         # Initialize OpenAI client
         try:
-            self.client = OpenAI(api_key=self.api_key)
+            base_url = self.config.get("base_url") or os.getenv("OPENAI_BASE_URL")
+            # Any OpenAI-compatible endpoint works here: a local ollama or
+            # vLLM server, LM Studio, or a hosted vendor.
+            self.client = (OpenAI(api_key=self.api_key, base_url=base_url)
+                           if base_url else OpenAI(api_key=self.api_key))
             print(f"✅ Initialized OpenAI with model: {self.current_model}")
         except Exception as e:
             print(f"⚠️ Failed to initialize OpenAI client: {str(e)}")

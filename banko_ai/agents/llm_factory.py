@@ -39,6 +39,7 @@ def get_llm_for_agent(temperature: float = 0.7, model_override: str | None = Non
             return ChatOpenAI(
                 model=model_override or config.openai_model,
                 api_key=api_key,
+                base_url=os.getenv('OPENAI_BASE_URL') or None,
                 temperature=temperature
             )
         except ImportError:

@@ -29,6 +29,7 @@ class Config:
     # AI Service Configuration
     ai_service: str = "watsonx"  # openai, aws, watsonx, gemini
     openai_api_key: str | None = None
+    openai_base_url: str = ""
     openai_model: str = "gpt-4o-mini"  # gpt-4o-mini (default), gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
@@ -117,6 +118,7 @@ class Config:
             # AI Services
             ai_service=ai_service,
             openai_api_key=os.getenv("OPENAI_API_KEY"),
+            openai_base_url=os.getenv("OPENAI_BASE_URL", ""),
             openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
@@ -181,6 +183,7 @@ class Config:
             "service": self.ai_service,
             "openai": {
                 "api_key": self.openai_api_key,
+                "base_url": self.openai_base_url,
                 "model": self.openai_model,
             },
             "aws": {
