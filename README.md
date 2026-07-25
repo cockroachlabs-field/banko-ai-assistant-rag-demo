@@ -183,6 +183,58 @@ curl -X POST http://localhost:5000/api/rag \
   -d '{"query": "What are my biggest expenses this month?"}'
 ```
 
+## The Spending Coach (streaming + agentic)
+
+Everything above waits for a question. The Coach reacts to events: a
+spending signal arrives, an agent investigates with real budget and
+transaction tools, and a nudge appears live on the `/coach` tab, for
+example "you've used 82% of your dining budget with 9 days left." Signals
+and nudges live in CockroachDB with row-level TTLs, and the agent's
+conversation state checkpoints there too.
+
+Kick it off the quick way, by posting a synthetic signal at the webhook:
+
+```bash
+export CDC_WEBHOOK_HMAC_SECRET=dev-only-secret   # same value as the app
+uv run python scripts/coach/mock_signals.py --type=budget_threshold
+# also: --type=anomaly, --type=recurring_drift
+```
+
+Or run the real thing: CockroachDB changefeeds streaming through Debezium
+and Kafka into the app. One script brings up Kafka, Kafka Connect, and the
+Debezium CockroachDB connector, then registers a source on the
+`spending_signals` table:
+
+```bash
+scripts/coach/cdc-demo/run-cdc-demo.sh
+# then run the app with the Kafka transport on:
+COACH_KAFKA_ENABLED=true KAFKA_BOOTSTRAP_SERVERS=localhost:29092 \
+  AI_SERVICE=watsonx banko-ai run
+```
+
+With that stack up, sending a change event is just SQL. Insert a row and
+CockroachDB streams it to the Coach, no webhook involved:
+
+```sql
+INSERT INTO spending_signals
+  (user_id, signal_type, severity, payload, idempotency_key)
+VALUES
+  ('00000000-0000-0000-0000-0000000000a1', 'budget_threshold', 'warn',
+   '{"category": "dining", "pct_used": 0.82, "monthly_budget": 400.0,
+     "spent_so_far": 328.0, "days_remaining": 9}',
+   'demo:' || gen_random_uuid()::STRING);
+```
+
+Watch `/coach` while you run it. To verify the whole path automatically:
+
+```bash
+uv run python scripts/coach/assert_nudges.py             # webhook transport
+uv run python scripts/coach/assert_nudges.py --via sql   # the CDC pipeline
+```
+
+The producer contract (payload shapes, idempotency, both transports) is
+in [PIPELINE_CONTRACT.md](PIPELINE_CONTRACT.md).
+
 ## Where the data plane comes from
 
 This repo is the agent side. A companion repo,

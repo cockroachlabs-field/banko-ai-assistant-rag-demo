@@ -28,18 +28,36 @@
 |----------|--------|-------------|
 | `/api/upload-receipt` | POST | Upload receipt image/PDF for agent processing |
 
+### Spending Coach (streaming signals)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/cdc/signals` | POST | CDC webhook receiver. Body is a CockroachDB changefeed wrapped envelope; requires an `X-Banko-Signature` header (hex HMAC-SHA256 of the raw body with `CDC_WEBHOOK_HMAC_SECRET`). Returns 202 with queued and replayed signal ids |
+| `/api/coach/nudges` | GET | Recent nudges for the current persona (`?limit=N`) |
+| `/api/coach/nudges/<nudge_id>` | GET | One nudge with its tool trace (the evidence panel) |
+| `/api/coach/chat` | POST | Conversational coach; JSON body `{"message": ..., "thread_id": ...}`, state checkpointed in CockroachDB |
+| `/health/coach` | GET | Coach subsystem health: DB reachability, webhook secret, Kafka flag, last nudge time |
+
+The same signals can arrive over Kafka instead of the webhook: set
+`COACH_KAFKA_ENABLED=true` and `KAFKA_BOOTSTRAP_SERVERS`, topic
+`banko.spending_signals`. See PIPELINE_CONTRACT.md for the full contract.
+
 ### Chat History
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/chat-history/<session_id>` | GET | Retrieve persistent chat history |
 | `/api/chat-history/<session_id>` | DELETE | Clear chat history for a session |
+| `/api/user-summary` | GET | Spending summary for the current persona |
 
 ### Data Management
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/generate-data` | POST | Generate sample expense data |
+| `/api/stop-generation` | POST | Stop an in-progress generation run |
+| `/api/reset-generation` | POST | Reset generation state |
+| `/cache-cleanup` | POST | Clear expired cache entries |
 | `/data-generator` | GET | Data generator UI |
 
 ### Web Interface
@@ -190,7 +208,7 @@ print(r.json())
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | CockroachDB connection string | `cockroachdb://root@localhost:26257/defaultdb?sslmode=disable` |
-| `AI_SERVICE` | AI provider (`watsonx`, `openai`, `aws`, `gemini`) | `watsonx` |
+| `AI_SERVICE` | AI provider (`watsonx`, `openai`, `aws`, `gemini`, `ollama`) | `watsonx` |
 | `SECRET_KEY` | Flask session key (auto-generated if not set) | Random |
 
 See [README.md](../README.md) for full configuration including provider-specific settings, cache tuning, and database pool configuration.
