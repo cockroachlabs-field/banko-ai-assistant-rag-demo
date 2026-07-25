@@ -311,6 +311,38 @@ def create_app() -> Flask:
             lines.append(f"| {row['date']} | {row['merchant']} "
                          f"| ${row['amount']:,.2f} |")
         return "\n".join(lines)
+
+    def _aggregation_insights(agg, question: str) -> str | None:
+        """One short LLM pass over the SQL result. The figures arrive
+        pre-computed and the prompt forbids new arithmetic, so the model
+        adds judgment, not math. Any failure just means no insights block."""
+        try:
+            from banko_ai.agents.llm_factory import get_llm_for_agent
+            merchants = {}
+            for row in agg.rows:
+                merchants[row["merchant"]] = (
+                    merchants.get(row["merchant"], 0) + row["amount"])
+            top = sorted(merchants.items(), key=lambda kv: -kv[1])[:3]
+            top_text = ", ".join(f"{m} (${v:,.2f})" for m, v in top)
+            prompt = (
+                "You are a personal finance coach. Exact figures, already "
+                f"computed from the user's expense database: total "
+                f"${agg.total:,.2f} across {agg.count} transactions on "
+                f"{agg.category or 'all categories'} between "
+                f"{agg.window_start} and {agg.window_end}. "
+                f"Top merchants: {top_text}. "
+                f"The user asked: \"{question}\". Write two or three short, "
+                "specific observations or suggestions as markdown bullets. "
+                "Use only the figures given; do not compute new totals or "
+                "restate the question. No headings, bullets only.")
+            llm = get_llm_for_agent(temperature=0.4)
+            raw = llm.invoke(prompt)
+            text = raw.content if hasattr(raw, "content") else str(raw)
+            text = text.strip()
+            return text or None
+        except Exception as e:
+            print(f"aggregation insights skipped: {e}")
+            return None
     
     @app.route('/logout')
     def logout():
@@ -1098,6 +1130,10 @@ def create_app() -> Flask:
                     agg = run_aggregation(agg_intent, current_demo_user(),
                                           config.database_url)
                     agg_text = _render_aggregation_markdown(agg)
+                    if agg.count:
+                        insights = _aggregation_insights(agg, user_message)
+                        if insights:
+                            agg_text += "\n\n**Insights**\n\n" + insights
                     session['chat'].append({'text': agg_text,
                                             'class': 'Assistant'})
                     try:

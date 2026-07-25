@@ -45,6 +45,8 @@ services:
         condition: service_started
     environment:
       - DATABASE_URL=cockroachdb://root@cockroachdb:26257/defaultdb?sslmode=disable
+      # Demo default; set your own for anything beyond a local demo
+      - SECRET_KEY=${SECRET_KEY:-local-demo-secret-change-me}
       - AI_SERVICE=ollama
       - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-granite3.3:8b}
