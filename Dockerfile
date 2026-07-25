@@ -71,6 +71,11 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # Install the package in the runtime stage
 RUN pip install --no-deps -e .
 
+# Bake the embedding model into the image so airgap deployments never
+# reach for Hugging Face. Roughly 90MB, cached under /root/.cache.
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+    SentenceTransformer('all-MiniLM-L6-v2')"
+
 # Fix permissions for cache directories
 RUN chown -R bankoai:bankoai /home/bankoai/.cache
 

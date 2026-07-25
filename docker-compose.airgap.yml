@@ -53,6 +53,10 @@ services:
       - CDC_WEBHOOK_HMAC_SECRET=${CDC_WEBHOOK_HMAC_SECRET:-airgap-demo-secret}
       - CACHE_SIMILARITY_THRESHOLD=${CACHE_SIMILARITY_THRESHOLD:-0.75}
       - CACHE_TTL_HOURS=${CACHE_TTL_HOURS:-24}
+      # Never call out to Hugging Face; the model is baked into the image
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - TOKENIZERS_PARALLELISM=false
     networks:
       - banko-airgap
 
