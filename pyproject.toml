@@ -79,7 +79,7 @@ dependencies = [
     "eventlet>=0.33.0,<1.0.0",
 
     # Coach v1: Kafka transport for the prod-mode (Debezium) signal path
-    "kafka-python>=2.0.0,<3.0.0",
+    "kafka-python>=2.0.0,<4.0.0",
     
     # Production Server (Updated for CVE-2024-1135 and CVE-2024-6827 fixes)
     "gunicorn>=23.0.0,<27.0.0",
