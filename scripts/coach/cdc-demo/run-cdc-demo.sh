@@ -27,13 +27,16 @@ echo "== 0/5 cockroachdb"
 # never creates its own CockroachDB. It does make sure one is running:
 # a stopped repo container gets started, and if nothing is listening at
 # all, the repo compose brings one up (data lives on a named volume).
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cockroachdb$'; then
+if [ -n "${CRDB_HOST:-}" ]; then
+    echo "   using CRDB_HOST=${CRDB_HOST} from the environment"
+elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cockroachdb$'; then
     echo "   banko-cockroachdb already running"
+elif (echo > /dev/tcp/localhost/26257) 2>/dev/null; then
+    echo "   using the CockroachDB already listening on localhost:26257"
+    echo "   (make sure this is the cluster your app points at)"
 elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cockroachdb$'; then
     docker start banko-cockroachdb >/dev/null
     echo "   started existing banko-cockroachdb container"
-elif (echo > /dev/tcp/localhost/26257) 2>/dev/null; then
-    echo "   found a CockroachDB listening on localhost:26257"
 else
     (cd "$(git -C . rev-parse --show-toplevel 2>/dev/null || echo ../../..)" \
         && docker compose up -d cockroachdb)
@@ -57,7 +60,17 @@ CRDB_USER="${CRDB_USER:-root}"
 CRDB_DB="${CRDB_DB:-defaultdb}"
 CHANGEFEED_KAFKA_URI="${CHANGEFEED_KAFKA_URI:-$KAFKA_URI_DEFAULT}"
 CONNECTOR_VERSION="${CONNECTOR_VERSION:-3.6.0.Final}"
+# gvproxy keeps forwards for other stacks (a 5-node cluster's admin UIs
+# occupy 8080-8084, for example). If the port is held by anything that is
+# not our own connect container, hop to the next free one.
 CONNECT_PORT="${CONNECT_PORT:-8084}"
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cdc-connect$'; then
+    while (echo > /dev/tcp/localhost/${CONNECT_PORT}) 2>/dev/null; do
+        echo "   port ${CONNECT_PORT} is taken; trying $((CONNECT_PORT+1))"
+        CONNECT_PORT=$((CONNECT_PORT+1))
+    done
+fi
+export CONNECT_PORT
 EXAMPLES_REPO="${EXAMPLES_REPO:-$HOME/idea_workspace/debezium-cockroachdb-examples}"
 
 echo "== 1/5 connector plugin"
