@@ -1,7 +1,7 @@
 # PIPELINE_CONTRACT.md
 
 The contract between this repo (consumer) and
-`cockroachlabs-field/cockroachdb-watsonx-data-pipeline` (producer) for the
+`viragtripathi/cockroachdb-watsonx-data-pipeline` (producer) for the
 Proactive Spending Coach's streaming signals. This file is canonical: it is
 derived from the implemented consumer code, with file references so drift is
 checkable. If either side needs a change, update this file and coordinate

@@ -239,7 +239,7 @@ in [PIPELINE_CONTRACT.md](PIPELINE_CONTRACT.md).
 ## Where the data plane comes from
 
 This repo is the agent side. A companion repo,
-[`cockroachlabs-field/cockroachdb-watsonx-data-pipeline`](https://github.com/cockroachlabs-field/cockroachdb-watsonx-data-pipeline),
+[`viragtripathi/cockroachdb-watsonx-data-pipeline`](https://github.com/viragtripathi/cockroachdb-watsonx-data-pipeline),
 streams CockroachDB CDC events into Apache Iceberg on IBM watsonx.data
 (both via webhook and Debezium → Kafka). Neither repo requires the other —
 this app works against a local CockroachDB with its own sample data — but

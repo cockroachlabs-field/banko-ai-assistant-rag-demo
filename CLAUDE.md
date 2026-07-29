@@ -61,7 +61,7 @@ A fuller architecture diagram lives in the internal design docs (local-only, see
 
 ## Sibling repo (you will touch its outputs, not its code)
 
-`~/idea_workspace/cockroachdb-watsonx-data-pipeline` (GitHub: `cockroachlabs-field/cockroachdb-watsonx-data-pipeline`) — the streaming/lakehouse side. It produces CDC events from CockroachDB into Apache Iceberg on IBM watsonx.data, with two paths: webhook (demo) and Debezium-Kafka (prod). It is developed in a **separate Claude Code session**. The contract between the two repos lives in `PIPELINE_CONTRACT.md` (planned) at this repo's root. The pipeline repo writes to a `spending_signals` table; this repo consumes it via webhook or Kafka.
+`~/idea_workspace/cockroachdb-watsonx-data-pipeline` (GitHub: `viragtripathi/cockroachdb-watsonx-data-pipeline`) — the streaming/lakehouse side. It produces CDC events from CockroachDB into Apache Iceberg on IBM watsonx.data, with two paths: webhook (demo) and Debezium-Kafka (prod). It is developed in a **separate Claude Code session**. The contract between the two repos lives in `PIPELINE_CONTRACT.md` (planned) at this repo's root. The pipeline repo writes to a `spending_signals` table; this repo consumes it via webhook or Kafka.
 
 Schema for `expenses` table is **shared** between both repos — keep them in sync if you ever change it here.
 
