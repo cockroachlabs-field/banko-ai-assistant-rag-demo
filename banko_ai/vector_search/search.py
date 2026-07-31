@@ -74,15 +74,17 @@ class VectorSearchEngine:
     
     @db_retry(max_attempts=3, initial_delay=0.5)
     def search_expenses(
-        self, 
-        query: str, 
+        self,
+        query: str,
         user_id: str | None = None,
         limit: int = 10,
         threshold: float = 0.7,
         use_user_index: bool = True,
         date_start=None,
         date_end=None,
-    ) -> list[SearchResult]:
+        region: str | None = None,
+        capture_explain: bool = False,
+    ) -> list[SearchResult] | tuple[list[SearchResult], str]:
         """
         Search for expenses using vector similarity.
         
@@ -126,6 +128,8 @@ class VectorSearchEngine:
                             'tags': result.get('tags', [])
                         }
                     ))
+                if capture_explain:
+                    return (search_results, "(cached results, no fresh EXPLAIN)")
                 return search_results
             print("2. ❌ Vector search cache MISS, querying database")
         else:
@@ -139,15 +143,17 @@ class VectorSearchEngine:
         search_embedding = json.dumps(raw_embedding.flatten().tolist())
         
         # Build SQL query based on whether we're using user-specific search
-        date_clause = ""
+        filter_clause = ""
         if date_start is not None:
-            date_clause += " AND expense_date >= :date_start"
+            filter_clause += " AND expense_date >= :date_start"
         if date_end is not None:
-            date_clause += " AND expense_date < :date_end"
+            filter_clause += " AND expense_date < :date_end"
+        if region is not None:
+            filter_clause += " AND crdb_region = :region"
         if user_id and use_user_index:
-            sql = self._build_user_specific_query(date_clause)
+            sql = self._build_user_specific_query(filter_clause)
         else:
-            sql = self._build_general_query(date_clause)
+            sql = self._build_general_query(filter_clause)
         
         # Prepare parameters as a dictionary
         params = {
@@ -161,6 +167,8 @@ class VectorSearchEngine:
             params['date_start'] = date_start
         if date_end is not None:
             params['date_end'] = date_end
+        if region is not None:
+            params['region'] = region
 
         # Execute query
         start_time = time.time()
@@ -187,37 +195,48 @@ class VectorSearchEngine:
                     "tags": row[10] if len(row) > 10 else None
                 }
             ))
-            
-            print(f"3. Database query returned {len(results)} expense records in {query_duration:.1f}ms")
-            
-            # Cache the results for future use (convert back to dict format for caching)
-            if self.cache_manager and results:
-                # Convert SearchResult objects back to dict format for caching
-                search_results_dict = []
-                for result in results:
-                    search_results_dict.append({
-                        'expense_id': result.expense_id,
-                        'user_id': result.user_id,
-                        'description': result.description,
-                        'merchant': result.merchant,
-                        'expense_amount': result.amount,
-                        'expense_date': result.date,
-                        'similarity_score': result.similarity_score,
-                        'shopping_type': result.metadata.get('shopping_type'),
-                        'payment_method': result.metadata.get('payment_method'),
-                        'recurring': result.metadata.get('recurring'),
-                        'tags': result.metadata.get('tags')
-                    })
-                
-                self.cache_manager.cache_vector_search_results(raw_embedding, search_results_dict)
-                print("4. ✅ Cached vector search results for future queries")
-            
-            return results
+
+        print(f"3. Database query returned {len(results)} expense records in {query_duration:.1f}ms")
+
+        # Cache the results for future use (convert back to dict format for caching)
+        if self.cache_manager and results:
+            # Convert SearchResult objects back to dict format for caching
+            search_results_dict = []
+            for result in results:
+                search_results_dict.append({
+                    'expense_id': result.expense_id,
+                    'user_id': result.user_id,
+                    'description': result.description,
+                    'merchant': result.merchant,
+                    'expense_amount': result.amount,
+                    'expense_date': result.date,
+                    'similarity_score': result.similarity_score,
+                    'shopping_type': result.metadata.get('shopping_type'),
+                    'payment_method': result.metadata.get('payment_method'),
+                    'recurring': result.metadata.get('recurring'),
+                    'tags': result.metadata.get('tags')
+                })
+
+            self.cache_manager.cache_vector_search_results(raw_embedding, search_results_dict)
+            print("4. ✅ Cached vector search results for future queries")
+
+        if capture_explain:
+            try:
+                with self.engine.connect() as conn:
+                    explain_sql = f"EXPLAIN ANALYZE {sql}"
+                    explain_result = conn.execute(text(explain_sql), params)
+                    explain_rows = explain_result.fetchall()
+                explain_text = "\n".join(str(row[0]) for row in explain_rows)
+            except Exception as e:
+                explain_text = f"(explain unavailable: {str(e)})"
+            return (results, explain_text)
+
+        return results
     
-    def _build_user_specific_query(self, date_clause: str = "") -> str:
+    def _build_user_specific_query(self, filter_clause: str = "") -> str:
         """Build SQL query for user-specific vector search."""
         return """
-        SELECT 
+        SELECT
             expense_id,
             user_id,
             description,
@@ -230,15 +249,15 @@ class VectorSearchEngine:
             recurring,
             tags
         FROM expenses
-        WHERE user_id = :user_id""" + date_clause + """
+        WHERE user_id = :user_id""" + filter_clause + """
         ORDER BY embedding <=> :search_embedding
         LIMIT :limit
         """
-    
-    def _build_general_query(self, date_clause: str = "") -> str:
+
+    def _build_general_query(self, filter_clause: str = "") -> str:
         """Build SQL query for general vector search."""
         return """
-        SELECT 
+        SELECT
             expense_id,
             user_id,
             description,
@@ -251,8 +270,8 @@ class VectorSearchEngine:
             recurring,
             tags
         FROM expenses
-        """ + (("WHERE " + date_clause.lstrip()[4:].lstrip())
-               if date_clause else "") + """
+        """ + (("WHERE " + filter_clause.lstrip()[4:].lstrip())
+               if filter_clause else "") + """
         ORDER BY embedding <=> :search_embedding
         LIMIT :limit
         """

@@ -1,74 +1,275 @@
 """
 User authentication and management.
 
-This module provides simple user authentication for the Banko AI Assistant.
+This module provides user authentication backed by CockroachDB for the
+Banko AI Assistant.
 """
 
-import uuid
+from functools import lru_cache
 from typing import Any
 
 from flask import session
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
+
+from ..utils.db_retry import get_database_url
+
+
+@lru_cache(maxsize=256)
+def resolve_user_region(user_id: str, database_url: str | None = None) -> str | None:
+    """Resolve user's home region from the users table.
+
+    Returns None if the user has no home_region set or on lookup errors.
+    Cached per user_id to avoid repeated queries.
+
+    Args:
+        user_id: User UUID
+        database_url: Database connection string (defaults to env DATABASE_URL)
+    """
+    from ..utils.db_retry import create_resilient_engine
+
+    url = get_database_url(database_url)
+    engine = create_resilient_engine(url)
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("SELECT home_region FROM users WHERE user_id = :u"),
+                {"u": user_id}
+            )
+            row = result.fetchone()
+            return str(row[0]) if row and row[0] else None
+    except Exception:
+        return None
+    finally:
+        engine.dispose()
 
 
 class UserManager:
-    """Simple user management for the application."""
-    
-    def __init__(self):
-        """Initialize the user manager."""
-        self.users = {}  # In production, this would be a database
-    
-    def create_user(self, username: str, email: str = None) -> str:
-        """
-        Create a new user.
-        
-        Args:
-            username: Username for the user
-            email: Optional email address
-            
-        Returns:
-            User ID
-        """
-        user_id = str(uuid.uuid4())
-        self.users[user_id] = {
-            "id": user_id,
-            "username": username,
-            "email": email,
-            "created_at": None  # Would be datetime in production
-        }
-        return user_id
-    
-    def get_user(self, user_id: str) -> dict[str, Any] | None:
+    """Database-backed user management."""
+
+    def __init__(self, database_url: str | None = None):
+        """Initialize user manager with database connection."""
+        self.database_url = get_database_url(database_url)
+        self._engine = None
+
+    @property
+    def engine(self):
+        """Lazy engine initialization."""
+        if self._engine is None:
+            self._engine = create_engine(self.database_url, poolclass=NullPool)
+        return self._engine
+
+    def ensure_schema(self) -> None:
+        """Ensure users table exists (delegates to migration)."""
+        from ..utils.migration import DatabaseMigration
+        DatabaseMigration(self.database_url).migrate_users_table()
+
+    def create(self, username: str, spending_style: str,
+               home_region: str | None = None, demo_user: bool = True) -> dict[str, Any]:
+        """Create a new user and return their record."""
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    INSERT INTO users (username, spending_style, home_region, demo_user)
+                    VALUES (:username, :spending_style, :home_region, :demo_user)
+                    RETURNING user_id, username, spending_style, home_region, created_at, demo_user
+                """),
+                {
+                    "username": username,
+                    "spending_style": spending_style,
+                    "home_region": home_region,
+                    "demo_user": demo_user,
+                }
+            )
+            conn.commit()
+            row = result.fetchone()
+            return {
+                "user_id": str(row[0]),
+                "username": row[1],
+                "spending_style": row[2],
+                "home_region": row[3],
+                "created_at": row[4],
+                "demo_user": row[5],
+            }
+
+    def get(self, user_id: str) -> dict[str, Any] | None:
         """Get user by ID."""
-        return self.users.get(user_id)
-    
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT user_id, username, spending_style, home_region, created_at, demo_user
+                    FROM users
+                    WHERE user_id = :user_id
+                """),
+                {"user_id": user_id}
+            )
+            row = result.fetchone()
+            if row:
+                return {
+                    "user_id": str(row[0]),
+                    "username": row[1],
+                    "spending_style": row[2],
+                    "home_region": row[3],
+                    "created_at": row[4],
+                    "demo_user": row[5],
+                }
+            return None
+
+    def get_by_username(self, username: str) -> dict[str, Any] | None:
+        """Get user by username."""
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT user_id, username, spending_style, home_region, created_at, demo_user
+                    FROM users
+                    WHERE username = :username
+                """),
+                {"username": username}
+            )
+            row = result.fetchone()
+            if row:
+                return {
+                    "user_id": str(row[0]),
+                    "username": row[1],
+                    "spending_style": row[2],
+                    "home_region": row[3],
+                    "created_at": row[4],
+                    "demo_user": row[5],
+                }
+            return None
+
+    def delete_by_username(self, username: str) -> None:
+        """Delete user by username (test cleanup)."""
+        with self.engine.connect() as conn:
+            conn.execute(
+                text("DELETE FROM users WHERE username = :username"),
+                {"username": username}
+            )
+            conn.commit()
+
+    def backfill_personas(self) -> None:
+        """UPSERT the three legacy demo personas (idempotent)."""
+        personas = [
+            ("00000000-0000-0000-0000-0000000000a1", "maya", "diner"),
+            ("00000000-0000-0000-0000-0000000000a2", "sam", "subscriber"),
+            ("00000000-0000-0000-0000-0000000000a3", "riley", "saver"),
+        ]
+        with self.engine.connect() as conn:
+            for user_id, username, spending_style in personas:
+                conn.execute(
+                    text("""
+                        INSERT INTO users (user_id, username, spending_style, demo_user)
+                        VALUES (:user_id, :username, :spending_style, true)
+                        ON CONFLICT (username) DO NOTHING
+                    """),
+                    {
+                        "user_id": user_id,
+                        "username": username,
+                        "spending_style": spending_style,
+                    }
+                )
+            conn.commit()
+
     def get_current_user(self) -> dict[str, Any] | None:
-        """Get current user from session."""
+        """Get current user from Flask session."""
         user_id = session.get('user_id')
         if user_id:
-            return self.get_user(user_id)
+            return self.get(user_id)
         return None
-    
+
+    def logout_user(self) -> None:
+        """Logout current user (clear session)."""
+        session.pop('user_id', None)
+        session.pop('username', None)
+
+    def create_user(self, username: str, email: str = None) -> str:
+        """Legacy interface for existing app.py call sites (maps to create
+        with default style)."""
+        user = self.create(username, spending_style="diner", demo_user=True)
+        return user["user_id"]
+
     def login_user(self, user_id: str) -> bool:
-        """Login user by setting session."""
-        if user_id in self.users:
+        """Legacy interface for existing app.py login route."""
+        user = self.get(user_id)
+        if user:
             session['user_id'] = user_id
+            session['username'] = user['username']
             return True
         return False
-    
-    def logout_user(self) -> None:
-        """Logout current user."""
-        session.pop('user_id', None)
-    
-    def is_logged_in(self) -> bool:
-        """Check if user is logged in."""
-        return 'user_id' in session and session['user_id'] in self.users
-    
-    def get_or_create_current_user(self) -> str:
-        """Get or create current user."""
-        if self.is_logged_in():
-            return session['user_id']
-        
-        # Create a default user
-        user_id = self.create_user("Default User")
-        self.login_user(user_id)
-        return user_id
+
+
+def clear_demo_users(database_url: str) -> dict[str, int]:
+    """Delete all demo users and their dependent data, preserving the three
+    legacy personas. Returns per-table deletion counts."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import NullPool
+
+    engine = create_engine(get_database_url(database_url), poolclass=NullPool)
+    counts = {}
+
+    legacy_persona_ids = [
+        "00000000-0000-0000-0000-0000000000a1",
+        "00000000-0000-0000-0000-0000000000a2",
+        "00000000-0000-0000-0000-0000000000a3",
+    ]
+
+    try:
+        with engine.connect() as conn:
+            demo_user_ids_result = conn.execute(
+                text("""
+                    SELECT user_id FROM users
+                    WHERE demo_user = true
+                    AND user_id NOT IN (:p1, :p2, :p3)
+                """),
+                {"p1": legacy_persona_ids[0], "p2": legacy_persona_ids[1], "p3": legacy_persona_ids[2]}
+            )
+            demo_user_ids = [str(row[0]) for row in demo_user_ids_result]
+
+            if not demo_user_ids:
+                return {"users": 0, "expenses": 0, "user_budgets": 0, "spending_signals": 0, "coach_nudges": 0}
+
+            placeholders = ", ".join([f":uid{i}" for i in range(len(demo_user_ids))])
+            uid_params = {f"uid{i}": uid for i, uid in enumerate(demo_user_ids)}
+
+            result = conn.execute(
+                text(f"""
+                    DELETE FROM coach_nudges
+                    WHERE signal_id IN (
+                        SELECT signal_id FROM spending_signals
+                        WHERE user_id IN ({placeholders})
+                    )
+                """),
+                uid_params
+            )
+            counts["coach_nudges"] = result.rowcount
+
+            result = conn.execute(
+                text(f"DELETE FROM spending_signals WHERE user_id IN ({placeholders})"),
+                uid_params
+            )
+            counts["spending_signals"] = result.rowcount
+
+            result = conn.execute(
+                text(f"DELETE FROM user_budgets WHERE user_id IN ({placeholders})"),
+                uid_params
+            )
+            counts["user_budgets"] = result.rowcount
+
+            result = conn.execute(
+                text(f"DELETE FROM expenses WHERE user_id IN ({placeholders})"),
+                uid_params
+            )
+            counts["expenses"] = result.rowcount
+
+            result = conn.execute(
+                text(f"DELETE FROM users WHERE user_id IN ({placeholders})"),
+                uid_params
+            )
+            counts["users"] = result.rowcount
+
+            conn.commit()
+
+    finally:
+        engine.dispose()
+
+    return counts

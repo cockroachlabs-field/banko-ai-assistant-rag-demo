@@ -222,6 +222,9 @@
     </style>
 </head>
 <body>
+    {% if current_username %}
+    <div style="position:fixed;top:12px;right:16px;z-index:40;">{% include "_identity.html" %}</div>
+    {% endif %}
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <h1 style="margin: 0;">🤖 Agent Dashboard</h1>

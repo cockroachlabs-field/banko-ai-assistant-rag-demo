@@ -405,10 +405,6 @@
                     </div>
                 </div>
                 <div class="flex items-center space-x-4 pr-6">
-                    <button id="voice-toggle" class="btn-modern btn-secondary text-sm transition-all duration-300 hover:scale-105">
-                        <i class="fas fa-microphone mr-2"></i>
-                        <span id="voice-status">Voice ON</span>
-                    </button>
 
 
                     <button id="db-toggle" class="btn-modern bg-blue-600 hover:bg-blue-700 text-white text-sm">
@@ -416,9 +412,7 @@
                         <span>DB Ops</span>
                         <span id="db-indicator" class="ml-2 w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
                     </button>
-                    <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-cockroach-border">
-                        <img src="{{ url_for('static', filename='profilepic.jpeg') }}" alt="Profile" class="w-full h-full object-cover">
-                    </div>
+                    {% include "_identity.html" %}
       </div>
     </header>
     
@@ -448,6 +442,13 @@
                                     <div class="markdown-content text-cockroach-text leading-relaxed" data-raw-content="{{ message.text }}">
                                         <!-- Markdown content will be rendered here -->
                             </div>
+                            {% if message.meta %}
+                            <div class="text-xs text-gray-400 mt-2">
+                                {% if message.meta.region %}{{ message.meta.region }} · {% endif %}{{ message.meta.db_ms }}ms
+                                <button class="ml-2 text-blue-500 hover:text-blue-600" onclick="toggleExplain(this)">how was this answered</button>
+                            </div>
+                            <pre class="explain-panel hidden mt-2 p-2 bg-gray-50 text-gray-700 text-xs font-mono overflow-x-auto rounded border border-gray-200">{{ message.meta.explain | e }}</pre>
+                            {% endif %}
                         </div>
                     </div>
                             <button class="copy-button" onclick="copyMessage(this, this.closest('.message-container').querySelector('.markdown-content').getAttribute('data-raw-content') || this.closest('.message-container').querySelector('p').textContent)" title="Copy message">
@@ -607,6 +608,17 @@ marked.setOptions({
                     icon.className = originalIcon;
                 }, 2000);
             });
+        }
+
+        function toggleExplain(button) {
+            const panel = button.closest('.message-bubble').querySelector('.explain-panel');
+            if (panel.classList.contains('hidden')) {
+                panel.classList.remove('hidden');
+                button.textContent = 'hide plan';
+            } else {
+                panel.classList.add('hidden');
+                button.textContent = 'how was this answered';
+            }
         }
 
         // Sidebar Management
@@ -831,18 +843,6 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                     console.error('Language selector not found during setup');
                 }
                 
-                // Voice toggle
-                const voiceToggle = document.getElementById('voice-toggle');
-                if (voiceToggle) {
-                    voiceToggle.addEventListener('click', () => {
-                        console.log('Voice toggle clicked');
-                        this.toggleVoiceFeatures();
-                    });
-                    console.log('Voice toggle event listener added');
-                } else {
-                    console.error('Voice toggle not found during setup');
-                }
-                
                 console.log('Voice event listeners setup complete');
             }
             
@@ -908,18 +908,16 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                     return;
                 }
                 
-                // Always stop any ongoing speech first
+                // A click while speaking means stop. The old version reset
+                // isSpeaking before checking it, so it never returned and
+                // every click restarted the speech instead of stopping it.
                 if (this.speechSynthesis.speaking || this.isSpeaking) {
                     console.log('Stopping all speech...');
                     this.speechSynthesis.cancel();
                     this.isSpeaking = false;
                     this.updateSpeakerButton(false);
-                    
-                    // If we were already speaking, just stop and return
-                    if (this.isSpeaking) {
-        return;
-                    }
-    }
+                    return;
+                }
     
                 try {
     const botMessages = document.querySelectorAll('[data-read-aloud]');
@@ -1098,13 +1096,13 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
 
             
             disableVoiceFeatures() {
+                // Runs at init on browsers without speech recognition, so
+                // every element is optional (the header toggle is gone).
                 this.isEnabled = false;
-                document.getElementById('voice-btn').style.display = 'none';
-                document.getElementById('speaker-btn').style.display = 'none';
-                document.getElementById('language-select').style.display = 'none';
-                document.getElementById('voice-toggle').innerHTML = '<i class="fas fa-microphone-slash mr-2"></i><span>Voice OFF</span>';
-                document.getElementById('voice-toggle').className = 'btn-modern bg-red-600 hover:bg-red-700 text-white text-sm';
-                document.getElementById('voice-status').textContent = 'Voice OFF';
+                for (const id of ['voice-btn', 'speaker-btn', 'language-select']) {
+                    const el = document.getElementById(id);
+                    if (el) el.style.display = 'none';
+                }
             }
         }
 

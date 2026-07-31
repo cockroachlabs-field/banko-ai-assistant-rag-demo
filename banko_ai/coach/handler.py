@@ -116,21 +116,35 @@ class SignalHandler:
     def _persist_nudge(self, signal: Signal, nudge: dict[str, Any]) -> str:
         eng = self._engine()
         with eng.begin() as conn:
-            row = conn.execute(text("""
-                INSERT INTO coach_nudges
-                  (signal_id, user_id, message, tool_trace,
-                   provider_used, trace_id)
-                VALUES (:sig, :u, :msg, CAST(:trace AS JSONB),
-                        :prov, :trace_id)
-                RETURNING nudge_id
-            """), {
+            from ..utils.migration import regional_tables_ready
+            from ..web.auth import resolve_user_region
+
+            cols = ["signal_id", "user_id", "message", "tool_trace",
+                    "provider_used", "trace_id"]
+            placeholders = [":sig", ":u", ":msg", "CAST(:trace AS JSONB)",
+                           ":prov", ":trace_id"]
+            params = {
                 "sig": signal.signal_id,
                 "u": signal.user_id,
                 "msg": nudge["message"],
                 "trace": json.dumps(nudge.get("tool_trace") or []),
                 "prov": nudge.get("provider_used"),
                 "trace_id": nudge.get("trace_id"),
-            }).fetchone()
+            }
+
+            if regional_tables_ready(self.database_url):
+                user_region = resolve_user_region(signal.user_id, self.database_url)
+                if user_region:
+                    cols.append("crdb_region")
+                    placeholders.append(":region")
+                    params["region"] = user_region
+
+            sql = f"""
+                INSERT INTO coach_nudges ({", ".join(cols)})
+                VALUES ({", ".join(placeholders)})
+                RETURNING nudge_id
+            """
+            row = conn.execute(text(sql), params).fetchone()
         eng.dispose()
         return str(row[0])
 

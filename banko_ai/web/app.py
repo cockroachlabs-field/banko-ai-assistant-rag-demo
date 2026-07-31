@@ -9,10 +9,13 @@ import hmac
 import json
 import logging as _coach_log
 import os
+import re
+import time
 import uuid
 from datetime import datetime
 
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+import requests
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_socketio import SocketIO
 from sqlalchemy import text
 
@@ -21,7 +24,7 @@ from ..coach.handler import SignalHandler
 from ..coach.signals import SignalParseError, parse_changefeed_envelope
 from ..config.settings import get_config
 from ..utils.cache_manager import BankoCacheManager
-from ..utils.db_retry import create_resilient_engine, get_database_url
+from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, get_database_url
 from ..vector_search.generator import EnhancedExpenseGenerator
 from ..vector_search.search import VectorSearchEngine
 from .auth import UserManager
@@ -251,11 +254,62 @@ def create_app() -> Flask:
     # the legacy indexing migration still carries pgvector ivfflat syntax
     # that CockroachDB rejects.
     try:
-        from banko_ai.utils.migration import DatabaseMigration
-        DatabaseMigration(config.database_url).migrate_to_coach_v1()
+        from banko_ai.utils.migration import (
+            DatabaseMigration,
+            detect_regions,
+            migrate_regional_tables,
+            resolve_primary_region,
+        )
+        migrator = DatabaseMigration(config.database_url)
+        migrator.migrate_users_table()
+        migrator.migrate_to_coach_v1()
+
+        # The three legacy personas must exist on every boot: docs and
+        # clear-demo-users both promise maya/sam/riley survive, and a
+        # fresh database otherwise has no users at all.
+        UserManager(config.database_url).backfill_personas()
+
+        regions = detect_regions(config.database_url)
+        if regions:
+            primary = resolve_primary_region(config.database_url)
+            if primary:
+                migrate_regional_tables(config.database_url, primary)
     except Exception as e:
-        print(f"Warning: coach migration failed at startup: {e}")
-    
+        print(f"Warning: migration failed at startup: {e}")
+
+    def _emit_welcome_signal(user: dict) -> None:
+        """Post a welcome signal matched to the user's spending style."""
+        secret = os.getenv("CDC_WEBHOOK_HMAC_SECRET", "")
+        if not secret:
+            print("welcome signal skipped: no webhook secret")
+            return
+        sig_type, severity, payload = {
+            "subscriber": ("recurring_drift", "info",
+                           {"subscription": "Netflix", "old_amount": 15.99,
+                            "new_amount": 22.99, "pct_change": 0.44,
+                            "merchant_id": str(uuid.uuid4())}),
+        }.get(user["spending_style"],
+              ("budget_threshold", "info",
+               {"category": "dining", "pct_used": 0.55,
+                "monthly_budget": 400.0, "spent_so_far": 220.0,
+                "days_remaining": 12}))
+        envelope = {"payload": [{"after": {
+            "signal_id": str(uuid.uuid4()), "user_id": user["user_id"],
+            "signal_type": sig_type, "severity": severity,
+            "payload": payload,
+            "idempotency_key": f"welcome:{user['user_id']}"},
+            "updated": f"{time.time():.10f}"}]}
+        body = json.dumps(envelope).encode()
+        mac = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        try:
+            url = request.host_url.rstrip('/') + '/api/cdc/signals'
+            requests.post(
+                url, data=body, timeout=5,
+                headers={"Content-Type": "application/json",
+                         "X-Banko-Signature": mac})
+        except Exception as e:
+            print(f"welcome signal skipped: {e}")
+
     @app.route('/')
     def index():
         """Main application page."""
@@ -275,16 +329,82 @@ def create_app() -> Flask:
     
     @app.route('/login', methods=['GET', 'POST'])
     def login():
-        """Demo persona picker. Every downstream query scopes to the choice."""
-        from banko_ai.vector_search.generator import PERSONAS
+        """Login for known users, reveal signup for unknown usernames."""
         if request.method == 'POST':
-            chosen = request.form.get('persona_id')
-            persona = next((p for p in PERSONAS if p["user_id"] == chosen), None)
-            if persona:
-                session['user_id'] = persona["user_id"]
-                session['username'] = persona["name"]
+            username = request.form.get('username', '').strip()
+            if not username:
+                flash('Username required', 'error')
+                return render_template('login.html', regions=[])
+
+            um = UserManager(config.database_url)
+            user = um.get_by_username(username)
+            if user:
+                session['user_id'] = user["user_id"]
+                session['username'] = user["username"]
                 return redirect(url_for('index'))
-        return render_template('login.html', personas=PERSONAS)
+
+            regions = detect_regions(config.database_url)
+            return render_template('login.html', username=username,
+                                   regions=regions, show_signup=True)
+
+        return render_template('login.html', regions=[])
+
+    @app.route('/signup', methods=['POST'])
+    def signup():
+        """Create user, seed history, emit welcome signal, log in."""
+        username = request.form.get('username', '').strip()
+        spending_style = request.form.get('spending_style', '').strip()
+        home_region = request.form.get('home_region', None)
+
+        allowed_styles = ['diner', 'subscriber', 'saver', 'balanced']
+        if spending_style not in allowed_styles:
+            flash(f'Invalid spending style. Choose from: {", ".join(allowed_styles)}', 'error')
+            return render_template('login.html', username=username,
+                                   regions=detect_regions(config.database_url),
+                                   show_signup=True)
+
+        # Only accept a region the cluster actually has; anything else
+        # (including any value on a single-region cluster) is dropped so a
+        # crafted form post can never poison home_region.
+        if home_region and home_region not in detect_regions(config.database_url):
+            home_region = None
+
+        um = UserManager(config.database_url)
+        gen = EnhancedExpenseGenerator(config.database_url)
+
+        # A taken username is a sign-in, not an error: never touch the
+        # existing account from the signup path.
+        if um.get_by_username(username):
+            flash(f'"{username}" already exists. Sign in below to continue.', 'info')
+            return render_template('login.html', username=username,
+                                   regions=detect_regions(config.database_url))
+
+        user = None
+        try:
+            user = um.create(username, spending_style, home_region, demo_user=True)
+            gen.seed_user_history(user["user_id"], spending_style)
+            _emit_welcome_signal(user)
+
+            session['user_id'] = user["user_id"]
+            session['username'] = user["username"]
+            return redirect(url_for('index'))
+        except Exception as e:
+            # Roll back only what this request created, including any
+            # partially seeded history, so a failure never orphans rows
+            # and a create-time race never deletes someone else's account.
+            if user is not None:
+                try:
+                    with um.engine.connect() as conn:
+                        conn.execute(text("DELETE FROM expenses WHERE user_id = :uid"),
+                                     {"uid": user["user_id"]})
+                        conn.commit()
+                except Exception as cleanup_err:
+                    print(f"signup rollback: expense cleanup failed: {cleanup_err}")
+                um.delete_by_username(username)
+            flash(f'Signup failed: {e}', 'error')
+            return render_template('login.html', username=username,
+                                   regions=detect_regions(config.database_url),
+                                   show_signup=True)
 
     def current_demo_user() -> str:
         """The session persona, falling back to the coach default so API
@@ -310,6 +430,21 @@ def create_app() -> Flask:
         if session.get('user_id'):
             return None
         return redirect(url_for('login'))
+
+    def _serving_regions(explain_text: str | None) -> str | None:
+        """The region(s) that actually served a query, parsed from its
+        EXPLAIN ANALYZE output. This is what makes the badge move during a
+        region outage: the user's home region is where their rows live,
+        but leaseholders fail over, and the plan names the survivors."""
+        if not explain_text:
+            return None
+        found: list[str] = []
+        for m in re.finditer(r"regions: ([a-z0-9, -]+)", explain_text):
+            for r in m.group(1).split(","):
+                r = r.strip()
+                if r and r not in found:
+                    found.append(r)
+        return ", ".join(sorted(found)) if found else None
 
     def _render_aggregation_markdown(agg) -> str:
         """Deterministic answer card for aggregation questions. Numbers come
@@ -374,6 +509,24 @@ def create_app() -> Flask:
         session.pop('username', None)
         user_manager.logout_user()
         return redirect(url_for('login'))
+
+    @app.context_processor
+    def inject_identity():
+        """Who is signed in, for the header pill on every page. The region
+        is the user's home region (where their rows live), shown only on
+        regional deployments; the per-answer badge shows where each query
+        was actually served."""
+        username = session.get('username')
+        region = None
+        if username and session.get('user_id'):
+            try:
+                from ..utils.migration import regional_tables_ready
+                if regional_tables_ready(config.database_url):
+                    from .auth import resolve_user_region
+                    region = resolve_user_region(session['user_id'], config.database_url)
+            except Exception:
+                region = None
+        return {'current_username': username, 'current_user_region': region}
     
     @app.route('/api/search', methods=['POST'])
     def api_search():
@@ -858,21 +1011,25 @@ def create_app() -> Flask:
                     with engine.connect() as conn:
                         # Format embedding as array literal for CockroachDB
                         embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
-                        
+
                         # Format tags array for CockroachDB
                         tags_str = '{' + ','.join(f'"{tag}"' for tag in tags) + '}' if tags else None
-                        
-                        conn.execute(text("""
-                            INSERT INTO expenses (
-                                expense_id, user_id, expense_amount, shopping_type,
+
+                        # Pin the row to the uploader's home region like every
+                        # other expenses writer, or the region-pruned reads
+                        # silently exclude uploaded receipts.
+                        from banko_ai.utils.migration import regional_tables_ready
+
+                        from .auth import resolve_user_region as _resolve_region
+                        receipt_region = (_resolve_region(user_id, config.database_url)
+                                          if regional_tables_ready(config.database_url) else None)
+                        cols = """expense_id, user_id, expense_amount, shopping_type,
                                 merchant, expense_date, description, payment_method,
-                                tags, embedding
-                            ) VALUES (
-                                :expense_id, :user_id, :amount, :category,
+                                tags, embedding"""
+                        vals = """:expense_id, :user_id, :amount, :category,
                                 :merchant, :date, :description, :payment_method,
-                                :tags, CAST(:embedding AS VECTOR(384))
-                            )
-                        """), {
+                                :tags, CAST(:embedding AS VECTOR(384))"""
+                        insert_params = {
                             'expense_id': expense_id,
                             'user_id': user_id,
                             'amount': amount,
@@ -883,7 +1040,14 @@ def create_app() -> Flask:
                             'payment_method': extracted.get('payment_method', 'unknown') if extracted.get('payment_method') else 'unknown',
                             'tags': tags_str,
                             'embedding': embedding_str
-                        })
+                        }
+                        if receipt_region:
+                            cols += ", crdb_region"
+                            vals += ", :crdb_region"
+                            insert_params['crdb_region'] = receipt_region
+                        conn.execute(text(f"""
+                            INSERT INTO expenses ({cols}) VALUES ({vals})
+                        """), insert_params)
                         conn.commit()
                     
                     print(f"💰 Expense added to expenses table: {expense_id}")
@@ -1102,6 +1266,19 @@ def create_app() -> Flask:
         ai_provider_display = get_provider_display_info(config.ai_service, ai_provider)
         
         if request.method == 'POST':
+            # One import for every branch below: a local import inside a
+            # single branch makes the name function-local everywhere and
+            # the other branches crash on it. Gated on the deployment being
+            # regional so a failed RBR migration (tables without
+            # crdb_region) can never poison the read path.
+            from ..utils.migration import regional_tables_ready
+            from .auth import resolve_user_region as _resolve_region_raw
+
+            def resolve_user_region(user_id, database_url):
+                if not regional_tables_ready(database_url):
+                    return None
+                return _resolve_region_raw(user_id, database_url)
+
             # Handle both 'message' and 'user_input' field names for compatibility
             user_message = request.form.get('user_input') or request.form.get('message')
             response_language = request.form.get('response_language', 'en-US')
@@ -1151,21 +1328,44 @@ def create_app() -> Flask:
                 from banko_ai.utils.intent_classifier import classify_aggregation, extract_window
                 agg_intent = classify_aggregation(user_message)
                 if agg_intent is not None:
-                    from banko_ai.utils.aggregations import run_aggregation
-                    agg = run_aggregation(agg_intent, current_demo_user(),
-                                          config.database_url)
-                    agg_text = _render_aggregation_markdown(agg)
-                    if agg.count:
-                        insights = _aggregation_insights(agg, user_message)
-                        if insights:
-                            agg_text += "\n\n**Insights**\n\n" + insights
-                    session['chat'].append({'text': agg_text,
-                                            'class': 'Assistant'})
+                    # Same transient posture as the RAG branch below: a DB
+                    # blip during a fault demo must read as reconnecting,
+                    # never as a 500.
                     try:
-                        from langchain_core.messages import AIMessage
-                        crdb_history.add_message(AIMessage(content=agg_text))
-                    except Exception:
-                        pass
+                        from banko_ai.utils.aggregations import explain_aggregation, run_aggregation
+                        user_region = resolve_user_region(current_demo_user(), config.database_url)
+                        t0 = time.perf_counter()
+                        agg = run_aggregation(agg_intent, current_demo_user(),
+                                              config.database_url, region=user_region)
+                        db_ms = int((time.perf_counter() - t0) * 1000)
+                        agg_text = _render_aggregation_markdown(agg)
+                        if agg.count:
+                            insights = _aggregation_insights(agg, user_message)
+                            if insights:
+                                agg_text += "\n\n**Insights**\n\n" + insights
+                        explain_text = explain_aggregation(agg_intent, current_demo_user(),
+                                                           config.database_url, region=user_region)
+                        session['chat'].append({
+                            'text': agg_text,
+                            'class': 'Assistant',
+                            'meta': {
+                                'region': _serving_regions(explain_text) or user_region,
+                                'db_ms': db_ms,
+                                'explain': explain_text
+                            }
+                        })
+                        try:
+                            from langchain_core.messages import AIMessage
+                            crdb_history.add_message(AIMessage(content=agg_text))
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        if isinstance(e, TRANSIENT_ERRORS):
+                            error_message = "Reconnecting to the database, try that again in a moment."
+                        else:
+                            error_message = f"Sorry, I'm experiencing technical difficulties. Error: {str(e)}"
+                        print(f"Aggregation error: {str(e)}")
+                        session['chat'].append({'text': error_message, 'class': 'Assistant'})
                     return render_template('index.html',
                                            chat=session['chat'],
                                            ai_provider=ai_provider_display,
@@ -1176,16 +1376,26 @@ def create_app() -> Flask:
                     # persona, with a date predicate when the question names
                     # a window. The cache layers live inside the engine.
                     window = extract_window(user_message)
-                    search_results = search_engine.search_expenses(
+                    t0 = time.perf_counter()
+                    search_result = search_engine.search_expenses(
                         query=prompt,
                         user_id=current_demo_user(),
                         limit=10,
                         date_start=window[0] if window else None,
                         date_end=window[1] if window else None,
+                        region=resolve_user_region(current_demo_user(), config.database_url),
+                        capture_explain=True,
                     )
-                    
+                    db_ms = int((time.perf_counter() - t0) * 1000)
+
+                    if isinstance(search_result, tuple):
+                        search_results, explain_text = search_result
+                    else:
+                        search_results = search_result
+                        explain_text = ""
+
                     print(f"Using {config.ai_service} for response generation in {target_language}")
-                    
+
                     # Convert SearchResult objects to dictionaries if needed
                     if search_results and hasattr(search_results[0], 'description'):
                         # Convert SearchResult objects to dict format - MUST include ALL fields!
@@ -1203,7 +1413,7 @@ def create_app() -> Flask:
                                 'similarity_score': result.similarity_score
                             })
                         search_results = search_results_dict
-                    
+
                     # Generate RAG response with language preference
                     if hasattr(ai_provider, 'simple_rag_response'):
                         rag_response_text = ai_provider.simple_rag_response(
@@ -1214,11 +1424,20 @@ def create_app() -> Flask:
                             user_message, search_results, None, response_language
                         )
                         rag_response_text = rag_response.response if hasattr(rag_response, 'response') else str(rag_response)
-                    
+
                     print(f"Response from {config.ai_service}: {rag_response_text}")
-                    
-                    session['chat'].append({'text': rag_response_text, 'class': 'Assistant'})
-                    
+
+                    session['chat'].append({
+                        'text': rag_response_text,
+                        'class': 'Assistant',
+                        'meta': {
+                            'region': _serving_regions(explain_text)
+                                or resolve_user_region(current_demo_user(), config.database_url),
+                            'db_ms': db_ms,
+                            'explain': explain_text
+                        }
+                    })
+
                     # Persist assistant response in CockroachDB chat history
                     try:
                         from langchain_core.messages import AIMessage
@@ -1227,7 +1446,10 @@ def create_app() -> Flask:
                         pass
                     
                 except Exception as e:
-                    error_message = f"Sorry, I'm experiencing technical difficulties. Error: {str(e)}"
+                    if isinstance(e, TRANSIENT_ERRORS):
+                        error_message = "Reconnecting to the database, try that again in a moment."
+                    else:
+                        error_message = f"Sorry, I'm experiencing technical difficulties. Error: {str(e)}"
                     print(f"Error with {config.ai_service}: {str(e)}")
                     session['chat'].append({'text': error_message, 'class': 'Assistant'})
                     
@@ -1546,25 +1768,40 @@ def create_app() -> Flask:
         from sqlalchemy import create_engine
         from sqlalchemy.exc import IntegrityError
         from sqlalchemy.pool import NullPool
+
+        from banko_ai.utils.migration import regional_tables_ready
+        from banko_ai.web.auth import resolve_user_region as _resolve_region
         eng = create_engine(get_database_url(), poolclass=NullPool)
         try:
             try:
                 with eng.begin() as conn:
-                    row = conn.execute(text("""
-                        INSERT INTO spending_signals
-                          (signal_id, user_id, signal_type, severity, payload,
-                           idempotency_key)
-                        VALUES (:sid, :uid, :stype, :sev, CAST(:pl AS JSONB), :ik)
-                        ON CONFLICT (idempotency_key) DO NOTHING
-                        RETURNING signal_id
-                    """), {
+                    cols = ["signal_id", "user_id", "signal_type", "severity",
+                            "payload", "idempotency_key"]
+                    placeholders = [":sid", ":uid", ":stype", ":sev",
+                                   "CAST(:pl AS JSONB)", ":ik"]
+                    params = {
                         "sid": sig.signal_id,
                         "uid": sig.user_id,
                         "stype": sig.signal_type.value,
                         "sev": sig.severity,
                         "pl": json.dumps(sig.payload),
                         "ik": sig.idempotency_key,
-                    }).fetchone()
+                    }
+
+                    if regional_tables_ready(get_database_url()):
+                        user_region = _resolve_region(sig.user_id, get_database_url())
+                        if user_region:
+                            cols.append("crdb_region")
+                            placeholders.append(":region")
+                            params["region"] = user_region
+
+                    sql = f"""
+                        INSERT INTO spending_signals ({", ".join(cols)})
+                        VALUES ({", ".join(placeholders)})
+                        ON CONFLICT (idempotency_key) DO NOTHING
+                        RETURNING signal_id
+                    """
+                    row = conn.execute(text(sql), params).fetchone()
                 return row is not None
             except IntegrityError:
                 # PK collision on signal_id (or any other unique constraint) —
@@ -1698,9 +1935,19 @@ def create_app() -> Flask:
             provider_name=cfg.ai_service,
             max_steps=cfg.coach_agent_max_steps,
         )
-        reply = agent.converse(user_id=user_id, message=message,
-                               history=[], context=context,
-                               thread_id=thread_id)
+        try:
+            reply = agent.converse(user_id=user_id, message=message,
+                                   history=[], context=context,
+                                   thread_id=thread_id)
+        except Exception as e:
+            # A provider timeout or DB blip must come back as a retryable
+            # coach message, not a raw 500 the UI renders as an error.
+            print(f"coach chat failed: {e}")
+            return jsonify({
+                "message": "I could not reach the model just now. "
+                           "Give it a moment and send that again.",
+                "transient": True,
+            }), 503
         return jsonify(reply)
 
     @socketio.on("coach.join")

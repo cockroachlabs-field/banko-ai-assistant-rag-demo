@@ -16,18 +16,6 @@ from sqlalchemy import text
 from ..utils.db_retry import create_resilient_engine, get_database_url
 from .enrichment import DataEnricher
 
-PERSONAS = [
-    {"user_id": "00000000-0000-0000-0000-0000000000a1",
-     "name": "Maya", "style": "diner",
-     "blurb": "Eats out a lot, wants to know where the money goes"},
-    {"user_id": "00000000-0000-0000-0000-0000000000a2",
-     "name": "Sam", "style": "subscriber",
-     "blurb": "Subscriptions everywhere, one of them just got pricier"},
-    {"user_id": "00000000-0000-0000-0000-0000000000a3",
-     "name": "Riley", "style": "saver",
-     "blurb": "Light spender, mostly groceries and transit"},
-]
-
 
 class EnhancedExpenseGenerator:
     """Enhanced expense generator with data enrichment for better vector search."""
@@ -317,11 +305,15 @@ class EnhancedExpenseGenerator:
         from sqlalchemy.exc import DBAPIError, OperationalError
 
         from ..utils.db_retry import is_transient_error
-        
+        from ..utils.migration import regional_tables_ready
+        from ..web.auth import resolve_user_region
+
+        is_regional = regional_tables_ready(self.database_url)
+
         # Prepare data for insertion
         data_to_insert = []
         for expense in expenses:
-            data_to_insert.append({
+            row = {
                 'expense_id': expense['expense_id'],
                 'user_id': expense['user_id'],
                 'expense_date': expense['expense_date'],
@@ -333,7 +325,12 @@ class EnhancedExpenseGenerator:
                 'recurring': expense['recurring'],
                 'tags': expense['tags'],
                 'embedding': expense['embedding']
-            })
+            }
+            if is_regional:
+                user_region = resolve_user_region(expense['user_id'], self.database_url)
+                if user_region:
+                    row['crdb_region'] = user_region
+            data_to_insert.append(row)
         
         # Insert in smaller batches to reduce transaction conflicts
         # Use environment variable or default to 50
@@ -533,37 +530,12 @@ class EnhancedExpenseGenerator:
         
         expenses = self.generate_expenses(count, user_id)
         saved = self.save_expenses_to_database(expenses)
-        self._seed_personas()
         return saved
 
-    def _seed_personas(self) -> None:
-        """Seed the three demo personas with dense, recent, patterned data.
-        Idempotent: a persona that already has rows is left alone. The
-        patterns are deliberate demo material: Maya answers aggregation
-        questions with a known ground truth, Sam trips the recurring-drift
-        coach signal, Riley shows a light spender."""
-        from sqlalchemy import text
-        today = datetime.now().date()
-        for persona in PERSONAS:
-            with self.engine.connect() as conn:
-                existing = conn.execute(
-                    text("SELECT count(*) FROM expenses WHERE user_id = :u"),
-                    {"u": persona["user_id"]}).scalar()
-            if existing:
-                continue
-            rows = self._persona_rows(persona, today)
-            texts = [r["searchable_text"] for r in rows]
-            vectors = self.embedding_model.encode(texts)
-            for row, vec in zip(rows, vectors):
-                row["embedding"] = vec.tolist()
-            self.save_expenses_to_database(rows)
-            print(f"🎭 Seeded persona {persona['name']} "
-                  f"({len(rows)} expenses)")
-
-    def _persona_row(self, user_id: str, days_ago: int, amount: float,
-                     category: str, merchant: str,
-                     payment: str = "Credit Card",
-                     recurring: bool = False) -> dict[str, Any]:
+    def _style_row(self, user_id: str, days_ago: int, amount: float,
+                   category: str, merchant: str,
+                   payment: str = "Credit Card",
+                   recurring: bool = False) -> dict[str, Any]:
         desc = (f"Spent ${amount:.2f} on {category.lower()} at {merchant} "
                 f"using {payment}.")
         return {
@@ -577,60 +549,115 @@ class EnhancedExpenseGenerator:
             "payment_method": payment,
             "recurring": recurring,
             "tags": [category.lower(), merchant.lower().replace(" ", "_")],
-            "embedding": None,  # filled in batch by _seed_personas
+            "embedding": None,
             "searchable_text": desc,
         }
 
-    def _persona_rows(self, persona: dict, today) -> list[dict[str, Any]]:
-        uid = persona["user_id"]
-        rng = random.Random(uid)  # deterministic per persona
+    def _style_rows(self, user_id: str, style: str, rng: random.Random) -> list[dict[str, Any]]:
+        """Build deterministic expense rows based on spending style."""
         rows: list[dict[str, Any]] = []
-        if persona["style"] == "diner":
+        if style == "diner":
             for _ in range(36):
-                rows.append(self._persona_row(
-                    uid, rng.randint(0, 118),
+                rows.append(self._style_row(
+                    user_id, rng.randint(0, 118),
                     round(rng.uniform(18.0, 85.0), 2), "Restaurant",
                     rng.choice(["Pizza Hut", "Italian Bistro", "Domino's",
                                 "Thai Garden"])))
             for _ in range(40):
-                rows.append(self._persona_row(
-                    uid, rng.randint(0, 118),
+                rows.append(self._style_row(
+                    user_id, rng.randint(0, 118),
                     round(rng.uniform(8.0, 140.0), 2),
                     rng.choice(["Groceries", "Coffee", "Transport"]),
                     rng.choice(["Whole Foods", "Starbucks", "Uber",
                                 "Local Market"])))
-        elif persona["style"] == "subscriber":
+        elif style == "subscriber":
             for months_ago in range(4, 2, -1):
-                rows.append(self._persona_row(
-                    uid, months_ago * 30, 15.99, "Subscription",
+                rows.append(self._style_row(
+                    user_id, months_ago * 30, 15.99, "Subscription",
                     "Netflix", recurring=True))
             for months_ago in range(2, 0, -1):
-                rows.append(self._persona_row(
-                    uid, months_ago * 30, 22.99, "Subscription",
+                rows.append(self._style_row(
+                    user_id, months_ago * 30, 22.99, "Subscription",
                     "Netflix", recurring=True))
             for months_ago in range(4, 0, -1):
-                rows.append(self._persona_row(
-                    uid, months_ago * 30 + 3,
+                rows.append(self._style_row(
+                    user_id, months_ago * 30 + 3,
                     round(rng.uniform(95.0, 110.0), 2), "Utilities",
                     "Electric Company", recurring=True))
-                rows.append(self._persona_row(
-                    uid, months_ago * 30 + 7, 79.99, "Utilities",
+                rows.append(self._style_row(
+                    user_id, months_ago * 30 + 7, 79.99, "Utilities",
                     "Internet Provider", recurring=True))
             for _ in range(40):
-                rows.append(self._persona_row(
-                    uid, rng.randint(0, 118),
+                rows.append(self._style_row(
+                    user_id, rng.randint(0, 118),
                     round(rng.uniform(10.0, 120.0), 2),
                     rng.choice(["Groceries", "Restaurant", "Shopping"]),
                     rng.choice(["Whole Foods", "Italian Bistro", "Amazon",
                                 "Target"])))
-        else:  # saver
+        elif style == "saver":
             for _ in range(22):
-                rows.append(self._persona_row(
-                    uid, rng.randint(0, 118),
+                rows.append(self._style_row(
+                    user_id, rng.randint(0, 118),
                     round(rng.uniform(5.0, 60.0), 2),
                     rng.choice(["Groceries", "Transport"]),
                     rng.choice(["Local Market", "Metro Transit"])))
+        elif style == "balanced":
+            categories = ["Groceries", "Restaurant", "Transport", "Shopping", "Subscription"]
+            for _ in range(60):
+                category = rng.choice(categories)
+                if category == "Groceries":
+                    merchant = rng.choice(["Whole Foods", "Local Market", "Costco", "Target"])
+                    amount = round(rng.uniform(10.0, 120.0), 2)
+                elif category == "Restaurant":
+                    merchant = rng.choice(["Pizza Hut", "Italian Bistro", "Chipotle", "Subway"])
+                    amount = round(rng.uniform(15.0, 90.0), 2)
+                elif category == "Transport":
+                    merchant = rng.choice(["Uber", "Lyft", "Metro Transit"])
+                    amount = round(rng.uniform(5.0, 80.0), 2)
+                elif category == "Shopping":
+                    merchant = rng.choice(["Amazon", "Target", "Walmart", "IKEA"])
+                    amount = round(rng.uniform(15.0, 180.0), 2)
+                else:  # Subscription
+                    merchant = rng.choice(["Netflix", "Spotify", "Planet Fitness"])
+                    amount = round(rng.uniform(10.0, 45.0), 2)
+                rows.append(self._style_row(
+                    user_id, rng.randint(0, 118),
+                    amount, category, merchant,
+                    recurring=(category == "Subscription")))
+        else:
+            raise ValueError(f"Unknown style '{style}'; allowed: diner, subscriber, saver, balanced")
         return rows
+
+    def seed_user_history(self, user_id: str, style: str, months: int = 4) -> int:
+        """Seed a user's expense history with style-driven data.
+
+        Idempotent: if the user already has expense rows, returns 0.
+        Otherwise builds deterministic rows (with embeddings) and inserts them.
+
+        Args:
+            user_id: User UUID
+            style: Spending pattern (diner, subscriber, saver, balanced)
+            months: Months of history to generate (default 4)
+
+        Returns:
+            Number of rows inserted (0 if user already had data)
+        """
+        from sqlalchemy import text
+        with self.engine.connect() as conn:
+            existing = conn.execute(
+                text("SELECT count(*) FROM expenses WHERE user_id = :u"),
+                {"u": user_id}).scalar()
+        if existing:
+            return 0
+
+        rng = random.Random(user_id)
+        rows = self._style_rows(user_id, style, rng)
+        texts = [r["searchable_text"] for r in rows]
+        vectors = self.embedding_model.encode(texts)
+        for row, vec in zip(rows, vectors):
+            row["embedding"] = vec.tolist()
+        self.save_expenses_to_database(rows)
+        return len(rows)
     
     def create_user_specific_indexes(self) -> bool:
         """Create user-specific vector indexes for CockroachDB."""

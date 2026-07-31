@@ -187,10 +187,7 @@
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
-                    <div class="flex items-center space-x-2 text-white">
-                        <img src="{{ url_for('static', filename='profilepic.jpeg') }}" alt="Profile" class="w-8 h-8 rounded-full">
-                        <span class="text-sm font-medium">John Doe</span>
-                    </div>
+                    {% include "_identity.html" %}
                 </div>
             </header>
             

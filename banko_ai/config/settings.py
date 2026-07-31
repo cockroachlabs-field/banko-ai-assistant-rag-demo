@@ -73,6 +73,9 @@ class Config:
     # Checkpointer Configuration
     checkpoint_ttl_days: int = 7  # Auto-expire LangGraph checkpoints after N days (0 = disabled)
 
+    # Demo User Configuration
+    demo_user_ttl_days: int = 0  # Auto-expire demo users after N days (0 = disabled)
+
     # Coach Configuration (added 2026-05-22)
     cdc_webhook_hmac_secret: str = ""
     coach_rate_limit_per_5min: int = 30
@@ -163,6 +166,9 @@ class Config:
             
             # Checkpointer
             checkpoint_ttl_days=int(os.getenv("CHECKPOINT_TTL_DAYS", "7")),
+
+            # Demo User
+            demo_user_ttl_days=int(os.getenv("DEMO_USER_TTL_DAYS", "0")),
 
             # Coach
             cdc_webhook_hmac_secret=os.getenv("CDC_WEBHOOK_HMAC_SECRET", ""),

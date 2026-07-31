@@ -134,6 +134,11 @@ def main() -> int:
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         sys.exit("DATABASE_URL not set")
+    # Same scheme normalization as the app: a plain postgresql:// URL
+    # trips the stock dialect on CockroachDB's version string.
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+    from banko_ai.utils.db_retry import normalize_db_url
+    db_url = normalize_db_url(db_url)
 
     if args.via == "webhook":
         signal_ids = _fire_webhook(args.url, args.user_id)

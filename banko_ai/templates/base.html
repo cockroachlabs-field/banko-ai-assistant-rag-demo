@@ -24,6 +24,9 @@
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
+    {% if current_username %}
+    <div style="position:fixed;top:12px;right:16px;z-index:40;">{% include "_identity.html" %}</div>
+    {% endif %}
     {% block content %}{% endblock %}
     
     <script>

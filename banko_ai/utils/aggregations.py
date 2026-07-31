@@ -63,9 +63,13 @@ def resolve_category(subject: str | None, database_url: str) -> str | None:
     return None
 
 
-def run_aggregation(intent: AggregationIntent, user_id: str,
-                    database_url: str) -> AggregationResult:
-    category = resolve_category(intent.subject, database_url)
+def _where_and_params(intent: AggregationIntent, user_id: str,
+                      category: str | None,
+                      region: str | None) -> tuple[str, dict]:
+    """One WHERE builder for the query and its EXPLAIN so they can never
+    drift apart. The region predicate prunes the scan to the user's home
+    partition on REGIONAL BY ROW tables; single-region callers pass None
+    and the SQL never mentions crdb_region."""
     where = ("WHERE user_id = :u AND expense_date >= :s "
              "AND expense_date < :e")
     params: dict = {"u": user_id, "s": intent.window_start,
@@ -73,6 +77,17 @@ def run_aggregation(intent: AggregationIntent, user_id: str,
     if category:
         where += " AND shopping_type = :c"
         params["c"] = category
+    if region:
+        where += " AND crdb_region = :r"
+        params["r"] = region
+    return where, params
+
+
+def run_aggregation(intent: AggregationIntent, user_id: str,
+                    database_url: str,
+                    region: str | None = None) -> AggregationResult:
+    category = resolve_category(intent.subject, database_url)
+    where, params = _where_and_params(intent, user_id, category, region)
 
     eng = create_engine(database_url)
     try:
@@ -107,3 +122,26 @@ def run_aggregation(intent: AggregationIntent, user_id: str,
         rows=[{"date": str(r[0]), "merchant": r[1],
                "amount": float(r[2])} for r in detail],
     )
+
+
+def explain_aggregation(intent: AggregationIntent, user_id: str,
+                        database_url: str,
+                        region: str | None = None) -> str:
+    """Run EXPLAIN ANALYZE of the aggregation query and return the plan as text."""
+    category = resolve_category(intent.subject, database_url)
+    where, params = _where_and_params(intent, user_id, category, region)
+
+    eng = create_engine(database_url)
+    try:
+        with eng.connect() as c:
+            plan_rows = c.execute(text(f"""
+                EXPLAIN ANALYZE
+                SELECT COALESCE(SUM(expense_amount), 0),
+                       COUNT(*),
+                       MIN(expense_date), MAX(expense_date)
+                FROM expenses {where}
+            """), params).fetchall()
+    finally:
+        eng.dispose()
+
+    return "\n".join(str(row[0]) for row in plan_rows)
