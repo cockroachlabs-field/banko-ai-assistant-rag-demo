@@ -1743,11 +1743,20 @@ def create_app() -> Flask:
         from ..coach.kafka_consumer import build_production_consumer
         bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
         topic = os.getenv("COACH_KAFKA_TOPIC", "banko.spending_signals")
-        consumer = build_production_consumer(
-            handler=_get_coach_handler(),
-            bootstrap_servers=bootstrap,
-            topic=topic,
-        )
+        try:
+            consumer = build_production_consumer(
+                handler=_get_coach_handler(),
+                bootstrap_servers=bootstrap,
+                topic=topic,
+            )
+        except Exception as e:
+            # Kafka is an optional transport; an unreachable broker must
+            # not take the whole app down. The webhook path still works.
+            print(f"⚠️  Coach Kafka transport disabled: cannot reach brokers "
+                  f"at {bootstrap} ({e}). Start the cdc-demo stack and "
+                  f"restart the app to enable it; the webhook transport "
+                  f"remains active.")
+            return
         t = threading.Thread(target=consumer.run_forever,
                              name="coach-kafka-consumer", daemon=True)
         t.start()
