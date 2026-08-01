@@ -1740,29 +1740,41 @@ def create_app() -> Flask:
             return
         import threading
 
-        from ..coach.kafka_consumer import build_production_consumer
         bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
         topic = os.getenv("COACH_KAFKA_TOPIC", "banko.spending_signals")
-        try:
-            consumer = build_production_consumer(
-                handler=_get_coach_handler(),
-                bootstrap_servers=bootstrap,
-                topic=topic,
-            )
-        except Exception as e:
+
+        def _connect_and_run() -> None:
             # Kafka is an optional transport; an unreachable broker must
-            # not take the whole app down. The webhook path still works.
-            print(f"⚠️  Coach Kafka transport disabled: cannot reach brokers "
-                  f"at {bootstrap} ({e}). Start the cdc-demo stack and "
-                  f"restart the app to enable it; the webhook transport "
-                  f"remains active.")
-            return
-        t = threading.Thread(target=consumer.run_forever,
+            # not take the app down, and starting the broker after the app
+            # should just work. Keep retrying with backoff until the
+            # brokers appear, then hand off to the consumer loop (which
+            # handles reconnects itself once established).
+            from ..coach.kafka_consumer import build_production_consumer
+            delay, attempt = 5, 0
+            while True:
+                try:
+                    consumer = build_production_consumer(
+                        handler=_get_coach_handler(),
+                        bootstrap_servers=bootstrap,
+                        topic=topic,
+                    )
+                    break
+                except Exception as e:
+                    attempt += 1
+                    if attempt == 1 or attempt % 10 == 0:
+                        print(f"⚠️  Coach Kafka brokers unreachable at "
+                              f"{bootstrap} ({e}); retrying every {delay}s. "
+                              f"The webhook transport remains active.", flush=True)
+                    time.sleep(delay)
+                    delay = min(delay * 2, 30)
+            print(f"📡 Coach Kafka consumer started (topic={topic}, "
+                  f"brokers={bootstrap})", flush=True)
+            consumer.run_forever()
+
+        t = threading.Thread(target=_connect_and_run,
                              name="coach-kafka-consumer", daemon=True)
         t.start()
         app._coach_kafka_thread = t
-        print(f"📡 Coach Kafka consumer started (topic={topic}, "
-              f"brokers={bootstrap})")
 
     _maybe_start_kafka_consumer()
 
