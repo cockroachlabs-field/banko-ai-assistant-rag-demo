@@ -516,6 +516,12 @@ def create_app() -> Flask:
             print(f"aggregation insights skipped: {e}")
             return None
 
+    # Narrative cache for the aggregation branch: SQL reruns every time
+    # (exact figures), only the LLM prose is reused. Keyed on user,
+    # provider, language, and the figures themselves, so any change in
+    # the data invalidates naturally.
+    _agg_narrative_cache: dict = {}
+
     def _translate_answer(markdown_text: str, target_language: str) -> str | None:
         """Render a deterministic answer in the user's language. The
         figures were computed by SQL and must survive verbatim, so the
@@ -1382,20 +1388,42 @@ def create_app() -> Flask:
                               f"(category: {agg.category or 'all'})")
                         print("   Figures computed by CockroachDB; the model "
                               "never does the arithmetic")
-                        agg_text = _render_aggregation_markdown(agg)
-                        if agg.count:
-                            insights = _aggregation_insights(agg, user_message)
-                            if insights:
-                                agg_text += "\n\n**Insights**\n\n" + insights
-                                print(f"3. Insights narrated by {config.ai_service} "
-                                      f"around the pinned figures")
-                        # SQL computed the figures; the model only renders
-                        # them in the user's language. English answers on a
-                        # Hindi session were the aggregation path skipping
-                        # the language setting the RAG path always honored.
-                        if target_language != 'English':
-                            agg_text = _translate_answer(agg_text, target_language) or agg_text
-                            print(f"4. Rendered in {target_language}, figures preserved")
+                        # The SQL always runs (exact, fast); only the model
+                        # work is cached. Same user, same figures, same
+                        # language: reuse the narrative instead of paying
+                        # for insights plus translation again, which on a
+                        # local model turns a repeat question from seconds
+                        # into milliseconds.
+                        cache_key = (current_demo_user(), config.ai_service,
+                                     target_language, agg.operation,
+                                     agg.category, str(agg.window_start),
+                                     str(agg.window_end), agg.total, agg.count)
+                        cached_text = _agg_narrative_cache.get(cache_key)
+                        if cached_text:
+                            est = int(len(cached_text.split()) * 1.3)
+                            print(f"3. ✅ Narrative cache HIT "
+                                  f"(est. {est} tokens saved)")
+                            agg_text = cached_text
+                        else:
+                            print("3. ❌ Narrative cache MISS, generating")
+                            agg_text = _render_aggregation_markdown(agg)
+                            if agg.count:
+                                insights = _aggregation_insights(agg, user_message)
+                                if insights:
+                                    agg_text += "\n\n**Insights**\n\n" + insights
+                                    print(f"   Insights narrated by {config.ai_service} "
+                                          f"around the pinned figures")
+                            # SQL computed the figures; the model only
+                            # renders them in the user's language. English
+                            # answers on a Hindi session were this path
+                            # skipping the language setting the RAG path
+                            # always honored.
+                            if target_language != 'English':
+                                agg_text = _translate_answer(agg_text, target_language) or agg_text
+                                print(f"   Rendered in {target_language}, figures preserved")
+                            if len(_agg_narrative_cache) > 256:
+                                _agg_narrative_cache.clear()
+                            _agg_narrative_cache[cache_key] = agg_text
                         explain_text = explain_aggregation(agg_intent, current_demo_user(),
                                                            config.database_url, region=user_region)
                         session['chat'].append({

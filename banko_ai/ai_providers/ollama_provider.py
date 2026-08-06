@@ -127,7 +127,8 @@ class OllamaProvider(AIProvider):
             cached = self.cache_manager.get_cached_response(
                 prompt, search_results, "ollama", language=language)
             if cached:
-                print("2. ✅ Response cache HIT")
+                est = int(len(cached.split()) * 1.3)
+                print(f"2. ✅ Response cache HIT (est. {est} tokens saved)")
                 return cached
             print("2. ❌ Response cache MISS, generating locally")
         expense_lines = []
@@ -146,6 +147,10 @@ class OllamaProvider(AIProvider):
                 self.cache_manager.cache_response(
                     prompt, answer, search_results, "ollama",
                     language=language)
+                prompt_tokens = len(rag_prompt.split()) * 1.3
+                response_tokens = len(answer.split()) * 1.3
+                print(f"3. ✅ Cached response "
+                      f"(est. {int(prompt_tokens + response_tokens)} tokens)")
             except Exception:
                 pass
         return answer
