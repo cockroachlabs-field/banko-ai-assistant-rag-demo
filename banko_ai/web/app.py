@@ -197,6 +197,20 @@ def auto_setup_data_if_needed(database_url: str):
 
 def create_app() -> Flask:
     """Create and configure the Flask application."""
+    # The coach and migration modules narrate what they do (handling
+    # signal, nudge delivered, claimed, replayed, regional migration)
+    # through the banko.* loggers at INFO. Python drops INFO on the
+    # floor without a handler, which makes the CLI go silent exactly
+    # when the interesting things happen. Wire just our namespace to
+    # the console; third-party loggers keep their own defaults.
+    _banko_log = _coach_log.getLogger("banko")
+    if not _banko_log.handlers:
+        _h = _coach_log.StreamHandler()
+        _h.setFormatter(_coach_log.Formatter("%(asctime)s %(name)s: %(message)s",
+                                             datefmt="%H:%M:%S"))
+        _banko_log.addHandler(_h)
+        _banko_log.setLevel(_coach_log.INFO)
+
     # Get the directory containing this file
     # Set up template and static directories
     # Use package-relative paths that work both in development and PyPI installation
