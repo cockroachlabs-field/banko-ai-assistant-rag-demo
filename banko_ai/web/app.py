@@ -1366,22 +1366,36 @@ def create_app() -> Flask:
                     # never as a 500.
                     try:
                         from banko_ai.utils.aggregations import explain_aggregation, run_aggregation
+                        print("\n🧮 AGGREGATION (agentic routing):")
+                        print(f"1. Intent: {agg_intent.operation} on "
+                              f"'{agg_intent.subject or 'all spending'}' | window "
+                              f"{agg_intent.window_start} to {agg_intent.window_end}")
                         user_region = resolve_user_region(current_demo_user(), config.database_url)
+                        if user_region:
+                            print(f"   Region-pruned to {user_region} (REGIONAL BY ROW)")
                         t0 = time.perf_counter()
                         agg = run_aggregation(agg_intent, current_demo_user(),
                                               config.database_url, region=user_region)
                         db_ms = int((time.perf_counter() - t0) * 1000)
+                        print(f"2. SQL answered in {db_ms}ms: ${agg.total:,.2f} "
+                              f"across {agg.count} transactions "
+                              f"(category: {agg.category or 'all'})")
+                        print("   Figures computed by CockroachDB; the model "
+                              "never does the arithmetic")
                         agg_text = _render_aggregation_markdown(agg)
                         if agg.count:
                             insights = _aggregation_insights(agg, user_message)
                             if insights:
                                 agg_text += "\n\n**Insights**\n\n" + insights
+                                print(f"3. Insights narrated by {config.ai_service} "
+                                      f"around the pinned figures")
                         # SQL computed the figures; the model only renders
                         # them in the user's language. English answers on a
                         # Hindi session were the aggregation path skipping
                         # the language setting the RAG path always honored.
                         if target_language != 'English':
                             agg_text = _translate_answer(agg_text, target_language) or agg_text
+                            print(f"4. Rendered in {target_language}, figures preserved")
                         explain_text = explain_aggregation(agg_intent, current_demo_user(),
                                                            config.database_url, region=user_region)
                         session['chat'].append({
