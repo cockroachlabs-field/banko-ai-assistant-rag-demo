@@ -96,17 +96,31 @@ banko-ai run --no-data                    # skip the sample-data generator
 
 Open <http://localhost:5000>.
 
-### Demo personas
+### Sign up and it's yours
 
-The first visit asks you to pick a persona (Maya, Sam, or Riley), each
-seeded with their own spending patterns. Everything on screen is scoped
-to that choice: SQL aggregations filter by the persona's user id, vector
-search runs through the per-user vector index, and the Spending Coach
-nudges the same identity. Log out to switch personas. Questions that ask
-for totals or counts ("how much did I spend on restaurants in the past
-60 days?") are answered by SQL directly, so the figures are exact and
-identical no matter which AI provider is active; the model adds the
-narrative and suggestions around them.
+The first visit asks for a username. New names pick a spending style
+(diner, subscriber, saver, balanced) and get a seeded history in that
+style, embeddings included; returning names land straight back in their
+own data, and the Coach greets new users with a real nudge within
+seconds. Everything on screen is scoped to that identity: SQL
+aggregations filter by your user id, vector search runs through the
+per-user vector index, and the header shows who is signed in. Questions
+that ask for totals or counts ("how much did I spend on restaurants in
+the past 60 days?") are answered by SQL directly, so the figures are
+exact and identical no matter which AI provider is active; the model
+adds the narrative and suggestions around them. Every answer wears a
+badge with the real database time, and an expandable panel shows the
+actual EXPLAIN ANALYZE that produced it.
+
+On a multi-region cluster the same app goes region aware with no extra
+configuration: signup offers a home region (detected live from the
+cluster), rows are pinned to it via REGIONAL BY ROW, reads prune to the
+user's partition, and the answer badge names the regions that actually
+served each query. Kill a region and the badge visibly moves to the
+survivors while answers keep flowing. Single-region deployments see
+none of this; nothing fake is ever rendered. The legacy personas
+(maya, sam, riley) still exist for existing databases, and
+`banko-ai clear-demo-users` resets a demo machine while keeping them.
 
 `banko-ai --help` lists the rest (`generate-data`, `clear-data`, `status`,
 `search`, etc.). The first run creates the schema (expense, agent, cache,
