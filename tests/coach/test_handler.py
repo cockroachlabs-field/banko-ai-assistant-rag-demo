@@ -160,3 +160,25 @@ def test_handler_skips_suppressed_signal_type(db_url):
     assert result["status"] == "suppressed"
     assert coach.calls == []
     assert emitter.events == []
+
+
+def test_handler_skips_stale_event_without_llm_call(db_url):
+    # A Kafka event whose source row was deleted (test cleanup, TTL,
+    # clear-demo-users) must be skipped before the LLM runs; it used to
+    # invoke the model and then fail the nudge insert's foreign key.
+    coach = StubCoach()
+    emitter = StubEmitter()
+    handler = SignalHandler(coach=coach, emitter=emitter, database_url=db_url)
+
+    sig = _make_signal(db_url, "h-stale")
+    eng = create_engine(db_url)
+    with eng.begin() as conn:
+        conn.execute(text("DELETE FROM spending_signals WHERE signal_id = :s"),
+                     {"s": sig.signal_id})
+    eng.dispose()
+
+    result = handler.handle(sig)
+
+    assert result["status"] == "stale"
+    assert coach.calls == []
+    assert emitter.events == []

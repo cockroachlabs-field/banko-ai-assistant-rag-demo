@@ -62,6 +62,15 @@ class SignalHandler:
                      extra={"signal_id": signal.signal_id})
             return {"status": "replayed", "signal_id": signal.signal_id}
 
+        # A Kafka event can outlive its source row (test cleanup, TTL,
+        # clear-demo-users). Check before invoking the LLM: the nudge
+        # insert would fail its foreign key anyway, and the model call
+        # is the expensive part.
+        if not self._signal_row_exists(signal):
+            log.info("signal row no longer exists, skipping stale event",
+                     extra={"signal_id": signal.signal_id})
+            return {"status": "stale", "signal_id": signal.signal_id}
+
         if signal.signal_type in set(self.suppressed_types):
             self._mark_consumed(signal)
             return {"status": "suppressed", "signal_id": signal.signal_id}
@@ -103,6 +112,15 @@ class SignalHandler:
             ), {"k": signal.idempotency_key}).fetchone()
         eng.dispose()
         return bool(row and row[0])
+
+    def _signal_row_exists(self, signal: Signal) -> bool:
+        eng = self._engine()
+        with eng.connect() as conn:
+            row = conn.execute(text(
+                "SELECT 1 FROM spending_signals WHERE signal_id = :s"
+            ), {"s": signal.signal_id}).fetchone()
+        eng.dispose()
+        return row is not None
 
     def _mark_consumed(self, signal: Signal) -> None:
         eng = self._engine()
