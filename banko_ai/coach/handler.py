@@ -204,3 +204,50 @@ class SignalHandler:
                    "(Coach AI is offline.)")
         return {"message": msg, "tool_trace": [{"fallback": True,
                                                  "error": error}]}
+
+
+def replay_stranded_signals(handler: SignalHandler, database_url: str,
+                            window_minutes: int = 60) -> int:
+    """Recover signals that were claimed but never produced a nudge.
+
+    The claim is taken before the model call, so a process dying mid
+    nudge (restart, crash, Ctrl+C on a demo box) leaves the signal
+    consumed with nothing to show for it. On boot, release those claims
+    and run them through the handler again. Suppressed types re-suppress
+    instantly, so replaying them is free.
+    """
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.pool import NullPool
+
+    eng = create_engine(handler.database_url, poolclass=NullPool)
+    with eng.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT s.signal_id, s.user_id, s.signal_type, s.severity,
+                   s.payload, s.idempotency_key
+            FROM spending_signals s
+            LEFT JOIN coach_nudges n ON n.signal_id = s.signal_id
+            WHERE s.consumed_at IS NOT NULL
+              AND n.nudge_id IS NULL
+              AND s.produced_at > now() - (:mins * INTERVAL '1 minute')
+        """), {"mins": window_minutes}).fetchall()
+    eng.dispose()
+
+    replayed = 0
+    for row in rows:
+        try:
+            signal = Signal.from_dict({
+                "signal_id": str(row[0]),
+                "user_id": str(row[1]),
+                "signal_type": row[2],
+                "severity": row[3],
+                "payload": row[4] if isinstance(row[4], dict) else {},
+                "idempotency_key": row[5],
+            })
+            handler._unclaim(signal)
+            result = handler.handle(signal)
+            log.info("replayed stranded signal %s -> %s",
+                     signal.signal_id, result.get("status"))
+            replayed += 1
+        except Exception:
+            log.exception("failed to replay stranded signal %s", row[0])
+    return replayed

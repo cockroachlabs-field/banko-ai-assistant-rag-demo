@@ -1778,6 +1778,24 @@ def create_app() -> Flask:
 
     _maybe_start_kafka_consumer()
 
+    def _replay_stranded_on_boot() -> None:
+        """A process dying mid nudge leaves its signal claimed with no
+        nudge to show. Recover in the background so a demo-box restart
+        never eats a welcome nudge."""
+        try:
+            from ..coach.handler import replay_stranded_signals
+            n = replay_stranded_signals(_get_coach_handler(),
+                                        config.database_url)
+            if n:
+                print(f"🔁 replayed {n} stranded coach signal(s) from "
+                      f"before the last restart", flush=True)
+        except Exception as e:
+            print(f"stranded-signal replay skipped: {e}", flush=True)
+
+    import threading as _threading
+    _threading.Thread(target=_replay_stranded_on_boot,
+                      name="coach-reclaim", daemon=True).start()
+
     def _claim_signal(sig) -> bool:
         """Atomically claim a signal for processing by inserting its row
         into spending_signals. Returns True if this call claimed it

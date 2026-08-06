@@ -240,3 +240,28 @@ def test_evidence_always_includes_the_source_signal(db_url):
     assert trace[0]["tool"] == "source_signal"
     assert trace[0]["payload"]["pct_used"] == 0.82
     assert trace[1]["tool"] == "get_user_budget"  # stub's own trace kept
+
+
+def test_replay_recovers_claimed_signal_with_no_nudge(db_url):
+    # A process dying between claim and persist strands the signal:
+    # consumed_at set, no nudge row. Boot-time replay must release the
+    # claim and produce the nudge.
+    from banko_ai.coach.handler import replay_stranded_signals
+    coach = StubCoach()
+    emitter = StubEmitter()
+    handler = SignalHandler(coach=coach, emitter=emitter, database_url=db_url)
+
+    sig = _make_signal(db_url, "h-stranded")
+    assert handler._try_claim(sig) is True  # claimed, then "process died"
+
+    replayed = replay_stranded_signals(handler, db_url)
+
+    assert replayed == 1
+    assert len(coach.calls) == 1
+    eng = create_engine(db_url)
+    with eng.connect() as conn:
+        count = conn.execute(text(
+            "SELECT count(*) FROM coach_nudges WHERE signal_id = :s"
+        ), {"s": sig.signal_id}).scalar()
+    eng.dispose()
+    assert count == 1
