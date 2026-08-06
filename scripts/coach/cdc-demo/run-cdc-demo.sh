@@ -43,16 +43,25 @@ else
     echo "   brought up the repo compose cockroachdb"
 fi
 
-# When CockroachDB runs as the repo's compose container, talk to it over
-# the container network; otherwise assume a host process.
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cockroachdb$'; then
+# When CockroachDB runs in docker (the repo compose container or any other
+# stack, like the 5-node chaos cluster), the changefeed sink URI must be
+# reachable FROM THE CRDB NODES, so it has to be the in-network kafka:9092;
+# kafka://localhost:29092 would make each node dial itself. Every CRDB
+# container also gets joined to the cdc network in step 2.
+CRDB_CONTAINERS="$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null \
+    | awk '$2 ~ /cockroachdb\/cockroach/ {print $1}')"
+if echo "$CRDB_CONTAINERS" | grep -q '^banko-cockroachdb$'; then
     CRDB_DEFAULT_HOST="banko-cockroachdb"
     KAFKA_URI_DEFAULT="kafka://kafka:9092"
-    CRDB_IS_CONTAINER=1
+elif [ -n "$CRDB_CONTAINERS" ]; then
+    # Foreign cluster (chaos demo etc.): JDBC goes through the host's
+    # published 26257 (haproxy on the chaos stack), the sink stays
+    # in-network.
+    CRDB_DEFAULT_HOST="host.docker.internal"
+    KAFKA_URI_DEFAULT="kafka://kafka:9092"
 else
     CRDB_DEFAULT_HOST="host.docker.internal"
     KAFKA_URI_DEFAULT="kafka://localhost:29092"
-    CRDB_IS_CONTAINER=0
 fi
 CRDB_HOST="${CRDB_HOST:-$CRDB_DEFAULT_HOST}"
 CRDB_PORT="${CRDB_PORT:-26257}"
@@ -64,7 +73,13 @@ CONNECTOR_VERSION="${CONNECTOR_VERSION:-3.6.0.Final}"
 # occupy 8080-8084, for example). If the port is held by anything that is
 # not our own connect container, hop to the next free one.
 CONNECT_PORT="${CONNECT_PORT:-8084}"
-if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cdc-connect$'; then
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^banko-cdc-connect$'; then
+    # Reuse whatever port the running container already publishes;
+    # recreating it on the default collides with whoever took 8084.
+    EXISTING_PORT="$(docker port banko-cdc-connect 8083/tcp 2>/dev/null \
+        | head -1 | awk -F: '{print $NF}')"
+    [ -n "$EXISTING_PORT" ] && CONNECT_PORT="$EXISTING_PORT"
+else
     while (echo > /dev/tcp/localhost/${CONNECT_PORT}) 2>/dev/null; do
         echo "   port ${CONNECT_PORT} is taken; trying $((CONNECT_PORT+1))"
         CONNECT_PORT=$((CONNECT_PORT+1))
@@ -101,9 +116,11 @@ Databases live on named volumes; nothing is lost by the restart.
 HINT
     exit 1
 fi
-if [ "$CRDB_IS_CONTAINER" = "1" ]; then
-    docker network connect cdc-demo_default banko-cockroachdb 2>/dev/null || true
-    echo "   banko-cockroachdb joined the cdc network"
+if [ -n "$CRDB_CONTAINERS" ]; then
+    for c in $CRDB_CONTAINERS; do
+        docker network connect cdc-demo_default "$c" 2>/dev/null || true
+    done
+    echo "   joined the cdc network: $(echo $CRDB_CONTAINERS | tr '\n' ' ')"
 fi
 printf "   waiting for connect"
 for _ in $(seq 1 60); do
@@ -120,10 +137,11 @@ curl -fs http://localhost:${CONNECT_PORT}/connectors >/dev/null 2>&1 || {
 }
 
 echo "== 3/5 rangefeed on ${CRDB_HOST}:${CRDB_PORT}/${CRDB_DB}"
-if [ "$CRDB_IS_CONTAINER" = "1" ]; then
+if [ -n "$CRDB_CONTAINERS" ]; then
+    NODE="$(echo "$CRDB_CONTAINERS" | head -1)"
     printf "   waiting for the node"
     for _ in $(seq 1 30); do
-        if docker exec banko-cockroachdb cockroach sql --insecure \
+        if docker exec "$NODE" cockroach sql --insecure \
             -e "SELECT 1" >/dev/null 2>&1; then
             break
         fi
@@ -131,9 +149,9 @@ if [ "$CRDB_IS_CONTAINER" = "1" ]; then
         sleep 2
     done
     echo ""
-    docker exec banko-cockroachdb cockroach sql --insecure \
+    docker exec "$NODE" cockroach sql --insecure \
         -e "SET CLUSTER SETTING kv.rangefeed.enabled = true" >/dev/null
-    echo "   enabled"
+    echo "   enabled (via $NODE)"
 else
     echo "   (host node: run SET CLUSTER SETTING kv.rangefeed.enabled = true;)"
 fi
