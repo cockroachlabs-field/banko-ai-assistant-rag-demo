@@ -501,6 +501,25 @@ def create_app() -> Flask:
         except Exception as e:
             print(f"aggregation insights skipped: {e}")
             return None
+
+    def _translate_answer(markdown_text: str, target_language: str) -> str | None:
+        """Render a deterministic answer in the user's language. The
+        figures were computed by SQL and must survive verbatim, so the
+        model translates prose only; any failure keeps the English text."""
+        try:
+            from banko_ai.agents.llm_factory import get_llm_for_agent
+            llm = get_llm_for_agent(temperature=0.1)
+            raw = llm.invoke(
+                f"Translate the following financial summary into "
+                f"{target_language}. Keep every number, currency amount, "
+                f"percentage, date, and merchant name exactly as written. "
+                f"Keep the markdown formatting. Output only the "
+                f"translation.\n\n{markdown_text}")
+            text = raw.content if hasattr(raw, "content") else str(raw)
+            return text.strip() or None
+        except Exception as e:
+            print(f"answer translation skipped: {e}")
+            return None
     
     @app.route('/logout')
     def logout():
@@ -1343,6 +1362,12 @@ def create_app() -> Flask:
                             insights = _aggregation_insights(agg, user_message)
                             if insights:
                                 agg_text += "\n\n**Insights**\n\n" + insights
+                        # SQL computed the figures; the model only renders
+                        # them in the user's language. English answers on a
+                        # Hindi session were the aggregation path skipping
+                        # the language setting the RAG path always honored.
+                        if target_language != 'English':
+                            agg_text = _translate_answer(agg_text, target_language) or agg_text
                         explain_text = explain_aggregation(agg_intent, current_demo_user(),
                                                            config.database_url, region=user_region)
                         session['chat'].append({
