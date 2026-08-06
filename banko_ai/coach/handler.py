@@ -85,6 +85,16 @@ class SignalHandler:
                 nudge = self._fallback_nudge(signal, error=str(e))
                 nudge["provider_used"] = "fallback"
 
+            # The signal payload is the nudge's grounding; lead the
+            # evidence with it so the panel is never blank even when the
+            # planner ran no tools (small local models skip them often).
+            nudge["tool_trace"] = ([{
+                "tool": "source_signal",
+                "signal_type": signal.signal_type.value,
+                "severity": signal.severity,
+                "payload": signal.payload,
+            }] + list(nudge.get("tool_trace") or []))
+
             nudge_id = self._persist_nudge(signal, nudge)
         except Exception:
             # Release the claim so a redelivery can retry; without this a

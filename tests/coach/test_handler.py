@@ -218,3 +218,25 @@ def test_failed_persist_releases_the_claim(db_url):
 
     retry = handler.handle(sig)
     assert retry["status"] == "delivered"
+
+
+def test_evidence_always_includes_the_source_signal(db_url):
+    # The panel showed a bare [] whenever the planner ran no tools; the
+    # signal payload is the grounding and must lead the evidence.
+    coach = StubCoach()
+    emitter = StubEmitter()
+    handler = SignalHandler(coach=coach, emitter=emitter, database_url=db_url)
+
+    sig = _make_signal(db_url, "h-evidence")
+    handler.handle(sig)
+
+    eng = create_engine(db_url)
+    with eng.connect() as conn:
+        trace = conn.execute(text(
+            "SELECT tool_trace FROM coach_nudges WHERE signal_id = :s"
+        ), {"s": sig.signal_id}).scalar()
+    eng.dispose()
+
+    assert trace[0]["tool"] == "source_signal"
+    assert trace[0]["payload"]["pct_used"] == 0.82
+    assert trace[1]["tool"] == "get_user_budget"  # stub's own trace kept
