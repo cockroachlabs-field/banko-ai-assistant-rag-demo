@@ -70,3 +70,4 @@ scripts/coach/cdc-demo/connect-plugins/
 
 # Internal working docs (specs, plans, handoffs) stay local, never public
 docs/superpowers/
+docs/USE_CASES_CALL_NOTES.md
