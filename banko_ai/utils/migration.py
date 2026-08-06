@@ -123,6 +123,16 @@ def resolve_primary_region(database_url: str) -> str | None:
             engine.dispose()
 
 
+def resolve_user_region_cache_clear() -> None:
+    """Drop auth.resolve_user_region's cache. Local import because auth
+    imports from this module."""
+    try:
+        from ..web.auth import resolve_user_region
+        resolve_user_region.cache_clear()
+    except Exception:
+        pass
+
+
 def migrate_regional_tables(database_url: str, primary_region: str | None) -> bool:
     """Idempotently apply REGIONAL BY ROW locality to expenses, spending_signals,
     and coach_nudges tables.
@@ -205,6 +215,12 @@ def migrate_regional_tables(database_url: str, primary_region: str | None) -> bo
 
             conn.commit()
             log.info("multi-region migration completed successfully")
+            # Anything that asked "are the tables regional yet" before this
+            # point cached a stale no (on a fresh cluster, sample-data setup
+            # runs before this migration). Drop those answers so writers
+            # start pinning and readers start pruning immediately.
+            regional_tables_ready.cache_clear()
+            resolve_user_region_cache_clear()
             return True
 
     except Exception as e:

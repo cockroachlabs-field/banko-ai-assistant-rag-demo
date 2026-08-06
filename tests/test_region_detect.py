@@ -5,7 +5,12 @@ import os
 import pytest
 from sqlalchemy import create_engine, text
 
-from banko_ai.utils.migration import detect_regions, migrate_regional_tables, resolve_primary_region
+from banko_ai.utils.migration import (
+    detect_regions,
+    migrate_regional_tables,
+    regional_tables_ready,
+    resolve_primary_region,
+)
 
 DB = os.getenv("DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DB, reason="DATABASE_URL not set")
@@ -72,8 +77,15 @@ def test_regional_migration_is_idempotent():
         if len(regions) < 2:
             assert migrate_regional_tables(test_db, primary_region=None) is False
         else:
+            # Regression: on a fresh cluster, sample-data setup asks this
+            # before the migration runs, and the cached False used to stick
+            # for the process lifetime (no pinning, no pruning, no region
+            # chip). A successful migration must invalidate it.
+            assert regional_tables_ready(test_db) is False
+
             result1 = migrate_regional_tables(test_db, primary_region="us-east-1")
             assert result1 is True
+            assert regional_tables_ready(test_db) is True
 
             result2 = migrate_regional_tables(test_db, primary_region="us-east-1")
             assert result2 is True
