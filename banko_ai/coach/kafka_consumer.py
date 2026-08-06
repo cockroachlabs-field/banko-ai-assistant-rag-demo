@@ -80,7 +80,21 @@ class SignalsKafkaConsumer:
 
         try:
             self.handler.handle(signal)
-        except Exception:
+        except Exception as e:
+            # Constraint violations are permanent: the classic case is a
+            # signal whose parent row was deleted between the changefeed
+            # capturing it and us consuming it. Redelivering forever would
+            # loop, re-running the LLM on every attempt. Ship it to the
+            # DLQ and move on; genuinely transient failures (DB blips,
+            # provider timeouts) still redeliver.
+            from sqlalchemy.exc import IntegrityError
+            if isinstance(e, IntegrityError):
+                log.error("permanent failure at offset=%s, sending to DLQ: %s",
+                          getattr(msg, "offset", "?"), e)
+                if self.dlq_send_fn is not None:
+                    self.dlq_send_fn(raw, str(e))
+                self.commit_fn(msg)
+                return
             log.exception("handler raised on offset=%s; will redeliver",
                           getattr(msg, "offset", "?"))
             return

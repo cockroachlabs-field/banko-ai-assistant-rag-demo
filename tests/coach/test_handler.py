@@ -15,11 +15,29 @@ TEST_USER = "00000000-0000-0000-0000-000000000eee"
 
 @pytest.fixture(scope="module")
 def db_url() -> str:
+    # Scratch database on purpose: these tests INSERT and DELETE real
+    # spending_signals rows, and on the shared database a changefeed
+    # (cdc-demo) ships the inserts to Kafka. Consumers then meet events
+    # whose parent row was deleted by test cleanup.
     url = os.getenv("DATABASE_URL")
     if not url:
         pytest.skip("DATABASE_URL not set")
-    DatabaseMigration(database_url=url).migrate_to_coach_v1()
-    return url
+    from sqlalchemy.engine.url import make_url
+    scratch = str(make_url(url).set(database="banko_coach_test"))
+    assert make_url(scratch).database == "banko_coach_test"
+    admin = create_engine(url)
+    with admin.connect() as conn:
+        # Recreate from clean so a crashed prior run cannot leak rows
+        # (fixed idempotency keys collide otherwise).
+        conn.execute(text("DROP DATABASE IF EXISTS banko_coach_test CASCADE"))
+        conn.execute(text("CREATE DATABASE banko_coach_test"))
+        conn.commit()
+    DatabaseMigration(database_url=scratch).migrate_to_coach_v1()
+    yield scratch
+    with admin.connect() as conn:
+        conn.execute(text("DROP DATABASE IF EXISTS banko_coach_test CASCADE"))
+        conn.commit()
+    admin.dispose()
 
 
 @pytest.fixture(autouse=True)
@@ -58,9 +76,13 @@ class StubEmitter:
         self.events.append((event, payload, room))
 
 
-def _make_signal(idem: str, sig_type: SignalType = SignalType.BUDGET_THRESHOLD,
+def _make_signal(db_url: str, idem: str,
+                 sig_type: SignalType = SignalType.BUDGET_THRESHOLD,
                  user_id: str = TEST_USER) -> Signal:
-    eng = create_engine(os.environ["DATABASE_URL"])
+    # Inserts into the scratch database, never the shared one: the shared
+    # spending_signals table is watched by the cdc-demo changefeed, and
+    # test rows here used to leak into Kafka as phantom events.
+    eng = create_engine(db_url)
     with eng.begin() as conn:
         row = conn.execute(text("""
             INSERT INTO spending_signals
@@ -86,7 +108,7 @@ def test_handler_invokes_coach_and_persists_nudge(db_url):
     emitter = StubEmitter()
     handler = SignalHandler(coach=coach, emitter=emitter, database_url=db_url)
 
-    sig = _make_signal("h-1")
+    sig = _make_signal(db_url, "h-1")
     result = handler.handle(sig)
 
     assert result["status"] == "delivered"
@@ -115,7 +137,7 @@ def test_handler_dedups_on_idempotency_key(db_url):
     emitter = StubEmitter()
     handler = SignalHandler(coach=coach, emitter=emitter, database_url=db_url)
 
-    sig = _make_signal("h-dup")
+    sig = _make_signal(db_url, "h-dup")
     first = handler.handle(sig)
     second = handler.handle(sig)
 
@@ -132,7 +154,7 @@ def test_handler_skips_suppressed_signal_type(db_url):
         suppressed_types={SignalType.RECURRING_DRIFT},
     )
 
-    sig = _make_signal("h-suppress", sig_type=SignalType.RECURRING_DRIFT)
+    sig = _make_signal(db_url, "h-suppress", sig_type=SignalType.RECURRING_DRIFT)
     result = handler.handle(sig)
 
     assert result["status"] == "suppressed"

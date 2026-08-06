@@ -85,3 +85,39 @@ def test_consumer_does_not_commit_on_handler_exception():
     )
     consumer.run_once()
     assert commit.call_count == 0
+
+
+def test_integrity_error_goes_to_dlq_not_redelivery():
+    # A signal whose parent row vanished (test cleanup, TTL) raises a
+    # constraint violation on nudge insert. That is permanent: it must
+    # land in the DLQ and commit, never loop through redelivery.
+    from sqlalchemy.exc import IntegrityError
+    handler = MagicMock()
+    handler.handle.side_effect = IntegrityError("stmt", {}, Exception("fk"))
+    commit = MagicMock()
+    dlq = MagicMock()
+    fake_consumer = iter([_fake_msg(_valid_signal_payload("k-fk"), offset=5)])
+    consumer = SignalsKafkaConsumer(
+        handler=handler,
+        kafka_consumer_factory=lambda: fake_consumer,
+        commit_fn=commit,
+        dlq_send_fn=dlq,
+    )
+    consumer.run_once()
+    assert handler.handle.call_count == 1
+    assert dlq.call_count == 1
+    assert commit.call_count == 1
+
+
+def test_transient_handler_error_still_redelivers():
+    handler = MagicMock()
+    handler.handle.side_effect = RuntimeError("provider timeout")
+    commit = MagicMock()
+    fake_consumer = iter([_fake_msg(_valid_signal_payload("k-transient"))])
+    consumer = SignalsKafkaConsumer(
+        handler=handler,
+        kafka_consumer_factory=lambda: fake_consumer,
+        commit_fn=commit,
+    )
+    consumer.run_once()
+    assert commit.call_count == 0  # not committed, Kafka redelivers
