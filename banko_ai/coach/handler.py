@@ -57,33 +57,40 @@ class SignalHandler:
                                             "type": signal.signal_type.value,
                                             "user_id": signal.user_id})
 
-        if self._already_consumed(signal):
-            log.info("signal already consumed, skipping",
-                     extra={"signal_id": signal.signal_id})
-            return {"status": "replayed", "signal_id": signal.signal_id}
-
-        # A Kafka event can outlive its source row (test cleanup, TTL,
-        # clear-demo-users). Check before invoking the LLM: the nudge
-        # insert would fail its foreign key anyway, and the model call
-        # is the expensive part.
-        if not self._signal_row_exists(signal):
+        # Atomic claim: set consumed_at up front with a compare-and-set.
+        # Both transports share this handler, and the same signal arrives
+        # on both within a second (the webhook claim INSERTs the row, the
+        # changefeed ships that insert to Kafka). Marking consumed only
+        # after the LLM finished left a window the width of a model call
+        # in which the other transport double-processed the signal.
+        if not self._try_claim(signal):
+            if self._signal_row_exists(signal):
+                log.info("signal already claimed or consumed, skipping",
+                         extra={"signal_id": signal.signal_id})
+                return {"status": "replayed", "signal_id": signal.signal_id}
+            # A Kafka event can outlive its source row (test cleanup,
+            # TTL, clear-demo-users): nothing to claim, nothing to nudge.
             log.info("signal row no longer exists, skipping stale event",
                      extra={"signal_id": signal.signal_id})
             return {"status": "stale", "signal_id": signal.signal_id}
 
         if signal.signal_type in set(self.suppressed_types):
-            self._mark_consumed(signal)
             return {"status": "suppressed", "signal_id": signal.signal_id}
 
         try:
-            nudge = self.coach.react(signal)
-        except Exception as e:
-            log.exception("coach failed", extra={"signal_id": signal.signal_id})
-            nudge = self._fallback_nudge(signal, error=str(e))
-            nudge["provider_used"] = "fallback"
+            try:
+                nudge = self.coach.react(signal)
+            except Exception as e:
+                log.exception("coach failed", extra={"signal_id": signal.signal_id})
+                nudge = self._fallback_nudge(signal, error=str(e))
+                nudge["provider_used"] = "fallback"
 
-        nudge_id = self._persist_nudge(signal, nudge)
-        self._mark_consumed(signal)
+            nudge_id = self._persist_nudge(signal, nudge)
+        except Exception:
+            # Release the claim so a redelivery can retry; without this a
+            # transient DB failure would strand the signal as consumed.
+            self._unclaim(signal)
+            raise
         self.emitter.emit(
             "coach.nudge",
             payload={
@@ -103,15 +110,26 @@ class SignalHandler:
     def _engine(self):
         return create_engine(self.database_url, poolclass=NullPool)
 
-    def _already_consumed(self, signal: Signal) -> bool:
+    def _try_claim(self, signal: Signal) -> bool:
+        """Compare-and-set on consumed_at: exactly one caller wins the
+        signal no matter how many transports or processes deliver it."""
         eng = self._engine()
-        with eng.connect() as conn:
-            row = conn.execute(text(
-                "SELECT consumed_at FROM spending_signals "
-                "WHERE idempotency_key = :k"
-            ), {"k": signal.idempotency_key}).fetchone()
+        with eng.begin() as conn:
+            result = conn.execute(text(
+                "UPDATE spending_signals SET consumed_at = now() "
+                "WHERE idempotency_key = :k AND consumed_at IS NULL"
+            ), {"k": signal.idempotency_key})
         eng.dispose()
-        return bool(row and row[0])
+        return result.rowcount == 1
+
+    def _unclaim(self, signal: Signal) -> None:
+        eng = self._engine()
+        with eng.begin() as conn:
+            conn.execute(text(
+                "UPDATE spending_signals SET consumed_at = NULL "
+                "WHERE idempotency_key = :k"
+            ), {"k": signal.idempotency_key})
+        eng.dispose()
 
     def _signal_row_exists(self, signal: Signal) -> bool:
         eng = self._engine()
@@ -121,15 +139,6 @@ class SignalHandler:
             ), {"s": signal.signal_id}).fetchone()
         eng.dispose()
         return row is not None
-
-    def _mark_consumed(self, signal: Signal) -> None:
-        eng = self._engine()
-        with eng.begin() as conn:
-            conn.execute(text(
-                "UPDATE spending_signals SET consumed_at = now() "
-                "WHERE signal_id = :s"
-            ), {"s": signal.signal_id})
-        eng.dispose()
 
     def _persist_nudge(self, signal: Signal, nudge: dict[str, Any]) -> str:
         eng = self._engine()

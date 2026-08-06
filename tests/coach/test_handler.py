@@ -182,3 +182,39 @@ def test_handler_skips_stale_event_without_llm_call(db_url):
     assert result["status"] == "stale"
     assert coach.calls == []
     assert emitter.events == []
+
+
+def test_concurrent_delivery_processes_exactly_once(db_url):
+    # The same signal arrives on both transports within a second (the
+    # webhook claim INSERT flows through the changefeed to Kafka). The
+    # claim is a compare-and-set on consumed_at, so the second delivery
+    # must skip even though the first has not finished its LLM call:
+    # simulate mid-flight by claiming, then delivering again.
+    coach = StubCoach()
+    emitter = StubEmitter()
+    handler = SignalHandler(coach=coach, emitter=emitter, database_url=db_url)
+
+    sig = _make_signal(db_url, "h-race")
+    assert handler._try_claim(sig) is True       # transport A mid-processing
+    second = handler.handle(sig)                 # transport B arrives now
+
+    assert second["status"] == "replayed"
+    assert coach.calls == []
+
+
+def test_failed_persist_releases_the_claim(db_url):
+    # A transient failure after the claim must release it, or redelivery
+    # would skip the signal forever and the nudge would be lost.
+    coach = StubCoach()
+    emitter = StubEmitter()
+    handler = SignalHandler(coach=coach, emitter=emitter, database_url=db_url)
+
+    sig = _make_signal(db_url, "h-unclaim")
+    original = handler._persist_nudge
+    handler._persist_nudge = lambda s, n: (_ for _ in ()).throw(RuntimeError("db blip"))
+    with pytest.raises(RuntimeError):
+        handler.handle(sig)
+    handler._persist_nudge = original
+
+    retry = handler.handle(sig)
+    assert retry["status"] == "delivered"
