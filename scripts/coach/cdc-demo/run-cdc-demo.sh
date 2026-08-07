@@ -178,11 +178,14 @@ Next:
        AI_SERVICE=watsonx CDC_WEBHOOK_HMAC_SECRET=dev-only-secret \
        DATABASE_URL=<same db as CRDB_DB above> uv run banko-ai run
   2. Open http://localhost:5000/coach
-  3. Insert a signal row and watch CockroachDB stream it into a nudge:
+  3. Insert a signal row and watch CockroachDB stream it into a nudge.
+     The coach page shows the signed-in user's nudges, so target the
+     username you signed up with:
        INSERT INTO spending_signals
          (user_id, signal_type, severity, payload, idempotency_key)
        VALUES
-         ('00000000-0000-0000-0000-000000000001', 'budget_threshold', 'warn',
+         ((SELECT user_id FROM users WHERE username = 'YOUR-USERNAME'),
+          'budget_threshold', 'warn',
           '{"category": "dining", "pct_used": 0.82, "monthly_budget": 400.0,
             "spent_so_far": 328.0, "days_remaining": 9}',
           'demo:' || gen_random_uuid()::STRING);

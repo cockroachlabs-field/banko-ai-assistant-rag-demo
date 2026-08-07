@@ -228,13 +228,16 @@ COACH_KAFKA_ENABLED=true KAFKA_BOOTSTRAP_SERVERS=localhost:29092 \
 ```
 
 With that stack up, sending a change event is just SQL. Insert a row and
-CockroachDB streams it to the Coach, no webhook involved:
+CockroachDB streams it to the Coach, no webhook involved. The coach page
+shows the signed-in user's nudges, so target the username you signed up
+with:
 
 ```sql
 INSERT INTO spending_signals
   (user_id, signal_type, severity, payload, idempotency_key)
 VALUES
-  ('00000000-0000-0000-0000-0000000000a1', 'budget_threshold', 'warn',
+  ((SELECT user_id FROM users WHERE username = 'YOUR-USERNAME'),
+   'budget_threshold', 'warn',
    '{"category": "dining", "pct_used": 0.82, "monthly_budget": 400.0,
      "spent_so_far": 328.0, "days_remaining": 9}',
    'demo:' || gen_random_uuid()::STRING);
