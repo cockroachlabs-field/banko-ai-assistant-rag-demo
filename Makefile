@@ -1,4 +1,4 @@
-.PHONY: test test-local lint types fmt clean help
+.PHONY: test test-local lockcheck lint types fmt clean help
 
 help:
 	@echo "Targets:"
@@ -19,12 +19,18 @@ test:
 		--ignore=tests/test_receipt_upload.py \
 		--ignore=tests/test_cache_threshold.py
 
-test-local: lint types test
+test-local: lockcheck lint types test
 	@echo ""
 	@echo "✓ Local test suite passed."
 	@echo "  REMINDER: multi-provider smoke is still required before push."
 	@echo "  See docs/coach-smoke-checklist.md once it exists, or run the app"
 	@echo "  against each of watsonx, openai, aws, gemini, ollama manually."
+
+lockcheck:
+	@# A pyproject change without a re-lock leaves uv.lock drifting: the
+	@# next uv run rewrites it AFTER the push and the tree looks dirty
+	@# out of nowhere. Fail here, before anything gets committed.
+	uv lock --check
 
 lint:
 	uv run ruff check banko_ai/ tests/
