@@ -14,7 +14,8 @@ from langchain_cockroachdb import (
     DistanceStrategy,
 )
 from langchain_core.embeddings import Embeddings
-from sentence_transformers import SentenceTransformer
+
+from banko_ai.utils.embeddings import load_embedding_model
 
 from ..utils.crdb_engine import get_crdb_engine
 
@@ -23,7 +24,7 @@ class _SentenceTransformerEmbeddings(Embeddings):
     """Wraps SentenceTransformer as a LangChain Embeddings object."""
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
-        self._model = SentenceTransformer(model_name)
+        self._model = load_embedding_model(model_name)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [e.tolist() for e in self._model.encode(texts)]

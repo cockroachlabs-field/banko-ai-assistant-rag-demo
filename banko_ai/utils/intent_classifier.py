@@ -20,9 +20,10 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
-_model: SentenceTransformer | None = None
+from banko_ai.utils.embeddings import load_embedding_model
+
+_model = None
 
 FINANCIAL_ANCHORS = [
     "expense report spending budget",
@@ -126,10 +127,10 @@ def _lexical_or_fuzzy_financial_hit(query: str) -> bool:
     return False
 
 
-def _get_model() -> SentenceTransformer:
+def _get_model():
     global _model
     if _model is None:
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
+        _model = load_embedding_model("all-MiniLM-L6-v2")
     return _model
 
 

@@ -172,5 +172,5 @@ def get_embedding_model():
     Returns:
         SentenceTransformer instance
     """
-    from sentence_transformers import SentenceTransformer
-    return SentenceTransformer('all-MiniLM-L6-v2')
+    from banko_ai.utils.embeddings import load_embedding_model
+    return load_embedding_model('all-MiniLM-L6-v2')

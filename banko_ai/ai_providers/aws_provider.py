@@ -10,9 +10,10 @@ from typing import Any
 
 import boto3
 import psycopg2
-from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError, OperationalError
+
+from banko_ai.utils.embeddings import load_embedding_model
 
 from ..utils.db_retry import TRANSIENT_ERRORS, create_resilient_engine, db_retry, get_database_url
 from .base import AIAuthenticationError, AIConnectionError, AIProvider, RAGResponse, SearchResult
@@ -173,13 +174,13 @@ class AWSProvider(AIProvider):
         inference-profile prefixes are covered."""
         return "claude-3-" in model_id.lower()
     
-    def _get_embedding_model(self) -> SentenceTransformer:
+    def _get_embedding_model(self):
         """Get or create the embedding model."""
         if self.embedding_model is None:
             try:
                 # Use configurable embedding model from environment or default
                 embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-                self.embedding_model = SentenceTransformer(embedding_model_name)
+                self.embedding_model = load_embedding_model(embedding_model_name)
             except Exception as e:
                 raise AIConnectionError(f"Failed to load embedding model: {str(e)}")
         return self.embedding_model

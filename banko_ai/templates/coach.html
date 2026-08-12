@@ -52,7 +52,7 @@
   </article>
 </template>
 
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
 <script>
 const userId = "{{ user_id }}";
 const room = `coach:${userId}`;

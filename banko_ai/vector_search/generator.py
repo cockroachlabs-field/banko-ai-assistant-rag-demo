@@ -45,10 +45,10 @@ class EnhancedExpenseGenerator:
         if self._embedding_model is None:
             import os
 
-            from sentence_transformers import SentenceTransformer
+            from banko_ai.utils.embeddings import load_embedding_model
             # Use configurable embedding model from environment or default
             embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-            self._embedding_model = SentenceTransformer(embedding_model_name)
+            self._embedding_model = load_embedding_model(embedding_model_name)
         return self._embedding_model
     
     @property

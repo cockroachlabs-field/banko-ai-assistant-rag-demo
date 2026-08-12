@@ -6,9 +6,9 @@
     <title>Data Generator - Banko AI</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='roach-logo.svg') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome/css/all.min.css') }}">
+    <script src="{{ url_for('static', filename='vendor/tailwind.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
     <style>
         * { font-family: 'Inter', system-ui, sans-serif; }
         .progress-bar { transition: width 0.3s ease; }

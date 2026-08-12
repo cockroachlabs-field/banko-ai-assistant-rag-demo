@@ -82,8 +82,8 @@ class WatsonxProvider(AIProvider):
     def generate_embedding(self, text: str) -> list[float]:
         """Generate embedding vector for the given text."""
         try:
-            from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer(self.embedding_model_name)
+            from banko_ai.utils.embeddings import load_embedding_model
+            model = load_embedding_model(self.embedding_model_name)
             embedding = model.encode([text])[0]
             return embedding.tolist()
         except Exception as e:
@@ -107,8 +107,9 @@ class WatsonxProvider(AIProvider):
             import json
 
             import numpy as np
-            from sentence_transformers import SentenceTransformer
             from sqlalchemy import text
+
+            from banko_ai.utils.embeddings import load_embedding_model
             
             # Database connection with proper pooling
             DB_URI = get_database_url()
@@ -153,7 +154,7 @@ class WatsonxProvider(AIProvider):
                     return results_list
                 print("3. ❌ Vector search cache MISS, querying database")
             else:
-                model = SentenceTransformer(self.embedding_model_name)
+                model = load_embedding_model(self.embedding_model_name)
                 raw_embedding = model.encode(query)
                 print("2. Embedding generated (no cache available)")
             

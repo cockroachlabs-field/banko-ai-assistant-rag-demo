@@ -10,8 +10,9 @@ import os
 import time
 from typing import Any
 
-from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
+
+from banko_ai.utils.embeddings import load_embedding_model
 
 from ..ai_providers.base import SearchResult
 from ..utils.db_retry import create_resilient_engine, db_retry, get_database_url
@@ -33,7 +34,7 @@ class VectorSearchEngine:
         )
         # Use configurable embedding model from environment or default
         embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-        self.embedding_model = SentenceTransformer(embedding_model_name)
+        self.embedding_model = load_embedding_model(embedding_model_name)
     
     @db_retry(max_attempts=3, initial_delay=0.5)
     def simple_search_expenses(self, query: str, limit: int = 5) -> list[dict[str, Any]]:

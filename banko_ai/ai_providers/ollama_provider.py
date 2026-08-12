@@ -92,8 +92,8 @@ class OllamaProvider(AIProvider):
 
     def generate_embedding(self, text: str) -> list[float]:
         try:
-            from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer(self.embedding_model_name)
+            from banko_ai.utils.embeddings import load_embedding_model
+            model = load_embedding_model(self.embedding_model_name)
             return model.encode([text])[0].tolist()
         except Exception as e:
             print(f"Error generating embedding: {e}")

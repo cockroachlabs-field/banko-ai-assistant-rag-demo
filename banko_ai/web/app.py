@@ -1024,8 +1024,8 @@ def create_app() -> Flask:
                     category = extracted.get('category') or 'Other'
                     expense_text = f"Spent ${amount} at {merchant} for {category} on {expense_date.strftime('%Y-%m-%d') if hasattr(expense_date, 'strftime') else expense_date}"
                     
-                    from sentence_transformers import SentenceTransformer
-                    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+                    from banko_ai.utils.embeddings import load_embedding_model
+                    embedding_model = load_embedding_model('all-MiniLM-L6-v2')
                     embedding = embedding_model.encode(expense_text).tolist()
                     
                     # Get category and items for tags and description

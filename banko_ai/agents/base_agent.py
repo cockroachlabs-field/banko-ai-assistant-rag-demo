@@ -377,8 +377,8 @@ Be concise but thorough in your responses."""
         
         try:
             # Generate embedding for the content
-            from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer('all-MiniLM-L6-v2')
+            from banko_ai.utils.embeddings import load_embedding_model
+            model = load_embedding_model('all-MiniLM-L6-v2')
             embedding = model.encode(content).tolist()
             
             engine = create_engine(
@@ -440,8 +440,8 @@ Be concise but thorough in your responses."""
         
         try:
             # Generate embedding for the query
-            from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer('all-MiniLM-L6-v2')
+            from banko_ai.utils.embeddings import load_embedding_model
+            model = load_embedding_model('all-MiniLM-L6-v2')
             query_embedding = model.encode(query).tolist()
             
             engine = create_engine(

@@ -20,10 +20,11 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 from sqlalchemy import Boolean, Column, DateTime, Float, Integer, MetaData, String, Table, create_engine, text
 from sqlalchemy import Text as TextColumn
 from sqlalchemy.dialects.postgresql import JSONB
+
+from banko_ai.utils.embeddings import load_embedding_model
 
 from .db_retry import create_resilient_engine, db_retry, get_database_url
 
@@ -97,7 +98,7 @@ class BankoCacheManager:
             try:
                 # Use configurable embedding model from environment or default
                 embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-                self.model = SentenceTransformer(embedding_model_name)
+                self.model = load_embedding_model(embedding_model_name)
             except Exception as e:
                 print(f"Warning: Could not load SentenceTransformer model: {e}")
                 print("Cache functionality will be limited.")

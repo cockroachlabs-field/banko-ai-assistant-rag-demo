@@ -9,9 +9,10 @@ import os
 from typing import Any
 
 import psycopg2
-from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError, OperationalError
+
+from banko_ai.utils.embeddings import load_embedding_model
 
 try:
     from google import genai
@@ -144,13 +145,13 @@ class GeminiProvider(AIProvider):
         
         return ["gemini-2.0-flash-001", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"]
 
-    def _get_embedding_model(self) -> SentenceTransformer:
+    def _get_embedding_model(self):
         """Get or create the embedding model."""
         if self.embedding_model is None:
             try:
                 # Use configurable embedding model from environment or default
                 embedding_model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-                self.embedding_model = SentenceTransformer(embedding_model_name)
+                self.embedding_model = load_embedding_model(embedding_model_name)
             except Exception as e:
                 raise AIConnectionError(f"Failed to load embedding model: {str(e)}")
         return self.embedding_model
