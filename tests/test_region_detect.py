@@ -90,6 +90,16 @@ def test_regional_migration_is_idempotent():
             result2 = migrate_regional_tables(test_db, primary_region="us-east-1")
             assert result2 is True
 
+            if len(regions) >= 3:
+                # A region kill must not strand ranges: the migration has
+                # to move survival off the zone default. Found live when a
+                # rebuilt cluster hit unavailable ranges mid chaos demo.
+                with engine_test.connect() as conn:
+                    goal = conn.execute(text(
+                        "SELECT survival_goal FROM [SHOW DATABASES] "
+                        "WHERE database_name = 'banko_rbr_test'")).scalar()
+                assert goal == "region"
+
             with engine_test.connect() as conn:
                 result = conn.execute(text("SHOW CREATE TABLE expenses"))
                 row = result.fetchone()
@@ -119,3 +129,54 @@ def test_resolve_primary_region_single_region_returns_none():
     """On single-region deployments, resolve_primary_region returns None."""
     unreachable = "postgresql://root@nonexistent:26257/defaultdb"
     assert resolve_primary_region(unreachable) is None
+
+
+def test_migration_respects_existing_topology():
+    """A database configured by someone else (the chaos demo's init.sql)
+    keeps its topology: banko must not re-home the primary, add regions,
+    or change the survival goal it did not create. It still converts its
+    own tables. Fighting init.sql for defaultdb once aborted that script
+    before its SURVIVE REGION FAILURE line and broke a working demo."""
+    regions = detect_regions(DB)
+    if len(regions) < 3:
+        pytest.skip("needs a 3-region cluster")
+    from sqlalchemy.engine.url import make_url
+    test_db = str(make_url(DB).set(database="banko_topology_test"))
+    admin = create_engine(DB)
+    with admin.connect() as conn:
+        conn.execute(text("DROP DATABASE IF EXISTS banko_topology_test CASCADE"))
+        conn.execute(text("CREATE DATABASE banko_topology_test"))
+        conn.commit()
+    try:
+        eng = create_engine(test_db)
+        with eng.connect() as conn:
+            # The operator chose two regions and left zone survival.
+            conn.execute(text("ALTER DATABASE banko_topology_test SET PRIMARY REGION 'us-east-1'"))
+            conn.execute(text("ALTER DATABASE banko_topology_test ADD REGION 'us-west-2'"))
+            conn.execute(text("CREATE TABLE expenses (expense_id UUID PRIMARY KEY, user_id UUID NOT NULL)"))
+            conn.execute(text("CREATE TABLE spending_signals (signal_id UUID PRIMARY KEY, user_id UUID NOT NULL)"))
+            conn.execute(text("CREATE TABLE coach_nudges (nudge_id UUID PRIMARY KEY, user_id UUID NOT NULL)"))
+            conn.commit()
+
+        assert migrate_regional_tables(test_db, primary_region="us-central-1") is True
+
+        with eng.connect() as conn:
+            primary = conn.execute(text(
+                'SELECT region FROM [SHOW REGIONS FROM DATABASE] WHERE "primary"')).scalar()
+            goal = conn.execute(text(
+                "SELECT survival_goal FROM [SHOW DATABASES] "
+                "WHERE database_name = 'banko_topology_test'")).scalar()
+            n_regions = conn.execute(text(
+                "SELECT count(*) FROM [SHOW REGIONS FROM DATABASE]")).scalar()
+            ddl = conn.execute(text("SHOW CREATE TABLE expenses")).fetchone()[1]
+        eng.dispose()
+
+        assert primary == "us-east-1"          # not re-homed
+        assert goal == "zone"                  # operator's choice untouched
+        assert n_regions == 2                  # no region added behind their back
+        assert "REGIONAL BY ROW" in str(ddl)   # banko's own table still converted
+    finally:
+        with admin.connect() as conn:
+            conn.execute(text("DROP DATABASE IF EXISTS banko_topology_test CASCADE"))
+            conn.commit()
+        admin.dispose()

@@ -179,28 +179,43 @@ def migrate_regional_tables(database_url: str, primary_region: str | None) -> bo
     engine = create_resilient_engine(database_url)
     try:
         with engine.connect() as conn:
-            log.info("applying multi-region config to database %s (primary: %s)", db_name, primary_region)
+            # Database-level topology (primary region, region list,
+            # survival goal) belongs to whoever configured it first. The
+            # chaos demo's init.sql owns its cluster's defaultdb, and
+            # banko fighting it for control broke a working demo: both
+            # ran the same ALTERs, the loser died on duplicates, and
+            # init.sql never reached its SURVIVE REGION FAILURE line.
+            # If a primary region exists, banko leaves the database DDL
+            # alone and only manages its own tables below.
+            existing_primary = conn.execute(text(
+                'SELECT region FROM [SHOW REGIONS FROM DATABASE] '
+                'WHERE "primary"')).fetchone()
 
-            try:
-                conn.execute(text(f"ALTER DATABASE {db_name} SET PRIMARY REGION '{primary_region}'"))
+            if existing_primary:
+                log.info("database %s topology already configured "
+                         "(primary: %s); leaving database DDL alone",
+                         db_name, existing_primary[0])
+            else:
+                log.info("bootstrapping multi-region config on %s "
+                         "(primary: %s)", db_name, primary_region)
+                conn.execute(text(
+                    f"ALTER DATABASE {db_name} SET PRIMARY REGION '{primary_region}'"))
                 log.info("set PRIMARY REGION to %s", primary_region)
-            except Exception as e:
-                if "already set" in str(e).lower() or "already exists" in str(e).lower():
-                    log.debug("PRIMARY REGION already set: %s", e)
-                else:
-                    raise
 
-            for region in regions:
-                if region == primary_region:
-                    continue
-                try:
-                    conn.execute(text(f"ALTER DATABASE {db_name} ADD REGION '{region}'"))
+                for region in regions:
+                    if region == primary_region:
+                        continue
+                    conn.execute(text(
+                        f"ALTER DATABASE {db_name} ADD REGION '{region}'"))
                     log.info("added region %s", region)
-                except Exception as e:
-                    if "already added" in str(e).lower() or "already exists" in str(e).lower():
-                        log.debug("region %s already added: %s", region, e)
-                    else:
-                        raise
+
+                # Region survival is the point of the multi-region demo:
+                # the zone default cannot keep quorum through a whole
+                # region dying. Needs three or more regions.
+                if len(regions) >= 3:
+                    conn.execute(text(
+                        f"ALTER DATABASE {db_name} SURVIVE REGION FAILURE"))
+                    log.info("survival goal set to REGION FAILURE")
 
             # Table names are hardcoded here (not user input), safe to interpolate
             for table in ["expenses", "spending_signals", "coach_nudges"]:
