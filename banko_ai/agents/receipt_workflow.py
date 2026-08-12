@@ -54,8 +54,10 @@ def receipt_node(state: ReceiptWorkflowState) -> dict:
     llm = get_llm_for_agent(temperature=0.7)
     embedding_model = get_embedding_model()
 
+    from banko_ai.utils.migration import agent_home_region
+
     agent = ReceiptAgent(
-        region="us-east-1",
+        region=agent_home_region(state.get("database_url", "")),
         llm=llm,
         database_url=state.get("database_url", ""),
         embedding_model=embedding_model,
@@ -98,8 +100,10 @@ def fraud_node(state: ReceiptWorkflowState) -> dict:
     llm = get_llm_for_agent(temperature=0.7)
     embedding_model = get_embedding_model()
 
+    from banko_ai.utils.migration import agent_home_region
+
     agent = FraudAgent(
-        region="us-west-2",
+        region=agent_home_region(state.get("database_url", "")),
         llm=llm,
         database_url=state.get("database_url", ""),
         embedding_model=embedding_model,

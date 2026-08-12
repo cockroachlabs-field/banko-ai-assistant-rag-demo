@@ -57,11 +57,11 @@ A fuller architecture diagram lives in the internal design docs (local-only, see
 | `scripts/coach/` | mock_signals.py (synthetic signals at the webhook), assert_nudges.py (automated e2e smoke), cdc-demo/ (Kafka + Debezium bootstrap) |
 | `scripts/airgap/` | preload-models.sh (cache the Ollama model for offline runs) |
 | `docs/` | API.md, DOCKER.md (public). `docs/superpowers/` (specs, plans, handoffs) is local-only and gitignored — internal working docs never go to the public repo |
-| `PIPELINE_CONTRACT.md` | **Planned** (repo root) — contract for the sibling pipeline repo |
+| `PIPELINE_CONTRACT.md` | Contract for the sibling pipeline repo (payload shapes, idempotency, both transports) |
 
 ## Sibling repo (you will touch its outputs, not its code)
 
-`~/idea_workspace/cockroachdb-watsonx-data-pipeline` (GitHub: `viragtripathi/cockroachdb-watsonx-data-pipeline`) — the streaming/lakehouse side. It produces CDC events from CockroachDB into Apache Iceberg on IBM watsonx.data, with two paths: webhook (demo) and Debezium-Kafka (prod). It is developed in a **separate Claude Code session**. The contract between the two repos lives in `PIPELINE_CONTRACT.md` (planned) at this repo's root. The pipeline repo writes to a `spending_signals` table; this repo consumes it via webhook or Kafka.
+`~/idea_workspace/cockroachdb-watsonx-data-pipeline` (GitHub: `viragtripathi/cockroachdb-watsonx-data-pipeline`) — the streaming/lakehouse side. It produces CDC events from CockroachDB into Apache Iceberg on IBM watsonx.data, with two paths: webhook (demo) and Debezium-Kafka (prod). It is developed in a **separate Claude Code session**. The contract between the two repos lives in `PIPELINE_CONTRACT.md` at this repo's root. The pipeline repo writes to a `spending_signals` table; this repo consumes it via webhook or Kafka.
 
 Schema for `expenses` table is **shared** between both repos — keep them in sync if you ever change it here.
 
@@ -129,7 +129,6 @@ These come from prior development pain (mostly from droid sessions Feb-Apr 2026)
 - `agent_memory.access_count` never incremented on read (defer to memory-system v2).
 - `SentenceTransformer` re-instantiated per call in `base_agent.py` (perf bug; fixing risks regression — defer).
 - `documents` table schema drift between `database.py` and `agent_schema.py` (both create it; reconcile when next touching either).
-- `.gitignore:45` has unanchored `test_*.py` (intended for local utility scripts), which blocks new `tests/test_*.py` from being tracked — every new pytest module needs `git add -f`. Change to `/test_*.py` (root-anchored) or remove.
 - mypy carries about 200 findings that predate the July 2026 dep landing (verified identical against the May lockfile, so not upgrade fallout). The `make types` target is advisory, same as CI. Someone needs to budget a real typing pass; until then do not treat mypy output as a regression signal.
 - The ibm-watsonx-ai SDK prints a third-party-license WatsonxAPIWarning on every agent LLM call while the default model is non-IBM (openai/gpt-oss-120b). Informational, not an error; switching WATSONX_MODEL to an ibm/granite model silences it.
 

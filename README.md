@@ -84,10 +84,11 @@ cockroach start-single-node --insecure \
 ### Start the app
 
 ```bash
-export AI_SERVICE=watsonx                 # or openai, aws, gemini
+export AI_SERVICE=watsonx                 # or openai, aws, gemini, ollama
 export WATSONX_API_KEY=...
 export WATSONX_PROJECT_ID=...
 export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
+export CDC_WEBHOOK_HMAC_SECRET=dev-only-secret   # signs Coach webhook posts, enables the welcome nudge
 
 banko-ai run                              # port 5000, generates 5000 sample records on first start
 banko-ai run --port 5001                  # custom port (macOS AirPlay grabs 5000)
@@ -130,14 +131,17 @@ the selected provider.
 ### Run it offline (airgap)
 
 The whole stack runs without internet: embeddings are computed locally,
-and the LLM is a local model served by Ollama. Run the preload script
-once while online (it caches both the Ollama model and the embedding
-model into named volumes), then start the stack with the network off:
+and the LLM is a local model served by Ollama. Bring the stack up once
+while online and it preloads itself (an init container pulls the Ollama
+model into a named volume, skipping the pull when it is already cached);
+every start after that works with the network off:
 
 ```bash
-scripts/airgap/preload-models.sh                    # once, while online
-docker compose -f docker-compose.airgap.yml up -d   # works offline
+docker compose -f docker-compose.airgap.yml up -d   # first run online, then works offline
 ```
+
+To cache ahead of time instead (say, the night before a talk),
+`scripts/airgap/preload-models.sh` pulls the same models explicitly.
 
 Default model is granite3.3:8b (override with `OLLAMA_MODEL`). For a
 non-Docker setup, `ollama serve` plus `AI_SERVICE=ollama banko-ai run`
@@ -151,8 +155,9 @@ The important knobs:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | CockroachDB connection string | `cockroachdb://root@localhost:26257/defaultdb?sslmode=disable` |
-| `AI_SERVICE` | `watsonx`, `openai`, `aws`, or `gemini` | `watsonx` |
-| `SECRET_KEY` | Flask session key (auto-generated in dev) | random |
+| `AI_SERVICE` | `watsonx`, `openai`, `aws`, `gemini`, or `ollama` | `watsonx` |
+| `SECRET_KEY` | Flask session key. Auto-generated per boot in dev, which signs everyone out on restart; set it for stable demo sessions | random |
+| `CDC_WEBHOOK_HMAC_SECRET` | Signs Coach webhook posts; unset disables `/api/cdc/signals` and the welcome nudge | unset |
 
 Provider keys depend on what you pick:
 
@@ -214,6 +219,11 @@ export CDC_WEBHOOK_HMAC_SECRET=dev-only-secret   # same value as the app
 uv run python scripts/coach/mock_signals.py --type=budget_threshold
 # also: --type=anomaly, --type=recurring_drift
 ```
+
+The coach page shows the signed-in user's nudges. By default the script
+targets the maya persona, so sign in as `maya` to watch the nudge land,
+or pass `--user-id` (or set `COACH_DEFAULT_USER_ID`) for the account you
+signed up with.
 
 Or run the real thing: CockroachDB changefeeds streaming through Debezium
 and Kafka into the app. One script brings up Kafka, Kafka Connect, and the

@@ -23,8 +23,8 @@ test-local: lockcheck lint types test
 	@echo ""
 	@echo "✓ Local test suite passed."
 	@echo "  REMINDER: multi-provider smoke is still required before push."
-	@echo "  See docs/coach-smoke-checklist.md once it exists, or run the app"
-	@echo "  against each of watsonx, openai, aws, gemini, ollama manually."
+	@echo "  Boot the app against each of watsonx, openai, aws, gemini, ollama"
+	@echo "  and run scripts/coach/assert_nudges.py (see README, Testing)."
 
 lockcheck:
 	@# A pyproject change without a re-lock leaves uv.lock drifting: the

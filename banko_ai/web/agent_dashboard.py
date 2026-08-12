@@ -8,7 +8,7 @@ Provides WebSocket-based updates for:
 - Decision making
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, render_template
 from flask_socketio import emit
@@ -235,7 +235,7 @@ def emit_agent_status_update(agent_id, status, task=None):
                 'agent_id': str(agent_id),
                 'status': status,
                 'task': task,
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             })
     except Exception as e:
         print(f"⚠️  Could not emit agent status: {e}")
@@ -280,7 +280,7 @@ def emit_agent_decision(agent_id, decision_type, confidence, reasoning):
                 'decision_type': decision_type,
                 'confidence': confidence,
                 'reasoning': reasoning[:200] if reasoning else None,
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             })
     except Exception as e:
         print(f"⚠️  Could not emit agent decision: {e}")
@@ -296,7 +296,7 @@ def emit_workflow_update(workflow_id, step, status, result=None):
                 'step': step,
                 'status': status,
                 'result': result,
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             })
     except Exception as e:
         print(f"⚠️  Could not emit workflow update: {e}")

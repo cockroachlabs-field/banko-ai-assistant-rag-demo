@@ -71,7 +71,8 @@ class BaseAgent:
         
         Args:
             agent_type: Type of agent (e.g., 'receipt', 'fraud', 'budget')
-            region: AWS region (e.g., 'us-east-1')
+            region: Region label recorded in agent_state (the deployment's
+                gateway region on multi-region clusters, else 'local')
             llm: LangChain LLM instance (provider-agnostic)
             tools: List of tools this agent can use
             database_url: CockroachDB connection string

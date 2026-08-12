@@ -1,0 +1,9 @@
+/* Inter, vendored for the wifi-off demo (replaces the fonts.googleapis.com
+   stylesheet). One variable-weight file covers 100-900. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('InterVariable.woff2') format('woff2');
+}

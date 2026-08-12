@@ -3,10 +3,12 @@ Test the signup flow: login, signup, welcome signal.
 """
 
 import os
+
 import pytest
+from sqlalchemy import create_engine, text
+
 from banko_ai.web.app import create_app
 from banko_ai.web.auth import UserManager
-from sqlalchemy import text, create_engine
 
 DB = os.getenv("DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DB, reason="DATABASE_URL not set")
@@ -27,6 +29,14 @@ def client():
         for attempt in range(4):
             try:
                 with engine.begin() as conn:
+                    # Welcome-signal rows too, or every run leaks a
+                    # spending_signals/coach_nudges pair onto a shared DB.
+                    conn.execute(text(
+                        "DELETE FROM coach_nudges WHERE user_id IN "
+                        "(SELECT user_id FROM users WHERE username = 'flow-test-user')"))
+                    conn.execute(text(
+                        "DELETE FROM spending_signals WHERE user_id IN "
+                        "(SELECT user_id FROM users WHERE username = 'flow-test-user')"))
                     conn.execute(text(
                         "DELETE FROM expenses WHERE user_id IN "
                         "(SELECT user_id FROM users WHERE username = 'flow-test-user')"))

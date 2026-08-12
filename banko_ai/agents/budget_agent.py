@@ -262,9 +262,11 @@ Provide 2-3 specific, actionable recommendations. Be concise and practical."""
                 
                 engine = create_engine(self.database_url, poolclass=NullPool)
                 with engine.connect() as conn:
+                    # Freshest fraud agent wherever it runs; region labels
+                    # are real localities now, not fixed AWS names.
                     fraud_result = conn.execute(text("""
-                        SELECT agent_id FROM agent_state 
-                        WHERE agent_type = 'fraud' AND region = 'us-west-2'
+                        SELECT agent_id FROM agent_state
+                        WHERE agent_type = 'fraud'
                         ORDER BY last_heartbeat DESC LIMIT 1
                     """))
                     fraud_row = fraud_result.fetchone()

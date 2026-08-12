@@ -32,8 +32,11 @@ import requests
 from sqlalchemy import create_engine, text
 
 DEFAULT_URL = "http://localhost:5000/api/cdc/signals"
+# Fallback matches settings.coach_default_user_id: the maya persona,
+# backfilled on every boot, so smoke nudges land on a user that exists
+# and show up on /coach when signed in as maya.
 DEFAULT_USER = os.getenv("COACH_DEFAULT_USER_ID",
-                         "00000000-0000-0000-0000-000000000001")
+                         "00000000-0000-0000-0000-0000000000a1")
 
 PAYLOADS: dict[str, tuple[str, dict[str, Any]]] = {
     "budget_threshold": ("warn", {

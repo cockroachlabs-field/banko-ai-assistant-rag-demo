@@ -5,7 +5,6 @@ This module provides user authentication backed by CockroachDB for the
 Banko AI Assistant.
 """
 
-from functools import lru_cache
 from typing import Any
 
 from flask import session
@@ -14,13 +13,18 @@ from sqlalchemy.pool import NullPool
 
 from ..utils.db_retry import get_database_url
 
+# Success-only cache: lru_cache used to pin None after one connection
+# blip, unpinning the user's rows for the rest of the process. Only a
+# lookup that actually reached the users table is remembered.
+_user_region_cache: dict[tuple[str, str], str | None] = {}
 
-@lru_cache(maxsize=256)
+
 def resolve_user_region(user_id: str, database_url: str | None = None) -> str | None:
     """Resolve user's home region from the users table.
 
     Returns None if the user has no home_region set or on lookup errors.
-    Cached per user_id to avoid repeated queries.
+    Successful lookups are cached per user; errors and not-yet-visible
+    rows are retried on the next call.
 
     Args:
         user_id: User UUID
@@ -29,6 +33,10 @@ def resolve_user_region(user_id: str, database_url: str | None = None) -> str | 
     from ..utils.db_retry import create_resilient_engine
 
     url = get_database_url(database_url)
+    key = (user_id, url)
+    if key in _user_region_cache:
+        return _user_region_cache[key]
+
     engine = create_resilient_engine(url)
     try:
         with engine.connect() as conn:
@@ -37,11 +45,22 @@ def resolve_user_region(user_id: str, database_url: str | None = None) -> str | 
                 {"u": user_id}
             )
             row = result.fetchone()
-            return str(row[0]) if row and row[0] else None
+            if row is None:
+                # Unknown user (or a signup race): answer None but let the
+                # next call look again.
+                return None
+            if len(_user_region_cache) > 4096:
+                _user_region_cache.clear()
+            region = str(row[0]) if row[0] else None
+            _user_region_cache[key] = region
+            return region
     except Exception:
         return None
     finally:
         engine.dispose()
+
+
+resolve_user_region.cache_clear = _user_region_cache.clear  # type: ignore[attr-defined]
 
 
 class UserManager:
@@ -116,13 +135,16 @@ class UserManager:
             return None
 
     def get_by_username(self, username: str) -> dict[str, Any] | None:
-        """Get user by username."""
+        """Get user by username, case-insensitively: 'Maya' at the login
+        prompt finds 'maya', and signup cannot mint a case-variant twin.
+        The users table is tiny, so the lower() scan costs nothing."""
         with self.engine.connect() as conn:
             result = conn.execute(
                 text("""
                     SELECT user_id, username, spending_style, home_region, created_at, demo_user
                     FROM users
-                    WHERE username = :username
+                    WHERE lower(username) = lower(:username)
+                    LIMIT 1
                 """),
                 {"username": username}
             )

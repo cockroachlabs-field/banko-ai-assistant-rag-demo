@@ -1,6 +1,8 @@
 # Airgap demo: CockroachDB + Banko + Ollama, no external network needed at
-# demo time. Run scripts/airgap/preload-models.sh once while online to cache
-# the model, then this stack works with the wifi off.
+# demo time. The first `up` while online pulls the LLM into the ollama-models
+# volume automatically (ollama-init below); after that the stack works with
+# the wifi off. scripts/airgap/preload-models.sh does the same thing
+# explicitly if you would rather cache ahead of time.
 
 services:
   cockroachdb:
@@ -33,6 +35,33 @@ services:
     networks:
       - banko-airgap
 
+  # One-shot preload: pulls the model into the shared volume only when it
+  # is not already there. Online, the first `up` self-preloads; offline
+  # with the model cached it exits clean without touching the network;
+  # offline without the model it fails loudly instead of letting the app
+  # come up brokenly.
+  ollama-init:
+    image: ollama/ollama:${OLLAMA_VERSION:-latest}
+    container_name: banko-airgap-ollama-init
+    depends_on:
+      ollama:
+        condition: service_started
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        model="${OLLAMA_MODEL:-granite3.3:8b}"
+        if ollama list | grep -q "$$model"; then
+          echo "$$model already cached, nothing to pull"
+        else
+          echo "pulling $$model (first online run)"
+          ollama pull "$$model"
+        fi
+    restart: "no"
+    networks:
+      - banko-airgap
+
   banko-ai:
     image: virag/banko-ai-assistant:${BANKO_VERSION:-latest}
     container_name: banko-airgap-app
@@ -43,6 +72,8 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
+      ollama-init:
+        condition: service_completed_successfully
     environment:
       - DATABASE_URL=cockroachdb://root@cockroachdb:26257/defaultdb?sslmode=disable
       # Demo default; set your own for anything beyond a local demo

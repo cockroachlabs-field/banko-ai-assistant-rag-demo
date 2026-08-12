@@ -269,6 +269,7 @@ def create_app() -> Flask:
     try:
         from banko_ai.utils.migration import (
             DatabaseMigration,
+            detect_database_regions,
             detect_regions,
             migrate_regional_tables,
             resolve_primary_region,
@@ -292,7 +293,11 @@ def create_app() -> Flask:
         print(f"Warning: migration failed at startup: {e}")
 
     def _emit_welcome_signal(user: dict) -> None:
-        """Post a welcome signal matched to the user's spending style."""
+        """Post a welcome signal matched to the user's spending style.
+
+        The POST goes back to this same server, so it runs on a background
+        thread: a synchronous self-call inside the signup request would
+        deadlock a single-threaded server."""
         secret = os.getenv("CDC_WEBHOOK_HMAC_SECRET", "")
         if not secret:
             print("welcome signal skipped: no webhook secret")
@@ -315,14 +320,21 @@ def create_app() -> Flask:
             "updated": f"{time.time():.10f}"}]}
         body = json.dumps(envelope).encode()
         mac = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-        try:
-            url = request.host_url.rstrip('/') + '/api/cdc/signals'
-            requests.post(
-                url, data=body, timeout=5,
-                headers={"Content-Type": "application/json",
-                         "X-Banko-Signature": mac})
-        except Exception as e:
-            print(f"welcome signal skipped: {e}")
+        # host_url needs the request context; resolve it before the thread.
+        url = request.host_url.rstrip('/') + '/api/cdc/signals'
+
+        def _post() -> None:
+            try:
+                requests.post(
+                    url, data=body, timeout=5,
+                    headers={"Content-Type": "application/json",
+                             "X-Banko-Signature": mac})
+            except Exception as e:
+                print(f"welcome signal skipped: {e}")
+
+        import threading
+        threading.Thread(target=_post, daemon=True,
+                         name="welcome-signal").start()
 
     @app.route('/')
     def index():
@@ -357,7 +369,10 @@ def create_app() -> Flask:
                 session['username'] = user["username"]
                 return redirect(url_for('index'))
 
-            regions = detect_regions(config.database_url)
+            # Offer only regions the database has: an operator-configured
+            # database can carry fewer regions than the cluster, and rows
+            # can never pin to a region outside its enum.
+            regions = detect_database_regions(config.database_url)
             return render_template('login.html', username=username,
                                    regions=regions, show_signup=True)
 
@@ -370,17 +385,27 @@ def create_app() -> Flask:
         spending_style = request.form.get('spending_style', '').strip()
         home_region = request.form.get('home_region', None)
 
+        # Bound the username: it lands in headers, session cookies, and
+        # SQL parameters on every page, so no novels and no control bytes.
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,32}", username):
+            flash('Usernames are 1-32 characters: letters, digits, '
+                  'dot, dash, underscore.', 'error')
+            return render_template('login.html', username='',
+                                   regions=detect_database_regions(config.database_url),
+                                   show_signup=True)
+
         allowed_styles = ['diner', 'subscriber', 'saver', 'balanced']
         if spending_style not in allowed_styles:
             flash(f'Invalid spending style. Choose from: {", ".join(allowed_styles)}', 'error')
             return render_template('login.html', username=username,
-                                   regions=detect_regions(config.database_url),
+                                   regions=detect_database_regions(config.database_url),
                                    show_signup=True)
 
-        # Only accept a region the cluster actually has; anything else
-        # (including any value on a single-region cluster) is dropped so a
-        # crafted form post can never poison home_region.
-        if home_region and home_region not in detect_regions(config.database_url):
+        # Only accept a region the database actually has; the cluster can
+        # know regions the database's enum does not, and anything else
+        # (including any value on a single-region deployment) is dropped so
+        # a crafted form post can never poison home_region.
+        if home_region and home_region not in detect_database_regions(config.database_url):
             home_region = None
 
         um = UserManager(config.database_url)
@@ -391,7 +416,7 @@ def create_app() -> Flask:
         if um.get_by_username(username):
             flash(f'"{username}" already exists. Sign in below to continue.', 'info')
             return render_template('login.html', username=username,
-                                   regions=detect_regions(config.database_url))
+                                   regions=detect_database_regions(config.database_url))
 
         user = None
         try:
@@ -417,7 +442,7 @@ def create_app() -> Flask:
                 um.delete_by_username(username)
             flash(f'Signup failed: {e}', 'error')
             return render_template('login.html', username=username,
-                                   regions=detect_regions(config.database_url),
+                                   regions=detect_database_regions(config.database_url),
                                    show_signup=True)
 
     def current_demo_user() -> str:
@@ -888,6 +913,13 @@ def create_app() -> Flask:
             
             print(f"📄 Receipt uploaded: {file.filename} → {temp_path}")
             
+            # One real region label for every agent in this pipeline: the
+            # cluster's gateway region when multi-region, 'local' otherwise.
+            # Hardcoded AWS names here used to reach the dashboard no
+            # matter what cluster was underneath.
+            from banko_ai.utils.migration import agent_home_region
+            agent_region = agent_home_region(config.database_url)
+
             # Initialize Receipt Agent
             try:
                 from pydantic import ValidationError
@@ -905,7 +937,7 @@ def create_app() -> Flask:
                 embedding_model = get_embedding_model()
                 
                 receipt_agent = ReceiptAgent(
-                    region='us-east-1',
+                    region=agent_region,
                     llm=llm,
                     database_url=config.database_url,
                     embedding_model=embedding_model
@@ -972,7 +1004,7 @@ def create_app() -> Flask:
                 try:
                     socketio.emit('agent_activity', {
                         'agent_type': 'receipt',
-                        'region': 'us-east-1',
+                        'region': agent_region,
                         'status': 'processing',
                         'message': f"Processing receipt from {extracted.get('merchant', 'Unknown')}",
                         'timestamp': datetime.now().isoformat()
@@ -1113,7 +1145,7 @@ def create_app() -> Flask:
                     try:
                         socketio.emit('agent_activity', {
                             'agent_type': 'receipt',
-                            'region': 'us-east-1',
+                            'region': agent_region,
                             'status': 'completed',
                             'message': f"Added expense: {extracted.get('merchant', 'Unknown')} - ${amount}",
                             'timestamp': datetime.now().isoformat()
@@ -1137,7 +1169,7 @@ def create_app() -> Flask:
                     fraud_embedding_model = get_embedding_model()
                     
                     fraud_agent = FraudAgent(
-                        region='us-west-2',
+                        region=agent_region,
                         llm=fraud_llm,
                         database_url=config.database_url,
                         embedding_model=fraud_embedding_model,
@@ -1151,7 +1183,7 @@ def create_app() -> Flask:
                     try:
                         socketio.emit('agent_activity', {
                             'agent_type': 'fraud',
-                            'region': 'us-west-2',
+                            'region': agent_region,
                             'status': 'processing',
                             'message': 'Scanning for suspicious patterns...',
                             'timestamp': datetime.now().isoformat()
@@ -1179,7 +1211,7 @@ def create_app() -> Flask:
                     try:
                         socketio.emit('agent_activity', {
                             'agent_type': 'fraud',
-                            'region': 'us-west-2',
+                            'region': agent_region,
                             'status': 'completed',
                             'message': fraud_result,
                             'timestamp': datetime.now().isoformat()
@@ -1201,7 +1233,7 @@ def create_app() -> Flask:
                     budget_llm = get_llm_for_agent(temperature=0.7)
                     
                     budget_agent = BudgetAgent(
-                        region='us-central-1',
+                        region=agent_region,
                         llm=budget_llm,
                         database_url=config.database_url,
                         alert_threshold=0.8
@@ -1213,7 +1245,7 @@ def create_app() -> Flask:
                     try:
                         socketio.emit('agent_activity', {
                             'agent_type': 'budget',
-                            'region': 'us-central-1',
+                            'region': agent_region,
                             'status': 'processing',
                             'message': 'Analyzing budget impact...',
                             'timestamp': datetime.now().isoformat()
@@ -1244,7 +1276,7 @@ def create_app() -> Flask:
                     try:
                         socketio.emit('agent_activity', {
                             'agent_type': 'budget',
-                            'region': 'us-central-1',
+                            'region': agent_region,
                             'status': 'completed',
                             'message': budget_result,
                             'timestamp': datetime.now().isoformat()

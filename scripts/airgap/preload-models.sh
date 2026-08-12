@@ -2,6 +2,11 @@
 # Pull the airgap model into the compose volume while still online.
 # Run once with a network connection; after that the airgap stack starts
 # without ever leaving the machine.
+#
+# Optional since the compose file grew an ollama-init service: the first
+# `docker compose -f docker-compose.airgap.yml up` while online pulls the
+# LLM by itself. This script remains the explicit path, and it also warms
+# the embedding cache for app images that do not bake the model in.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 

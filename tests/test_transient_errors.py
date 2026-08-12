@@ -25,10 +25,17 @@ def test_value_error_not_in_transient_errors():
     assert not isinstance(plain_error, TRANSIENT_ERRORS)
 
 
-def test_transient_errors_is_tuple():
-    """Verify TRANSIENT_ERRORS is a tuple of exception classes."""
-    assert isinstance(TRANSIENT_ERRORS, tuple)
-    assert len(TRANSIENT_ERRORS) > 0
-    # All items should be exception classes
-    for exc_class in TRANSIENT_ERRORS:
-        assert issubclass(exc_class, BaseException)
+def test_transient_errors_usable_with_isinstance():
+    """The contract callers rely on: the tuple works as an isinstance /
+    except target and matches subclasses of its members, not just exact
+    types. (Replaces a tautological is-it-a-tuple check.)"""
+
+    class DerivedOperationalError(OperationalError):
+        pass
+
+    derived = DerivedOperationalError("stmt", {}, Exception("x"))
+    assert isinstance(derived, TRANSIENT_ERRORS)
+    try:
+        raise derived
+    except TRANSIENT_ERRORS:
+        pass

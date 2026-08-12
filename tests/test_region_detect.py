@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from banko_ai.utils.migration import (
+    detect_database_regions,
     detect_regions,
     migrate_regional_tables,
     regional_tables_ready,
@@ -19,6 +20,13 @@ pytestmark = pytest.mark.skipif(not DB, reason="DATABASE_URL not set")
 def test_detect_regions_unreachable_url():
     """When the database is unreachable, detect_regions returns empty list."""
     assert detect_regions("postgresql://root@nonexistent:26257/defaultdb") == []
+
+
+def test_detect_database_regions_unreachable_url():
+    """When the database is unreachable, detect_database_regions returns
+    empty list, which drops the signup region picker entirely."""
+    assert detect_database_regions(
+        "postgresql://root@nonexistent2:26257/defaultdb") == []
 
 
 def test_detect_regions_returns_cluster_regions():

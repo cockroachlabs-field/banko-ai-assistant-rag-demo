@@ -37,9 +37,13 @@ services:
       # Database configuration
       - DATABASE_URL=cockroachdb://root@cockroachdb:26257/defaultdb?sslmode=disable
       
-      # AI Service (change to your preferred provider: watsonx, openai, aws, gemini)
+      # AI Service (change to your preferred provider: watsonx, openai, aws, gemini, ollama)
       - AI_SERVICE=${AI_SERVICE:-watsonx}
-      
+
+      # Coach webhook (signs /api/cdc/signals posts, enables the welcome
+      # nudge). Demo default; set your own beyond a local demo.
+      - CDC_WEBHOOK_HMAC_SECRET=${CDC_WEBHOOK_HMAC_SECRET:-dev-only-secret}
+
       # IBM Watsonx configuration
       - WATSONX_API_KEY=${WATSONX_API_KEY}
       - WATSONX_PROJECT_ID=${WATSONX_PROJECT_ID}

@@ -41,8 +41,9 @@ CONNECTION_POOLING_FIX.md
 HARDCODED_VALUES_FIX.md
 MULTI_REGION_SUPPORT.md
 
-# Local test/utility scripts (for development only)
-test_*.py
+# Local test/utility scripts (for development only). Root-anchored so it
+# never swallows new tests/test_*.py modules.
+/test_*.py
 cache_statistics.sql
 
 
@@ -71,3 +72,4 @@ scripts/coach/cdc-demo/connect-plugins/
 # Internal working docs (specs, plans, handoffs) stay local, never public
 docs/superpowers/
 docs/USE_CASES_CALL_NOTES.md
+.claude/

@@ -11,8 +11,6 @@ Usage:
 """
 
 from sqlalchemy import create_engine, text
-from sentence_transformers import SentenceTransformer
-import numpy as np
 import json
 import sys
 import os
@@ -20,14 +18,29 @@ import os
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Database connection settings
-DB_URI = "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
+from banko_ai.utils.db_retry import normalize_db_url  # noqa: E402
+from banko_ai.utils.embeddings import load_embedding_model  # noqa: E402
+
+# Database connection settings: whatever DATABASE_URL points at, local
+# single node by default. Normalized because a plain postgresql:// URL
+# trips the stock dialect on CockroachDB's version string.
+DB_URI = normalize_db_url(os.getenv(
+    "DATABASE_URL",
+    "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"))
+
+_model = None
+
+def get_embedding_model():
+    """Load the embedding model once, through the offline-first loader so
+    the demo works with the wifi off."""
+    global _model
+    if _model is None:
+        _model = load_embedding_model()
+    return _model
 
 def get_query_embedding(query_text):
     """Generate embedding for a text query."""
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    query_embedding = model.encode(query_text)
-    return query_embedding
+    return get_embedding_model().encode(query_text)
 
 def numpy_vector_to_pg_vector(vector):
     """Convert numpy vector to PostgreSQL vector format."""
@@ -36,10 +49,9 @@ def numpy_vector_to_pg_vector(vector):
 def search_expenses(query, limit=5):
     """Search expenses using vector similarity."""
     engine = create_engine(DB_URI)
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    
+
     # Create embedding for the search query
-    search_embedding = numpy_vector_to_pg_vector(model.encode(query))
+    search_embedding = numpy_vector_to_pg_vector(get_query_embedding(query))
     
     search_query = text("""
         SELECT 

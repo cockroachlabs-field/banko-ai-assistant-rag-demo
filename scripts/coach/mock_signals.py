@@ -24,8 +24,12 @@ import requests
 
 
 DEFAULT_URL = "http://localhost:5000/api/cdc/signals"
+# Fallback matches settings.coach_default_user_id: the maya persona,
+# backfilled on every boot, so the default target always exists. The
+# coach page only shows the signed-in user's nudges, so sign in as maya
+# or pass --user-id for your own account.
 DEFAULT_USER = os.getenv("COACH_DEFAULT_USER_ID",
-                          "00000000-0000-0000-0000-000000000001")
+                         "00000000-0000-0000-0000-0000000000a1")
 
 
 def _payload_for(signal_type: str) -> dict[str, Any]:

@@ -2,6 +2,7 @@
 Each test seeds its own rows and cleans up after itself."""
 
 import os
+
 import pytest
 from sqlalchemy import create_engine, text
 
@@ -13,7 +14,6 @@ from banko_ai.coach.tools import (
     set_budget,
 )
 from banko_ai.utils.migration import DatabaseMigration
-
 
 TEST_USER = "00000000-0000-0000-0000-000000000fff"
 
@@ -49,19 +49,27 @@ def db_url() -> str:
 
 @pytest.fixture(autouse=True)
 def _cleanup(db_url):
-    # Per-table transactions so a missing table or constraint error on one
-    # delete cannot poison the others (CRDB aborts the whole tx on error).
-    eng = create_engine(db_url)
-    for table in ("coach_nudges", "spending_signals", "expenses",
-                  "user_budgets"):
-        try:
-            with eng.begin() as conn:
-                conn.execute(text(f"DELETE FROM {table} WHERE user_id = :u"),
-                             {"u": TEST_USER})
-        except Exception:
-            pass
-    eng.dispose()
+    def _purge():
+        # Per-table transactions so a missing table or constraint error on
+        # one delete cannot poison the others (CRDB aborts the whole tx on
+        # error).
+        eng = create_engine(db_url)
+        for table in ("coach_nudges", "spending_signals", "expenses",
+                      "user_budgets"):
+            try:
+                with eng.begin() as conn:
+                    conn.execute(
+                        text(f"DELETE FROM {table} WHERE user_id = :u"),
+                        {"u": TEST_USER})
+            except Exception:
+                pass
+        eng.dispose()
+
+    # Purge on both sides: before for a clean slate even after a crashed
+    # run, after so the module's last test leaves nothing on a shared DB.
+    _purge()
     yield
+    _purge()
 
 
 def test_get_user_budget_default_when_no_override(db_url):
