@@ -1,7 +1,9 @@
 import os
 import uuid
+
 import pytest
 from sqlalchemy import create_engine, text
+
 from banko_ai.vector_search.generator import EnhancedExpenseGenerator
 
 DB = os.getenv("DATABASE_URL")

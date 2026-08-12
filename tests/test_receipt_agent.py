@@ -6,8 +6,9 @@ This creates a sample receipt image and processes it.
 
 import os
 import tempfile
-from PIL import Image, ImageDraw, ImageFont
+
 from langchain_openai import ChatOpenAI
+from PIL import Image, ImageDraw, ImageFont
 from sentence_transformers import SentenceTransformer
 
 from banko_ai.agents.receipt_agent import ReceiptAgent
@@ -24,7 +25,7 @@ def create_sample_receipt(filename: str) -> str:
     try:
         font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 20)
         font_small = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 16)
-    except:
+    except Exception:
         font = ImageFont.load_default()
         font_small = ImageFont.load_default()
     
@@ -168,7 +169,7 @@ def test_receipt_agent():
     try:
         os.unlink(receipt_path)
         print(f"🗑️  Cleaned up temp file: {receipt_path}")
-    except:
+    except Exception:
         pass
     
     print()

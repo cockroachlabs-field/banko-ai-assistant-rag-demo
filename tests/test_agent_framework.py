@@ -9,12 +9,13 @@ This tests:
 """
 
 import os
+
 from langchain_openai import ChatOpenAI
 from sentence_transformers import SentenceTransformer
 
 from banko_ai.agents.base_agent import BaseAgent
-from banko_ai.agents.tools.search_tools import create_search_tools
 from banko_ai.agents.tools.analysis_tools import create_analysis_tools
+from banko_ai.agents.tools.search_tools import create_search_tools
 
 
 def test_agent_framework():

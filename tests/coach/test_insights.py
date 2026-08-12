@@ -20,7 +20,6 @@ from banko_ai.coach.insights import (
 )
 from banko_ai.utils.migration import DatabaseMigration
 
-
 TEST_USER = "00000000-0000-0000-0000-000000000ddd"
 
 

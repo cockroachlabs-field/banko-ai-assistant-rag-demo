@@ -11,8 +11,8 @@ Run this, then open: http://localhost:5001/agents
 """
 
 import os
-import time
 import threading
+import time
 
 # Disable tokenizers parallelism warning
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
@@ -20,8 +20,8 @@ os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 from langchain_openai import ChatOpenAI
 from sentence_transformers import SentenceTransformer
 
-from banko_ai.agents.fraud_agent import FraudAgent
 from banko_ai.agents.budget_agent import BudgetAgent
+from banko_ai.agents.fraud_agent import FraudAgent
 from banko_ai.agents.orchestrator_agent import OrchestratorAgent
 from banko_ai.web.app import create_app
 

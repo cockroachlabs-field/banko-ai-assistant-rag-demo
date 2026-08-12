@@ -1,6 +1,7 @@
 """Tests for /health/coach. Uses Flask test client; doesn't require LLM."""
 
 import os
+
 import pytest
 
 from banko_ai.web.app import create_app

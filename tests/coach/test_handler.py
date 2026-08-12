@@ -2,13 +2,13 @@
 contract is tested without touching the LLM."""
 
 import os
+
 import pytest
 from sqlalchemy import create_engine, text
 
 from banko_ai.coach.handler import SignalHandler
 from banko_ai.coach.signals import Signal, SignalType
 from banko_ai.utils.migration import DatabaseMigration
-
 
 TEST_USER = "00000000-0000-0000-0000-000000000eee"
 

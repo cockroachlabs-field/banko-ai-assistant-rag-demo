@@ -1,14 +1,14 @@
 """Tests for /api/cdc/signals webhook receiver. Uses Flask's test client
 with the HMAC secret injected via env."""
 
-import hmac
 import hashlib
+import hmac
 import json
 import os
+
 import pytest
 
 from banko_ai.web.app import create_app
-
 
 SECRET = "test-secret-hmac-do-not-use-in-prod"
 
@@ -24,7 +24,8 @@ def _clean_test_signals():
         yield
         return
     try:
-        from sqlalchemy import create_engine, text as _text
+        from sqlalchemy import create_engine
+        from sqlalchemy import text as _text
         from sqlalchemy.pool import NullPool
         eng = create_engine(url, poolclass=NullPool)
         with eng.begin() as conn:

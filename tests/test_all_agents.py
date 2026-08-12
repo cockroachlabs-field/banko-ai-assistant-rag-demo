@@ -15,9 +15,9 @@ os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 from langchain_openai import ChatOpenAI
 from sentence_transformers import SentenceTransformer
 
-from banko_ai.agents.receipt_agent import ReceiptAgent
-from banko_ai.agents.fraud_agent import FraudAgent
 from banko_ai.agents.budget_agent import BudgetAgent
+from banko_ai.agents.fraud_agent import FraudAgent
+from banko_ai.agents.receipt_agent import ReceiptAgent
 
 
 def test_all_agents():
@@ -105,7 +105,7 @@ def test_all_agents():
         
         fraud_result = fraud_agent.analyze_expense(expense_id)
         
-        print(f"\n   Fraud Analysis Results:")
+        print("\n   Fraud Analysis Results:")
         print(f"   - Fraud Detected: {'🚨 YES' if fraud_result['fraud_detected'] else '✅ NO'}")
         print(f"   - Confidence: {fraud_result['confidence']:.1%}")
         print(f"   - Recommendation: {fraud_result['recommendation']}")
@@ -129,7 +129,7 @@ def test_all_agents():
             monthly_budget=1000.00
         )
         
-        print(f"\n   Budget Status:")
+        print("\n   Budget Status:")
         print(f"   - Status: {budget_result['status']}")
         print(f"   - Current Spend: ${budget_result.get('current_spend', 0):.2f}")
         print(f"   - Budget: ${budget_result['budget']:.2f}")
@@ -137,7 +137,7 @@ def test_all_agents():
         print(f"   - Alert Level: {budget_result['alert_level']}")
         
         if budget_result.get('recommendation'):
-            print(f"\n   Recommendations:")
+            print("\n   Recommendations:")
             for rec in budget_result['recommendation'][:2]:
                 print(f"   {rec}")
     else:
@@ -149,9 +149,9 @@ def test_all_agents():
     print("🎉 All agent tests completed!")
     print()
     print("Summary:")
-    print(f"  • Receipt Agent: Ready for document processing")
-    print(f"  • Fraud Agent: Ready for autonomous monitoring")
-    print(f"  • Budget Agent: Ready for proactive alerts")
+    print("  • Receipt Agent: Ready for document processing")
+    print("  • Fraud Agent: Ready for autonomous monitoring")
+    print("  • Budget Agent: Ready for proactive alerts")
     print()
     print("All agents running in different regions:")
     print(f"  • Receipt Agent: {receipt_agent.region}")

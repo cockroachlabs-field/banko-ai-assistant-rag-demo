@@ -14,10 +14,11 @@ This demonstrates:
 This is the FULL "Unstructured → AI → Structured" pipeline!
 """
 
-import os
 import io
-from PIL import Image, ImageDraw, ImageFont
+import os
 from datetime import datetime
+
+from PIL import Image, ImageDraw, ImageFont
 
 # Disable tokenizers warning
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
@@ -27,8 +28,8 @@ from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
-from banko_ai.agents.receipt_agent import ReceiptAgent
 from banko_ai.agents.fraud_agent import FraudAgent
+from banko_ai.agents.receipt_agent import ReceiptAgent
 
 
 def create_sample_receipt():
@@ -43,7 +44,7 @@ def create_sample_receipt():
         font_large = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
         font_medium = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 18)
         font_small = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 14)
-    except:
+    except Exception:
         font_large = ImageFont.load_default()
         font_medium = ImageFont.load_default()
         font_small = ImageFont.load_default()
@@ -136,7 +137,7 @@ def demo_receipt_pipeline():
     print("-"*70)
     receipt_path = create_sample_receipt()
     print(f"   Image: {receipt_path}")
-    print(f"   Type: PNG image (unstructured)")
+    print("   Type: PNG image (unstructured)")
     print()
     
     # Step 2: Initialize agents
@@ -182,15 +183,15 @@ def demo_receipt_pipeline():
     )
     
     if result['success']:
-        print(f"   ✅ Processing complete!")
-        print(f"   Extracted fields:")
+        print("   ✅ Processing complete!")
+        print("   Extracted fields:")
         for key, value in result['extracted_data'].items():
             print(f"      • {key}: {value}")
         print()
         
         if result.get('document_id'):
             print(f"   📄 Document ID: {result['document_id']}")
-            print(f"   🔢 Vector embedding: 384 dimensions stored")
+            print("   🔢 Vector embedding: 384 dimensions stored")
     else:
         print(f"   ❌ Processing failed: {result.get('error')}")
         return False
@@ -216,7 +217,7 @@ def demo_receipt_pipeline():
         
         if doc:
             print("   ✅ documents table:")
-            print(f"      • Document stored with embedding")
+            print("      • Document stored with embedding")
             print(f"      • User: {doc[1]}")
             print(f"      • Type: {doc[2]}")
             print(f"      • Created: {doc[3]}")
@@ -230,7 +231,7 @@ def demo_receipt_pipeline():
             WHERE agent_id = :agent_id
         """), {'agent_id': receipt_agent.agent_id})
         mem_count = result_mem.fetchone()[0]
-        print(f"\n   ✅ agent_memory table:")
+        print("\n   ✅ agent_memory table:")
         print(f"      • {mem_count} memory entries for Receipt Agent")
         
         # Check agent_decisions table
@@ -242,7 +243,7 @@ def demo_receipt_pipeline():
             LIMIT 3
         """), {'agent_id': receipt_agent.agent_id})
         
-        print(f"\n   ✅ agent_decisions table:")
+        print("\n   ✅ agent_decisions table:")
         decisions = result_dec.fetchall()
         if decisions:
             for dec in decisions:
@@ -326,7 +327,7 @@ def demo_receipt_pipeline():
                 count = result.fetchone()[0]
                 status = "✅" if count > 0 else "⚠️ "
                 print(f"  {status} {table:20} {count:4} records  ({desc})")
-            except:
+            except Exception:
                 print(f"  ❌ {table:20}       (not accessible)")
     
     engine.dispose()

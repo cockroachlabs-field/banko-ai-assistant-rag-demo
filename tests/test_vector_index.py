@@ -14,9 +14,9 @@ Or directly: python tests/test_vector_index.py
 
 Note: Uses cosine similarity (<=>) which is industry standard for semantic search.
 """
+import json
 import os
 import sys
-import json
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
+
 from banko_ai.config.settings import get_config
 
 # Make pytest optional - test can run standalone without it
@@ -164,7 +165,7 @@ class TestVectorIndexUsage:
             assert uses_vector_index or uses_top_k, \
                 f"Query plan uses neither vector index nor top-k sort:\n{plan_text}"
             
-            print(f"\n   ✅ Query plan shows vector index usage:")
+            print("\n   ✅ Query plan shows vector index usage:")
             print(f"   {'─'*60}")
             for row in plan:
                 print(f"   {row[0]}")
@@ -186,7 +187,7 @@ class TestVectorIndexUsage:
             assert row is not None, "Cosine similarity query returned no result"
             assert row[0] is not None, "Distance is NULL"
             
-            print(f"\n   ✅ Cosine similarity operator (<=>) working correctly")
+            print("\n   ✅ Cosine similarity operator (<=>) working correctly")
     
     def test_user_specific_vector_search(self, db_engine, test_embedding):
         """Test composite index (user_id + embedding)."""
@@ -232,7 +233,7 @@ class TestVectorIndexUsage:
                 result = conn.execute(text(sql), {'search_embedding': test_embedding})
                 row = result.fetchone()
                 assert row is not None, "Query without CAST failed"
-                print(f"\n   ✅ Vector query works without CAST (v25.4.0 compatible)")
+                print("\n   ✅ Vector query works without CAST (v25.4.0 compatible)")
             except Exception as e:
                 pytest.fail(f"Query without CAST failed: {e}")
 
@@ -251,7 +252,7 @@ def main():
     print(f"\n📊 Database: {config.database_url.split('@')[1].split('/')[0]}")
     
     embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    print(f"🤖 Embedding model: all-MiniLM-L6-v2 (384 dimensions)")
+    print("🤖 Embedding model: all-MiniLM-L6-v2 (384 dimensions)")
     
     db_engine = create_engine(config.database_url, poolclass=NullPool)
     test_embedding = json.dumps(embedding_model.encode("coffee shop purchases").tolist())

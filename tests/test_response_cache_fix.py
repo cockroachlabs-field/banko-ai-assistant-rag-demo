@@ -4,11 +4,14 @@ This should fix the issue where identical queries were getting cache MISS.
 """
 
 import os
+
 os.environ['DATABASE_URL'] = os.getenv('DATABASE_URL', 'cockroachdb://root@localhost:26257/defaultdb?sslmode=disable')
 
-from banko_ai.utils.cache_manager import BankoCacheManager
-from banko_ai.ai_providers.openai_provider import OpenAIProvider
 import time
+
+from banko_ai.ai_providers.openai_provider import OpenAIProvider
+from banko_ai.utils.cache_manager import BankoCacheManager
+
 
 def test_response_cache_with_identical_queries():
     """
@@ -26,16 +29,14 @@ def test_response_cache_with_identical_queries():
         
         test_query = "coffee"
         print(f"\nTest Query: '{test_query}'")
-        print(f"Provider: OpenAI")
+        print("Provider: OpenAI")
         
         # First query - should be MISS on both caches
         print(f"\n{'='*80}")
         print("FIRST QUERY (both caches should MISS)")
         print("="*80)
         
-        start = time.time()
         results1 = provider.search_expenses(test_query, limit=10)
-        time1_search = time.time() - start
         
         print(f"\n📊 Vector search results: {len(results1)} expenses")
         if results1:
@@ -43,7 +44,7 @@ def test_response_cache_with_identical_queries():
         
         # Now call the full RAG response (which checks response cache)
         # This is a simplified simulation - in real usage this would happen in the flow
-        print(f"\n⏭️  Now generating RAG response (checks response cache)...")
+        print("\n⏭️  Now generating RAG response (checks response cache)...")
         
         # Convert SearchResult to dict format for cache
         search_results_dict = []
@@ -61,24 +62,22 @@ def test_response_cache_with_identical_queries():
         # Check response cache
         cached_response = cache_manager.get_cached_response(test_query, search_results_dict, "openai")
         if cached_response:
-            print(f"   ❌ UNEXPECTED: Response cache HIT on first query!")
+            print("   ❌ UNEXPECTED: Response cache HIT on first query!")
         else:
-            print(f"   ✅ Response cache MISS (expected)")
+            print("   ✅ Response cache MISS (expected)")
         
         # Store a mock response in cache
         mock_response = "Coffee expenses: $45.20 at Starbucks, $12.50 at Peet's"
         cache_manager.cache_response(test_query, mock_response, search_results_dict, "openai", 
                                      prompt_tokens=100, response_tokens=50)
-        print(f"   ✅ Stored response in cache")
+        print("   ✅ Stored response in cache")
         
         # Second query - same query string
         print(f"\n{'='*80}")
         print("SECOND QUERY (response cache should HIT!)")
         print("="*80)
         
-        start = time.time()
         results2 = provider.search_expenses(test_query, limit=10)
-        time2_search = time.time() - start
         
         print(f"\n📊 Vector search results: {len(results2)} expenses")
         
@@ -99,13 +98,13 @@ def test_response_cache_with_identical_queries():
         cached_response2 = cache_manager.get_cached_response(test_query, search_results_dict2, "openai")
         
         if cached_response2:
-            print(f"\n   ✅ ✅ ✅ RESPONSE CACHE HIT! ✅ ✅ ✅")
+            print("\n   ✅ ✅ ✅ RESPONSE CACHE HIT! ✅ ✅ ✅")
             print(f"   Response: {cached_response2[:60]}...")
-            print(f"\n   🎉 FIX SUCCESSFUL: Response cache working with normalized expense data!")
+            print("\n   🎉 FIX SUCCESSFUL: Response cache working with normalized expense data!")
             return True
         else:
-            print(f"\n   ❌ Response cache MISS (should have been HIT)")
-            print(f"\n   ⚠️  FIX MAY NOT BE WORKING - expense hash still different?")
+            print("\n   ❌ Response cache MISS (should have been HIT)")
+            print("\n   ⚠️  FIX MAY NOT BE WORKING - expense hash still different?")
             
             # Debug: Check if hashes match
             hash1 = cache_manager._generate_hash(
@@ -115,14 +114,14 @@ def test_response_cache_with_identical_queries():
                 cache_manager._normalize_expense_data_for_cache(search_results_dict2)
             )
             
-            print(f"\n   Debug Info:")
+            print("\n   Debug Info:")
             print(f"   - Hash 1: {hash1[:20]}...")
             print(f"   - Hash 2: {hash2[:20]}...")
             print(f"   - Match: {hash1 == hash2}")
             
             if hash1 != hash2:
-                print(f"\n   Issue: Hashes still don't match even after normalization")
-                print(f"   This shouldn't happen with the fix!")
+                print("\n   Issue: Hashes still don't match even after normalization")
+                print("   This shouldn't happen with the fix!")
             
             return False
         

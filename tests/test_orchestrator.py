@@ -15,9 +15,9 @@ os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 from langchain_openai import ChatOpenAI
 from sentence_transformers import SentenceTransformer
 
-from banko_ai.agents.orchestrator_agent import OrchestratorAgent
-from banko_ai.agents.fraud_agent import FraudAgent
 from banko_ai.agents.budget_agent import BudgetAgent
+from banko_ai.agents.fraud_agent import FraudAgent
+from banko_ai.agents.orchestrator_agent import OrchestratorAgent
 
 
 def test_orchestrator():
@@ -116,19 +116,19 @@ def test_orchestrator():
         context={'user_id': user_id, 'monthly_budget': 1000.00}
     )
     
-    print(f"\n   Workflow Result:")
+    print("\n   Workflow Result:")
     print(f"   - Success: {'✅' if result1['success'] else '❌'}")
     print(f"   - Steps executed: {len(result1['steps_executed'])}")
     
     if result1.get('plan'):
-        print(f"   - Planned steps:")
+        print("   - Planned steps:")
         for step in result1['plan'].get('steps', []):
             print(f"     {step['step_number']}. {step['agent']}.{step['action']}")
     
     if result1.get('final_result'):
         synthesis = result1['final_result'].get('synthesis', '')
         if synthesis:
-            print(f"\n   Final Response:")
+            print("\n   Final Response:")
             print(f"   {synthesis[:200]}..." if len(synthesis) > 200 else f"   {synthesis}")
     print()
     
@@ -140,19 +140,19 @@ def test_orchestrator():
         context={'user_id': user_id, 'monthly_budget': 1000.00}
     )
     
-    print(f"\n   Workflow Result:")
+    print("\n   Workflow Result:")
     print(f"   - Success: {'✅' if result2['success'] else '❌'}")
     print(f"   - Steps executed: {len(result2['steps_executed'])}")
     
     if result2.get('plan'):
-        print(f"   - Planned steps:")
+        print("   - Planned steps:")
         for step in result2['plan'].get('steps', []):
             print(f"     {step['step_number']}. {step['agent']}.{step['action']}")
     
     if result2.get('final_result'):
         synthesis = result2['final_result'].get('synthesis', '')
         if synthesis:
-            print(f"\n   Final Response:")
+            print("\n   Final Response:")
             # Show first 300 chars
             lines = synthesis.split('\n')
             for line in lines[:5]:  # First 5 lines
@@ -166,7 +166,7 @@ def test_orchestrator():
     print("🎉 Orchestrator test completed!")
     print()
     print("Summary:")
-    print(f"  • Orchestrator created and working")
+    print("  • Orchestrator created and working")
     print(f"  • {len(orchestrator.available_agents)} agents registered")
     print(f"  • Executed {len(result1['steps_executed']) + len(result2['steps_executed'])} total workflow steps")
     print(f"  • Multi-agent coordination successful: {'✅' if result2['success'] else '❌'}")

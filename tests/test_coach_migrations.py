@@ -2,6 +2,7 @@
 with the correct columns, PKs, indexes, and TTL."""
 
 import os
+
 import pytest
 from sqlalchemy import create_engine, text
 

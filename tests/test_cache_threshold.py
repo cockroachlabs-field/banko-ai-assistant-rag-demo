@@ -5,10 +5,12 @@ Shows how different threshold settings affect cache hit rates.
 """
 
 import os
+
 os.environ['DATABASE_URL'] = os.getenv('DATABASE_URL', "cockroachdb://root@localhost:26257/defaultdb?sslmode=disable")
 
 # Apply CockroachDB version patch
 from sqlalchemy.dialects.postgresql.base import PGDialect
+
 original_get_server_version_info = PGDialect._get_server_version_info
 def patched_get_server_version_info(self, connection):
     try:

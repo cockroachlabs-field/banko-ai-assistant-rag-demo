@@ -2,6 +2,7 @@
 no DB, no network."""
 
 import json
+
 import pytest
 
 from banko_ai.coach.signals import (

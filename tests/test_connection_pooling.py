@@ -5,11 +5,14 @@ This script performs multiple concurrent database operations to demonstrate
 that connections are being reused from the pool rather than created/destroyed.
 """
 
-import time
 import threading
-from banko_ai.utils.database import DatabaseManager
-from banko_ai.ai_providers.openai_provider import OpenAIProvider
+import time
+
 from sqlalchemy import text
+
+from banko_ai.ai_providers.openai_provider import OpenAIProvider
+from banko_ai.utils.database import DatabaseManager
+
 
 def test_database_manager_pooling():
     """Test DatabaseManager connection pooling."""
@@ -20,7 +23,7 @@ def test_database_manager_pooling():
     db_manager = DatabaseManager()
     engine = db_manager.engine
     
-    print(f"\nPool Configuration:")
+    print("\nPool Configuration:")
     print(f"  - Pool size: {engine.pool.size()}")
     print(f"  - Max overflow: {engine.pool._max_overflow}")
     print(f"  - Pool pre-ping: {engine.pool._pre_ping}")
@@ -34,7 +37,7 @@ def test_database_manager_pooling():
         print(f"  ✅ Connection acquired successfully: {result.scalar()}")
         print(f"  📈 Pool status - Checked out: {engine.pool.checkedout()}, Overflow: {engine.pool.overflow()}")
     
-    print(f"  ✅ Connection returned to pool")
+    print("  ✅ Connection returned to pool")
     print(f"  📈 Pool status - Checked out: {engine.pool.checkedout()}, Overflow: {engine.pool.overflow()}")
     
     # Test multiple sequential operations (should reuse connection)
@@ -79,9 +82,9 @@ def test_concurrent_connections():
     for t in threads:
         t.join()
     
-    print(f"\n  ✅ All 15 threads completed")
+    print("\n  ✅ All 15 threads completed")
     print(f"  📈 Final pool status - Checked out: {engine.pool.checkedout()}, Overflow: {engine.pool.overflow()}")
-    print(f"  💡 Connections were reused from the pool!")
+    print("  💡 Connections were reused from the pool!")
 
 
 def test_provider_pooling():
@@ -94,7 +97,7 @@ def test_provider_pooling():
     provider = OpenAIProvider({})
     engine = provider._get_db_engine()
     
-    print(f"\nPool Configuration:")
+    print("\nPool Configuration:")
     print(f"  - Pool size: {engine.pool.size()}")
     print(f"  - Max overflow: {engine.pool._max_overflow}")
     print(f"  - Total capacity: {engine.pool.size() + engine.pool._max_overflow}")
@@ -121,9 +124,9 @@ def test_provider_pooling():
                 result = conn.execute(text("SELECT 1"))
                 print(f"  Query {i+1}/3 - Pool working (no expenses table), Pool checked out: {engine.pool.checkedout()}")
     
-    print(f"\n  ✅ All queries completed")
+    print("\n  ✅ All queries completed")
     print(f"  📈 Final pool status - Checked out: {engine.pool.checkedout()}")
-    print(f"  💡 Connections were reused efficiently!")
+    print("  💡 Connections were reused efficiently!")
 
 
 def test_pool_saturation():
@@ -149,16 +152,16 @@ def test_pool_saturation():
             print(f"  Connection {i+1}: Checked out: {engine.pool.checkedout()}, Overflow: {engine.pool.overflow()}")
         
         print(f"\n  📈 Peak usage - Checked out: {engine.pool.checkedout()}, Overflow: {engine.pool.overflow()}")
-        print(f"  ✅ Pool handled the load with overflow connections!")
+        print("  ✅ Pool handled the load with overflow connections!")
         
     finally:
         # Release all connections
-        print(f"\n🔄 Releasing all connections back to pool...")
+        print("\n🔄 Releasing all connections back to pool...")
         for conn in connections:
             conn.close()
         
         print(f"  📈 After release - Checked out: {engine.pool.checkedout()}, Overflow: {engine.pool.overflow()}")
-        print(f"  ✅ All connections returned to pool!")
+        print("  ✅ All connections returned to pool!")
 
 
 if __name__ == "__main__":

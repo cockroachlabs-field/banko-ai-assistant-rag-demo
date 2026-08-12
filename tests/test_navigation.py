@@ -14,8 +14,8 @@ print("🧪 Testing Navigation Integration")
 print("="*70)
 
 # Start server if not running
-import subprocess
 import signal
+import subprocess
 
 print("\n1️⃣  Checking if server is running...")
 try:
@@ -23,7 +23,7 @@ try:
     response = requests.get('http://localhost:5001/', timeout=2)
     print("   ✅ Server is running")
     server_was_running = True
-except:
+except Exception:
     print("   ⚠️  Server not running, starting it...")
     server_was_running = False
     # We'll skip starting for now, user should start manually

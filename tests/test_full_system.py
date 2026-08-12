@@ -25,10 +25,10 @@ from sentence_transformers import SentenceTransformer
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
-from banko_ai.agents.receipt_agent import ReceiptAgent
-from banko_ai.agents.fraud_agent import FraudAgent
 from banko_ai.agents.budget_agent import BudgetAgent
+from banko_ai.agents.fraud_agent import FraudAgent
 from banko_ai.agents.orchestrator_agent import OrchestratorAgent
+from banko_ai.agents.receipt_agent import ReceiptAgent
 
 
 class SystemTester:

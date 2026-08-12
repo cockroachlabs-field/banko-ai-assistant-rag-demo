@@ -4,6 +4,7 @@ verify the saver writes a checkpoint with the expected thread_id."""
 
 import os
 import uuid
+
 import pytest
 
 from banko_ai.coach.agent import CoachAgent, build_checkpointer

@@ -1,14 +1,13 @@
 """Unit tests for SignalsKafkaConsumer. Uses a fake consumer (no broker)."""
 
+import json
 from collections import namedtuple
 from unittest.mock import MagicMock
 
-import json
 import pytest
 
 from banko_ai.coach.kafka_consumer import SignalsKafkaConsumer
 from banko_ai.coach.signals import Signal, SignalType
-
 
 _FakeMsg = namedtuple("Msg", ["value", "key", "offset", "partition"])
 
