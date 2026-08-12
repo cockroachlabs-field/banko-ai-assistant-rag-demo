@@ -174,6 +174,18 @@ CI is **not enough**. CI gates on lint/unit/integration, but the multi-provider 
 
 Internal specs and plans live under `docs/superpowers/` on Virag's machine and are never committed or referenced in public artifacts (README, blog posts, PR bodies). Current state in brief: Coach v1a (reactive nudges, conversational mode, webhook + Kafka transports, Live Coach UI) merged to main July 2026 as v1.1.0; still open are v1b (Supervisor, MCP server, eval harness) and v1c (OTel, airgap packaging, docs), plus the July 2026 demo accuracy and local models round. Read the local specs directory for the details.
 
+## CockroachDB skills
+
+The official best-practice skills from
+https://github.com/cockroachlabs/cockroachdb-skills should be installed
+when working on this repo (`npx skills add cockroachlabs/cockroachdb-skills`,
+or copy the skill directories into `~/.claude/skills/`). The three that
+govern application code here: `cockroachdb-sql` (schema and query
+patterns), `designing-application-transactions` (retries, pooling,
+set-based writes), and `designing-multi-region-applications` (REGIONAL
+BY ROW, survival goals). Consult them before schema changes, new SQL,
+or multi-region work.
+
 ## Where the auto-memory lives
 
 Per-project Claude memory is at `~/.claude/projects/-Users-viragtripathi-idea-workspace-banko-ai-assistant/memory/`. Read `MEMORY.md` there for the index of user preferences, project facts, and feedback rules. Update it as you learn new things.
