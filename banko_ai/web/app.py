@@ -264,9 +264,8 @@ def create_app() -> Flask:
 
     # The coach webhook accepts signals as soon as the app is up, so its
     # tables have to exist before the first one arrives. CREATE IF NOT
-    # EXISTS, safe on every boot. Deliberately not run_all_migrations():
-    # the legacy indexing migration still carries pgvector ivfflat syntax
-    # that CockroachDB rejects.
+    # EXISTS, safe on every boot. The legacy pgvector ivfflat migration
+    # is gone; boot calls the granular migrations it needs directly.
     try:
         from banko_ai.utils.migration import (
             DatabaseMigration,
@@ -277,6 +276,7 @@ def create_app() -> Flask:
         migrator = DatabaseMigration(config.database_url)
         migrator.migrate_users_table()
         migrator.migrate_to_coach_v1()
+        migrator.migrate_timestamptz()
 
         # The three legacy personas must exist on every boot: docs and
         # clear-demo-users both promise maya/sam/riley survive, and a
@@ -718,15 +718,12 @@ def create_app() -> Flask:
 
     @app.route('/api/user-summary')
     def api_user_summary():
-        """API endpoint for user spending summary."""
+        """API endpoint for user spending summary. Served with a follower
+        read: totals tolerate a few seconds of staleness."""
         try:
-            if not user_manager.is_logged_in():
-                return jsonify({
-                    'success': False,
-                    'error': 'User not logged in'
-                }), 401
-            
-            user_id = user_manager.get_current_user()['id']
+            # The old is_logged_in() died with the persona-era auth stub;
+            # session scoping works like every other API route now.
+            user_id = current_demo_user()
             summary = search_engine.get_user_spending_summary(user_id)
             
             return jsonify({

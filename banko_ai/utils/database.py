@@ -53,7 +53,7 @@ class DatabaseManager:
                         recurring BOOL DEFAULT false,
                         tags STRING[],
                         embedding VECTOR(384),
-                        created_at TIMESTAMP DEFAULT now()
+                        created_at TIMESTAMPTZ DEFAULT now()
                     )
                 """))
                 
@@ -96,9 +96,9 @@ class DatabaseManager:
                         region STRING NOT NULL,
                         status STRING NOT NULL DEFAULT 'idle',
                         current_task JSONB,
-                        last_heartbeat TIMESTAMP DEFAULT now(),
+                        last_heartbeat TIMESTAMPTZ DEFAULT now(),
                         metadata JSONB,
-                        created_at TIMESTAMP DEFAULT now()
+                        created_at TIMESTAMPTZ DEFAULT now()
                     )
                 """))
                 
@@ -115,8 +115,8 @@ class DatabaseManager:
                         content TEXT NOT NULL,
                         embedding VECTOR(384),
                         metadata JSONB,
-                        created_at TIMESTAMP DEFAULT now(),
-                        accessed_at TIMESTAMP DEFAULT now(),
+                        created_at TIMESTAMPTZ DEFAULT now(),
+                        accessed_at TIMESTAMPTZ DEFAULT now(),
                         access_count INT DEFAULT 0
                     )
                 """))
@@ -132,8 +132,8 @@ class DatabaseManager:
                         action JSONB,
                         confidence FLOAT,
                         user_feedback STRING,
-                        created_at TIMESTAMP DEFAULT now(),
-                        feedback_at TIMESTAMP
+                        created_at TIMESTAMPTZ DEFAULT now(),
+                        feedback_at TIMESTAMPTZ
                     )
                 """))
                 
@@ -148,9 +148,9 @@ class DatabaseManager:
                         payload JSONB,
                         status STRING DEFAULT 'pending',
                         region STRING,
-                        created_at TIMESTAMP DEFAULT now(),
-                        started_at TIMESTAMP,
-                        completed_at TIMESTAMP,
+                        created_at TIMESTAMPTZ DEFAULT now(),
+                        started_at TIMESTAMPTZ,
+                        completed_at TIMESTAMPTZ,
                         result JSONB,
                         error TEXT
                     )
@@ -170,8 +170,8 @@ class DatabaseManager:
                         extracted_data JSONB,
                         embedding VECTOR(384),
                         processing_status STRING DEFAULT 'pending',
-                        created_at TIMESTAMP DEFAULT now(),
-                        processed_at TIMESTAMP
+                        created_at TIMESTAMPTZ DEFAULT now(),
+                        processed_at TIMESTAMPTZ
                     )
                 """))
                 

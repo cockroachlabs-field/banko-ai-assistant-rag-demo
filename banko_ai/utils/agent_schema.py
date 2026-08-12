@@ -48,9 +48,9 @@ CREATE TABLE IF NOT EXISTS agent_state (
     region STRING NOT NULL,
     status STRING NOT NULL DEFAULT 'idle',
     current_task JSONB,
-    last_heartbeat TIMESTAMP DEFAULT now(),
+    last_heartbeat TIMESTAMPTZ DEFAULT now(),
     metadata JSONB,
-    created_at TIMESTAMP DEFAULT now()
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_state_region_status 
@@ -67,8 +67,8 @@ CREATE TABLE IF NOT EXISTS agent_memory (
     content TEXT NOT NULL,
     embedding VECTOR(384),
     metadata JSONB,
-    created_at TIMESTAMP DEFAULT now(),
-    accessed_at TIMESTAMP DEFAULT now(),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    accessed_at TIMESTAMPTZ DEFAULT now(),
     access_count INT DEFAULT 0
 );
 
@@ -90,9 +90,9 @@ CREATE TABLE IF NOT EXISTS agent_tasks (
     payload JSONB,
     status STRING DEFAULT 'pending',
     region STRING,
-    created_at TIMESTAMP DEFAULT now(),
-    started_at TIMESTAMP,
-    completed_at TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
     result JSONB,
     error TEXT
 );
@@ -114,8 +114,8 @@ CREATE TABLE IF NOT EXISTS agent_decisions (
     action JSONB,
     confidence FLOAT,
     user_feedback STRING,
-    created_at TIMESTAMP DEFAULT now(),
-    feedback_at TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT now(),
+    feedback_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_decisions_agent 
@@ -137,8 +137,8 @@ CREATE TABLE IF NOT EXISTS documents (
     embedding VECTOR(384),
     processing_status STRING DEFAULT 'pending',
     processed_by_agent_id UUID REFERENCES agent_state(agent_id),
-    created_at TIMESTAMP DEFAULT now(),
-    processed_at TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    processed_at TIMESTAMPTZ,
     metadata JSONB
 );
 

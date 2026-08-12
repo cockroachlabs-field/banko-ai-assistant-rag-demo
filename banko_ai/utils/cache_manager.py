@@ -120,10 +120,10 @@ class BankoCacheManager:
                 ai_service STRING NOT NULL,
                 language STRING NOT NULL DEFAULT 'en',
                 expense_data_hash STRING,
-                created_at TIMESTAMP DEFAULT now(),
-                expires_at TIMESTAMP,
+                created_at TIMESTAMPTZ DEFAULT now(),
+                expires_at TIMESTAMPTZ,
                 hit_count INTEGER DEFAULT 0,
-                last_accessed TIMESTAMP DEFAULT now(),
+                last_accessed TIMESTAMPTZ DEFAULT now(),
                 UNIQUE (query_hash, ai_service, language),
                 INDEX idx_query_hash (query_hash),
                 INDEX idx_expires_at (expires_at),
@@ -138,7 +138,7 @@ class BankoCacheManager:
                 text_content STRING NOT NULL,
                 embedding VECTOR(384) NOT NULL,
                 model_name STRING NOT NULL DEFAULT 'all-MiniLM-L6-v2',
-                created_at TIMESTAMP DEFAULT now(),
+                created_at TIMESTAMPTZ DEFAULT now(),
                 access_count INTEGER DEFAULT 0,
                 UNIQUE (text_hash, model_name),
                 INDEX idx_text_hash (text_hash)
@@ -151,8 +151,8 @@ class BankoCacheManager:
                 search_results JSONB NOT NULL,
                 result_count INTEGER,
                 similarity_threshold FLOAT,
-                created_at TIMESTAMP DEFAULT now(),
-                expires_at TIMESTAMP,
+                created_at TIMESTAMPTZ DEFAULT now(),
+                expires_at TIMESTAMPTZ,
                 access_count INTEGER DEFAULT 0,
                 INDEX idx_embedding_hash (query_embedding_hash),
                 INDEX idx_expires_at (expires_at)
@@ -164,7 +164,7 @@ class BankoCacheManager:
                 cache_type STRING NOT NULL,
                 operation STRING NOT NULL, -- 'hit', 'miss', 'write'
                 tokens_saved INTEGER DEFAULT 0,
-                timestamp TIMESTAMP DEFAULT now(),
+                timestamp TIMESTAMPTZ DEFAULT now(),
                 details JSONB
             );
         """)

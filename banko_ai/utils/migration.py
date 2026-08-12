@@ -228,6 +228,20 @@ def migrate_regional_tables(database_url: str, primary_region: str | None) -> bo
                     else:
                         raise
 
+            # users is read on every request (identity pill, region
+            # resolution) and written only at signup. GLOBAL gives every
+            # region a fast local read and keeps auth instant while a
+            # region is down, per the multi-region skill's guidance for
+            # read-mostly reference tables.
+            try:
+                conn.execute(text("ALTER TABLE users SET LOCALITY GLOBAL"))
+                log.info("set users to GLOBAL")
+            except Exception as e:
+                if "already" in str(e).lower():
+                    log.debug("users already GLOBAL: %s", e)
+                else:
+                    log.warning("could not set users GLOBAL: %s", e)
+
             conn.commit()
             log.info("multi-region migration completed successfully")
             # Anything that asked "are the tables regional yet" before this
@@ -261,60 +275,42 @@ class DatabaseMigration:
             self._engine = create_engine(self.database_url)
         return self._engine
     
-    def migrate_to_user_specific_indexing(self) -> bool:
-        """Migrate database to support user-specific vector indexing."""
+    def migrate_timestamptz(self) -> bool:
+        """Convert naive TIMESTAMP columns on banko's tables to
+        TIMESTAMPTZ. Naive timestamps in a multi-region cluster invite
+        interpretation bugs; the schema DDL now creates TIMESTAMPTZ and
+        this brings existing databases along. Sessions run in UTC so the
+        stored instants do not move."""
+        tables = ("expenses", "agent_state", "agent_memory", "agent_tasks",
+                  "agent_decisions", "documents", "query_cache",
+                  "embedding_cache", "vector_search_cache", "cache_stats")
         try:
             from sqlalchemy import text
             with self.engine.connect() as conn:
-                # Check if user_id column exists
-                result = conn.execute(text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'expenses' AND column_name = 'user_id'
-                """))
-                
-                if not result.fetchone():
-                    # Add user_id column if it doesn't exist
-                    conn.execute(text("""
-                        ALTER TABLE expenses 
-                        ADD COLUMN user_id UUID DEFAULT gen_random_uuid()
-                    """))
-                    print("Added user_id column to expenses table")
-                
-                # Create user-specific vector index
-                conn.execute(text("""
-                    CREATE INDEX IF NOT EXISTS idx_expenses_user_embedding 
-                    ON expenses (user_id, embedding) 
-                    USING ivfflat (embedding vector_cosine_ops) 
-                    WITH (lists = 100)
-                """))
-                print("Created user-specific vector index")
-                
-                # Create regional index if supported
-                try:
-                    conn.execute(text("""
-                        CREATE INDEX IF NOT EXISTS idx_expenses_user_embedding_regional 
-                        ON expenses (user_id, embedding) 
-                        LOCALITY REGIONAL BY ROW AS region
-                    """))
-                    print("Created regional user-specific vector index")
-                except Exception as e:
-                    print(f"Regional indexing not supported: {e}")
-                
-                # Create additional indexes for user queries
-                conn.execute(text("""
-                    CREATE INDEX IF NOT EXISTS idx_expenses_user_date 
-                    ON expenses (user_id, expense_date DESC)
-                """))
-                print("Created user date index")
-                
+                rows = conn.execute(text("""
+                    SELECT table_name, column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND data_type = 'timestamp without time zone'
+                """)).fetchall()
+                todo = [(t, c) for t, c in rows if t in tables]
+                if not todo:
+                    return True
+                conn.execute(text(
+                    "SET enable_experimental_alter_column_type_general = true"))
+                for table, column in todo:
+                    # Table and column names come from information_schema
+                    # filtered to our own hardcoded table list.
+                    conn.execute(text(
+                        f'ALTER TABLE {table} ALTER COLUMN "{column}" '
+                        f"TYPE TIMESTAMPTZ"))
+                    print(f"   {table}.{column} -> TIMESTAMPTZ")
                 conn.commit()
                 return True
-                
         except Exception as e:
-            print(f"Migration failed: {e}")
+            print(f"timestamptz migration skipped: {e}")
             return False
-    
+
     def add_created_at_column(self) -> bool:
         """Add created_at timestamp column."""
         try:
@@ -443,8 +439,9 @@ class DatabaseMigration:
 
         success = True
         success &= self.add_created_at_column()
-        success &= self.migrate_to_user_specific_indexing()
+        success &= self.migrate_users_table()
         success &= self.migrate_to_coach_v1()
+        success &= self.migrate_timestamptz()
 
         if success:
             print("All migrations completed successfully")

@@ -283,22 +283,31 @@ class VectorSearchEngine:
         user_id: str, 
         days: int = 30
     ) -> dict[str, Any]:
-        """Get spending summary for a specific user."""
+        """Get spending summary for a specific user.
+
+        Reads with follower_read_timestamp(): dashboard totals tolerate a
+        few seconds of staleness, and the nearest replica can serve them
+        without a trip to the leaseholder. Chat answers and the coach
+        stay on fresh reads; their immediacy is demo-visible."""
         sql = """
-        SELECT 
+        SELECT
             COUNT(*) as transaction_count,
             SUM(expense_amount) as total_amount,
             AVG(expense_amount) as average_amount,
             shopping_type,
             COUNT(*) as category_count
         FROM expenses
-        WHERE user_id = :user_id{date_clause}
-        AND expense_date >= CURRENT_DATE - INTERVAL ':days days'
+        AS OF SYSTEM TIME follower_read_timestamp()
+        WHERE user_id = :user_id
+        AND expense_date >= CURRENT_DATE - CAST(:days || ' days' AS INTERVAL)
         GROUP BY shopping_type
         ORDER BY total_amount DESC
         """
         
-        with self.engine.connect() as conn:
+        # Autocommit: a statement-level AS OF SYSTEM TIME is rejected
+        # inside the transaction SQLAlchemy auto-opens.
+        with self.engine.connect().execution_options(
+                isolation_level="AUTOCOMMIT") as conn:
             result = conn.execute(text(sql), {'user_id': user_id, 'days': days})
             rows = result.fetchall()
         
