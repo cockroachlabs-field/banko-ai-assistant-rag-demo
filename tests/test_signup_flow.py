@@ -18,14 +18,25 @@ def client():
     app = create_app()
     app.config["TESTING"] = True
     yield app.test_client()
-    # Cleanup: delete the test user and their expenses
+    # Cleanup: delete the test user and their rows. Retries because on a
+    # shared cluster this commit can lose a RETRY_SERIALIZABLE race with
+    # a running app and fail the whole gate from teardown.
     if DB:
+        import time
         engine = create_engine(DB)
-        with engine.connect() as conn:
-            conn.execute(
-                text("DELETE FROM expenses WHERE user_id IN (SELECT user_id FROM users WHERE username = 'flow-test-user')"))
-            conn.execute(text("DELETE FROM users WHERE username = 'flow-test-user'"))
-            conn.commit()
+        for attempt in range(4):
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(
+                        "DELETE FROM expenses WHERE user_id IN "
+                        "(SELECT user_id FROM users WHERE username = 'flow-test-user')"))
+                    conn.execute(text("DELETE FROM users WHERE username = 'flow-test-user'"))
+                break
+            except Exception:
+                if attempt == 3:
+                    raise
+                time.sleep(0.5 * (attempt + 1))
+        engine.dispose()
 
 
 def test_fresh_visit_redirects_to_login(client):
