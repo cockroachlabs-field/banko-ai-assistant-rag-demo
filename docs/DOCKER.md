@@ -118,6 +118,7 @@ docker run -d \
   -e DATABASE_URL="cockroachdb://root@host.docker.internal:26257/defaultdb?sslmode=disable" \
   -e AI_SERVICE="openai" \
   -e OPENAI_API_KEY="your_api_key" \
+  -e SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
   --add-host=host.docker.internal:host-gateway \
   virag/banko-ai-assistant:latest
 ```
@@ -131,6 +132,7 @@ docker run -d \
   -e DATABASE_URL="cockroachdb://user:password@your-cluster.cockroachlabs.cloud:26257/banko_ai?sslmode=verify-full" \
   -e AI_SERVICE="openai" \
   -e OPENAI_API_KEY="your_api_key" \
+  -e SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
   virag/banko-ai-assistant:latest
 ```
 
