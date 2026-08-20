@@ -81,19 +81,63 @@ cockroach start-single-node --insecure \
   --http-addr=localhost:8080 --background
 ```
 
-### Start the app
+### Start the app: the bare minimum, per provider
+
+Everything below assumes CockroachDB on `localhost:26257` (that is the
+built-in default, so `DATABASE_URL` can be omitted; set it to point
+anywhere else). Two optional extras for any of them:
+`CDC_WEBHOOK_HMAC_SECRET=<any shared secret>` turns on the Coach webhook
+and the signup welcome nudge, and `TOKENIZERS_PARALLELISM=false` only
+silences a harmless HuggingFace warning.
+
+**Installed CLI** (`pip install banko-ai-assistant`):
 
 ```bash
-export AI_SERVICE=watsonx                 # or openai, aws, gemini, ollama
-export WATSONX_API_KEY=...
-export WATSONX_PROJECT_ID=...
-export DATABASE_URL="cockroachdb://root@localhost:26257/defaultdb?sslmode=disable"
-export CDC_WEBHOOK_HMAC_SECRET=dev-only-secret   # signs Coach webhook posts, enables the welcome nudge
+# Ollama — local model, no keys; needs `ollama serve` running
+AI_SERVICE=ollama banko-ai run
 
-banko-ai run                              # port 5000, generates 5000 sample records on first start
-banko-ai run --port 5001                  # custom port (macOS AirPlay grabs 5000)
-banko-ai run --no-data                    # skip the sample-data generator
+# watsonx (the default provider, AI_SERVICE not needed)
+WATSONX_API_KEY=... WATSONX_PROJECT_ID=... banko-ai run
+
+# OpenAI — or any compatible endpoint via OPENAI_BASE_URL
+AI_SERVICE=openai OPENAI_API_KEY=sk-... banko-ai run
+
+# AWS Bedrock — note aws, not bedrock; a profile OR a key pair
+AI_SERVICE=aws AWS_PROFILE=your-profile banko-ai run
+AI_SERVICE=aws AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... banko-ai run
+
+# Gemini — Vertex service account OR the Generative AI API key
+AI_SERVICE=gemini GOOGLE_PROJECT_ID=... GOOGLE_APPLICATION_CREDENTIALS=sa.json banko-ai run
+AI_SERVICE=gemini GOOGLE_PROJECT_ID=... GOOGLE_API_KEY=... banko-ai run
 ```
+
+**From source** — identical variables, `uv run` in front:
+
+```bash
+git clone https://github.com/cockroachlabs-field/banko-ai-assistant
+cd banko-ai-assistant && uv sync
+AI_SERVICE=ollama uv run banko-ai run
+```
+
+**Docker** — identical variables via `-e`, plus two container facts:
+host services are reached at `host.docker.internal`, and `SECRET_KEY`
+keeps sessions across container restarts (newer images generate a
+temporary one when it is omitted):
+
+```bash
+docker run --rm -p 5000:5000 \
+  -e DATABASE_URL="cockroachdb://root@host.docker.internal:26257/defaultdb?sslmode=disable" \
+  -e AI_SERVICE=ollama -e OLLAMA_HOST=http://host.docker.internal:11434 \
+  -e SECRET_KEY=pick-something-stable \
+  virag/banko-ai-assistant:latest
+```
+
+Swap the `AI_SERVICE` line and credentials for any provider above; only
+Ollama needs the `OLLAMA_HOST` override.
+
+Useful flags for every mode: `banko-ai run --port 5001` (macOS AirPlay
+holds 5000), `banko-ai run --no-data` (skip the sample-data generator;
+the first normal start generates 5000 sample records).
 
 Open <http://localhost:5000>.
 
@@ -159,25 +203,8 @@ The important knobs:
 | `SECRET_KEY` | Flask session key. Auto-generated per boot in dev, which signs everyone out on restart; set it for stable demo sessions | random |
 | `CDC_WEBHOOK_HMAC_SECRET` | Signs Coach webhook posts; unset disables `/api/cdc/signals` and the welcome nudge | unset |
 
-Provider keys depend on what you pick:
-
-```bash
-# IBM watsonx (default)
-WATSONX_API_KEY=...   WATSONX_PROJECT_ID=...
-
-# OpenAI
-OPENAI_API_KEY=...
-
-# AWS Bedrock — note AI_SERVICE=aws, not bedrock
-AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_REGION=us-east-1
-
-# Google Gemini (Vertex AI)
-GOOGLE_APPLICATION_CREDENTIALS=path/to/sa.json   GOOGLE_PROJECT_ID=...
-# or the Generative AI API
-GOOGLE_API_KEY=...
-```
-
-Override model lists with `WATSONX_MODELS`, `OPENAI_MODELS`, `AWS_MODELS`,
+Per-provider credentials are in "Start the app" above; `AWS_REGION`
+defaults to `us-east-1`. Override model lists with `WATSONX_MODELS`, `OPENAI_MODELS`, `AWS_MODELS`,
 `GEMINI_MODELS` (comma-separated). Cache, fraud, and pool tuning live in
 `banko_ai/config/` (`CACHE_SIMILARITY_THRESHOLD`, `CACHE_TTL_HOURS`,
 `FRAUD_DUPLICATE_WINDOW_DAYS`, `DB_POOL_SIZE`, …).
